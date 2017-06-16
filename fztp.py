@@ -285,21 +285,120 @@ Settings:
 		-SNMP OID Query
 
 
-set source file "/root/myfile"
-set source terminal ^
+
+
+
+
+
+
+
+
+
+
+
+set template BASECONFIG file "/root/myfile"
+set template BASECONFIG terminal ^
 !
-here
+hostname {{ hostname }}
 !
-is
-!
-some
-!
-config
+snmp-server community {{ basesnmpcom }} RO
 !
 end
 ^
 
-set domain sometest 1.0 
+
+
+
+
+set template FINALCONFIG terminal ^
+!
+hostname {{ hostname }}
+!
+interface Vlan1
+ ip address {{ vl1_ip_address }} 255.255.255.0
+ no shut
+!
+ip domain-name test.com
+!
+username admin privilege 15 secret password123
+!
+aaa new-model
+!
+!
+aaa authentication login CONSOLE local
+aaa authorization console
+aaa authorization exec default local if-authenticated
+!
+crypto key generate rsa modulus 2048
+!
+ip ssh version 2
+!
+line vty 0 15
+login authentication default
+transport input ssh
+line console 0
+login authentication CONSOLE
+end
+^
+
+
+
+
+set method GETSERIAL snmp host from-variable IPADDR
+set method GETSERIAL snmp community from-string "secretcommunity"
+set method GETSERIAL snmp oid "1.3.6.1.2.1.47.1.1.1.1.11.1000"
+
+
+
+
+set keystore SWITCHVARS id "FCW2039D0P7" hostname "3850CORE"
+set keystore SWITCHVARS id "FCW2039D0P7" vl1_ip_address "10.0.0.200"
+
+
+
+
+
+
+
+set ruleset 1.0 match filename "network-confg"
+set ruleset 1.10 set-variable IPADDR from-request ip-address
+set ruleset 1.20 set-variable FILENAME from-request filename
+set ruleset 1.30 set-variable HOSTNAME from-module random
+set ruleset 1.40 set-keystore HOSTNAME from-module GETSERIAL
+set ruleset 1.50 return merge BASECONFIG HOSTNAME
+
+
+
+
+##########################################################################
+
+
+
+set basefilename "network-confg"
+
+
+
+
+
+set temp and perm variables
+merge and return
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 '''
