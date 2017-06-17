@@ -1,5 +1,5 @@
 
-
+configfile = "fztp.cfg"
 
 class ztp_dyn_file:
 	closed = False
@@ -33,7 +33,7 @@ def start_tftp():
 #################################################################
 #################################################################
 
-
+import time
 import jinja2 as j2
 
 class config_factory:
@@ -49,7 +49,7 @@ class config_factory:
 		self.keyvalstore = keyvalstore
 	def request(self, filename, ipaddr):
 		if filename == self.basefilename:
-			tempid = generate_name()
+			tempid = self._generate_name()
 			self.create_snmp_request(tempid, ipaddr)
 			return self.merge_base_config(tempid)
 		else:
@@ -62,6 +62,11 @@ class config_factory:
 	def create_snmp_request(self, tempid, ipaddr):
 		newquery = snmp_query(ipaddr, self.basesnmpcom, self.snmpoid)
 		self.snmprequests.update({tempid: newquery})
+	def _generate_name(self):
+		timeint = int(str(time.time()).replace(".", ""))
+		timehex = hex(timeint)
+		hname = timehex[2:12].upper()
+		return("ZTP-"+hname)
 	def merge_base_config(self, tempid):
 		template = j2.Template(self.baseconfig)
 		return template.render(hostname=tempid, basesnmpcom=self.basesnmpcom)
@@ -80,7 +85,7 @@ class config_factory:
 
 
 
-config = config_factory()
+#config = config_factory()
 # config.request("network-confg", "10.0.0.101")
 
 
@@ -101,11 +106,7 @@ Create a unique temporary name for the device while the
 """
 import time
 
-def generate_name():
-	timeint = int(str(time.time()).replace(".", ""))
-	timehex = hex(timeint)
-	hname = timehex[2:12].upper()
-	return("ZTP-"+hname)
+
 
 
 
@@ -169,30 +170,84 @@ class snmp_query:
 #oid = '1.3.6.1.2.1.47.1.1.1.1.11.1000'
 #snmp = snmp_query(host, community, oid)
 
+import json
+import commands
+
+class config_manager:
+	def __init__(self):
+		self._publish()
+	def _file_exists(self, filepath):
+		checkdata = commands.getstatusoutput("ls " + filepath)
+		exists = True
+		for line in checkdata:
+			line = str(line)
+			if "No such" in line:
+				exists = False
+		return exists
+	def _publish(self):
+		if self._file_exists(configfile):
+			f = open(configfile, "r")
+			self.rawconfig = f.read()
+			f.close()
+			self.running = json.loads(self.rawconfig)
+			self.finalsuffix = self.running["finalsuffix"]
+			self.finaltemplate = self.running["finaltemplate"]
+			self.keyvalstore = self.running["keyvalstore"]
+			self.startfilename = self.running["startfilename"]
+			self.startsnmpcommunity = self.running["startsnmpcommunity"]
+			self.startsnmpoid = self.running["startsnmpoid"]
+			self.starttemplate = self.running["starttemplate"]
+		else:
+			print("No Config!")
+	def save(self):
+		self.rawconfig = self.json = json.dumps(self.running, indent=4, sort_keys=True)
+		f = open(configfile, "w")
+		self.rawconfig = f.write(self.rawconfig)
+		f.close()
+		print("done!")
+	def set(self, setting, value):
+		exceptions = ["finaltemplate", "keyvalstore", "starttemplate"]
+		if setting in exceptions:
+			print("Cannot configure this way")
+		else:
+			if setting in list(self.running):
+				self.running[setting] = value
+				self.save()
+				print("OK")
 
 
 
 
-"""
-Query a device with SNMP for a OID using a community
-"""
-import pysnmp.hlapi
 
-def get_oid(host, community, oid):
-	errorIndication, errorStatus, errorIndex, varBinds = next(
-		pysnmp.hlapi.getCmd(pysnmp.hlapi.SnmpEngine(),
-			   pysnmp.hlapi.CommunityData(community, mpModel=0),
-			   pysnmp.hlapi.UdpTransportTarget((host, 161)),
-			   pysnmp.hlapi.ContextData(),
-			   pysnmp.hlapi.ObjectType(pysnmp.hlapi.ObjectIdentity(oid)))
-	)
-	return varBinds
-	#return str(varBinds[0][1])
+import sys
+
+def cat_list(listname):
+	result = ""
+	counter = 0
+	for word in listname:
+		result = result + listname[counter].lower() + " "
+		counter = counter + 1
+	result = result[:len(result) - 1:]
+	return result
+
+
+def interpreter():
+	arguments = cat_list(sys.argv[1:])
+	config = config_manager()
+	if arguments == "run":
+		start_tftp()
+		config = config_factory()
+	elif arguments == "test":
+		config.finalsuffix = "-confg"
+		config.save()
+	elif sys.argv[1] == "set":
+		config.set(sys.argv[2], sys.argv[3])
+
+
 
 
 
 if __name__ == "__main__":
-	start_tftp()
-	config = config_factory()
+	interpreter()
 	
 
