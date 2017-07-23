@@ -1,24 +1,10 @@
 #!/usr/bin/python
 
+
 #####         FreeZTP Server v0.1.0          #####
 #####        Written by John W Kerns         #####
 #####       http://blog.packetsar.com        #####
 ##### https://github.com/convergeone/freeztp #####
-
-
-##### A punchlist of things to do #####
-'''
-To Do:
-	- Build logging system
-	- Update all config names
-	- Add a "last resort" or default keystore ID for anything unmatched
-	- Move punchlist to Github issues
-
-Bugs:
-	- If an ID is created in the keystore, then all keys cleared from it, the ID remains in the JSON config but nothing will show in the "show config"
-
-NEXT: Get app to find config file in /etc/ztp or local
-'''
 
 
 ##### Inform FreeZTP version here #####
@@ -67,11 +53,11 @@ class config_factory:
 	def __init__(self):
 		self.state = {}
 		self.snmprequests = {}
-		self.basefilename = config.running["startfilename"]
-		self.basesnmpcom = config.running["startsnmpcommunity"]
-		self.snmpoid = config.running["startsnmpoid"]
+		self.basefilename = config.running["initialfilename"]
+		self.basesnmpcom = config.running["community"]
+		self.snmpoid = config.running["snmpoid"]
 		self.baseconfig = config.running["starttemplate"]
-		self.uniquesuffix = config.running["finalsuffix"]
+		self.uniquesuffix = config.running["suffix"]
 		self.finaltemplate = config.running["finaltemplate"]
 		self.keyvalstore = config.running["keyvalstore"]
 	def request(self, filename, ipaddr):
@@ -89,7 +75,6 @@ class config_factory:
 	def create_snmp_request(self, tempid, ipaddr):
 		newquery = snmp_query(ipaddr, self.basesnmpcom, self.snmpoid)
 		self.snmprequests.update({tempid: newquery})
-		print(self.snmprequests)
 	def _generate_name(self):
 		timeint = int(str(time.time()).replace(".", ""))
 		timehex = hex(timeint)
@@ -97,7 +82,7 @@ class config_factory:
 		return("ZTP-"+hname)
 	def merge_base_config(self, tempid):
 		template = j2.Template(self.baseconfig)
-		return template.render(hostname=tempid, basesnmpcom=self.basesnmpcom)
+		return template.render(autohostname=tempid, community=self.basesnmpcom)
 	def merge_final_config(self, tempid):
 		template = j2.Template(self.finaltemplate)
 		identifier = self.snmprequests[tempid].response
@@ -160,7 +145,7 @@ class snmp_query:
 		self.oid = oid
 		self.timeout = timeout
 		self.thread = threading.Thread(target=self._query_worker)
-		self.thread.daemon = False
+		self.thread.daemon = True
 		self.thread.start()
 	def _query_worker(self):
 		starttime = time.time()
@@ -213,12 +198,12 @@ class config_manager:
 			self.rawconfig = f.read()
 			f.close()
 			self.running = json.loads(self.rawconfig)
-			self.finalsuffix = self.running["finalsuffix"]
+			self.suffix = self.running["suffix"]
 			self.finaltemplate = self.running["finaltemplate"]
 			self.keyvalstore = self.running["keyvalstore"]
-			self.startfilename = self.running["startfilename"]
-			self.startsnmpcommunity = self.running["startsnmpcommunity"]
-			self.startsnmpoid = self.running["startsnmpoid"]
+			self.initialfilename = self.running["initialfilename"]
+			self.community = self.running["community"]
+			self.snmpoid = self.running["snmpoid"]
 			self.starttemplate = self.running["starttemplate"]
 		else:
 			print("No Config File Found! Please install app!")
@@ -267,6 +252,8 @@ class config_manager:
 						print("Key does not exist under ID %s: %s" % (iden, key))
 					else:
 						del self.running["keyvalstore"][iden][key]
+						if self.running["keyvalstore"][iden] == {}: # No keys left
+							del self.running["keyvalstore"][iden]
 		elif setting == "idarray":
 			iden = args[3]
 			if iden not in list(self.running["idarrays"]):
@@ -293,7 +280,7 @@ class config_manager:
 		self.save()
 	def show_config(self):
 		cmdlist = []
-		simplevals = ["finalsuffix", "startfilename", "startsnmpcommunity", "startsnmpoid"]
+		simplevals = ["suffix", "initialfilename", "community", "snmpoid"]
 		for each in simplevals:
 			cmdlist.append("ztp set %s %s" % (each, self.running[each]))
 		itemp = "ztp set initial-template ^\n%s\n^" % self.running["starttemplate"]
@@ -345,7 +332,7 @@ class config_manager:
 ##### Installer class: A simple holder class which contains all of the    #####
 #####   installation scripts used to install/upgrade the ZTP server       #####
 class installer:
-	defaultconfig = '''{\n    "finalsuffix": "-confg", \n    "finaltemplate": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} 255.255.255.0\\n no shut\\n!\\nip domain-name test.com\\n!\\nusername admin privilege 15 secret password123\\n!\\naaa new-model\\n!\\n!\\naaa authentication login CONSOLE local\\naaa authorization console\\naaa authorization exec default local if-authenticated\\n!\\ncrypto key generate rsa modulus 2048\\n!\\nip ssh version 2\\n!\\nline vty 0 15\\nlogin authentication default\\ntransport input ssh\\nline console 0\\nlogin authentication CONSOLE\\nend", \n    "idarrays": {\n        "STACK1": [\n            "SERIAL1", \n            "SERIAL2", \n            "SERIAL3"\n        ]\n    }, \n    "keyvalstore": {\n        "SERIAL100": {\n            "hostname": "ACCESSSWITCH", \n            "vl1_ip_address": "10.0.0.201"\n        }, \n        "STACK1": {\n            "hostname": "CORESWITCH", \n            "vl1_ip_address": "10.0.0.200"\n        }\n    }, \n    "startfilename": "network-confg", \n    "startsnmpcommunity": "secretcommunity", \n    "startsnmpoid": "1.3.6.1.2.1.47.1.1.1.1.11.1000", \n    "starttemplate": "hostname {{ hostname }}\\n!\\nsnmp-server community {{ basesnmpcom }} RO\\n!\\nend"\n}'''
+	defaultconfig = '''{\n    "suffix": "-confg", \n    "finaltemplate": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} 255.255.255.0\\n no shut\\n!\\nip domain-name test.com\\n!\\nusername admin privilege 15 secret password123\\n!\\naaa new-model\\n!\\n!\\naaa authentication login CONSOLE local\\naaa authorization console\\naaa authorization exec default local if-authenticated\\n!\\ncrypto key generate rsa modulus 2048\\n!\\nip ssh version 2\\n!\\nline vty 0 15\\nlogin authentication default\\ntransport input ssh\\nline console 0\\nlogin authentication CONSOLE\\nend", \n    "idarrays": {\n        "STACK1": [\n            "SERIAL1", \n            "SERIAL2", \n            "SERIAL3"\n        ]\n    }, \n    "keyvalstore": {\n        "SERIAL100": {\n            "hostname": "ACCESSSWITCH", \n            "vl1_ip_address": "10.0.0.201"\n        }, \n        "STACK1": {\n            "hostname": "CORESWITCH", \n            "vl1_ip_address": "10.0.0.200"\n        }\n    }, \n    "initialfilename": "network-confg", \n    "community": "secretcommunity", \n    "snmpoid": "1.3.6.1.2.1.47.1.1.1.1.11.1000", \n    "starttemplate": "hostname {{ autohostname }}\\n!\\nsnmp-server community {{ community }} RO\\n!\\nend"\n}'''
 	def copy_binary(self):
 		binpath = "/bin/"
 		binname = "ztp"
@@ -502,13 +489,13 @@ _ztp_complete()
         COMPREPLY=( $(compgen -W "config run status version" -- $cur) )
         ;;
       "set")
-        COMPREPLY=( $(compgen -W "finalsuffix startfilename startsnmpcommunity startsnmpoid initial-template final-template keystore idarray" -- $cur) )
+        COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template final-template keystore idarray" -- $cur) )
         ;;
       "clear")
         COMPREPLY=( $(compgen -W "keystore idarray" -- $cur) )
         ;;
       "request")
-        COMPREPLY=( $(compgen -W "merge-test" -- $cur) )
+        COMPREPLY=( $(compgen -W "merge-test initial-merge" -- $cur) )
         ;;
       "service")
         COMPREPLY=( $(compgen -W "start stop restart status" -- $cur) )
@@ -518,22 +505,22 @@ _ztp_complete()
     esac
   elif [ $COMP_CWORD -eq 3 ]; then
     case "$prev" in
-      finalsuffix)
+      suffix)
         if [ "$prev2" == "set" ]; then
           COMPREPLY=( $(compgen -W "<value> -" -- $cur) )
         fi
         ;;
-      startfilename)
+      initialfilename)
         if [ "$prev2" == "set" ]; then
           COMPREPLY=( $(compgen -W "<value> -" -- $cur) )
         fi
         ;;
-      startsnmpcommunity)
+      community)
         if [ "$prev2" == "set" ]; then
           COMPREPLY=( $(compgen -W "<value> -" -- $cur) )
         fi
         ;;
-      startsnmpoid)
+      snmpoid)
         if [ "$prev2" == "set" ]; then
           COMPREPLY=( $(compgen -W "<value> -" -- $cur) )
         fi
@@ -690,22 +677,22 @@ def interpreter():
 		print("FreeZTP %s" % version)
 	##### SET #####
 	elif arguments == "set":
-		print " - set finalsuffix <value>                        |  Set the file name suffix used by target when requesting the final config"
-		print " - set startfilename <value>                      |  Set the file name used by the target during the initial config request"
-		print " - set startsnmpcommunity <value>                 |  Set the SNMP community you want to use for target ID identification"
-		print " - set startsnmpoid <value>                       |  Set the SNMP OID to use to pull the target ID during identification"
+		print " - set suffix <value>                             |  Set the file name suffix used by target when requesting the final config"
+		print " - set initialfilename <value>                      |  Set the file name used by the target during the initial config request"
+		print " - set community <value>                          |  Set the SNMP community you want to use for target ID identification"
+		print " - set snmpoid <value>                            |  Set the SNMP OID to use to pull the target ID during identification"
 		print " - set initial-template <end_char>                |  Set the initial configuration j2 template used to prep target for identification"
 		print " - set final-template <end_char>                  |  Set the final configuration j2 template pushed to host after discovery/identification"
 		print " - set keystore <id/arrayname> <keyword> <value>  |  Create a keystore entry to be used when merging final configurations"
 		print " - set idarray <arrayname> <id's>                 |  Create an ID array to allow multiple real ids to match one keystore id"
-	elif arguments == "set finalsuffix":
-		print " - set finalsuffix <value>                        |  Set the file name suffix used by target when requesting the final config"
-	elif arguments == "set startfilename":
-		print " - set startfilename <value>                      |  Set the file name used by the target during the initial config request"
-	elif arguments == "set startsnmpcommunity":
-		print " - set startsnmpcommunity <value>                 |  Set the SNMP community you want to use for target ID identification"
-	elif arguments == "set startsnmpoid":
-		print " - set startsnmpoid <value>                       |  Set the SNMP OID to use to pull the target ID during identification"
+	elif arguments == "set suffix":
+		print " - set suffix <value>                             |  Set the file name suffix used by target when requesting the final config"
+	elif arguments == "set initialfilename":
+		print " - set initialfilename <value>                    |  Set the file name used by the target during the initial config request"
+	elif arguments == "set community":
+		print " - set community <value>                          |  Set the SNMP community you want to use for target ID identification"
+	elif arguments == "set snmpoid":
+		print " - set snmpoid <value>                            |  Set the SNMP OID to use to pull the target ID during identification"
 	elif arguments == "set initial-template":
 		print " - set initial-template <end_char>                |  Set the initial configuration j2 template used to prep target for identification"
 	elif arguments == "set final-template":
@@ -729,8 +716,13 @@ def interpreter():
 	elif arguments[:13] == "clear idarray" and len(sys.argv) >= 4:
 		config.clear(sys.argv)
 	##### REQUEST #####
-	elif arguments == "request" or arguments == "request merge-test":
+	elif arguments == "request":
 		print " - request merge-test <id>                        |  Perform a test jinja2 merge of the final template with a keystore ID"
+		print " - request initial-merge                          |  See the result of an auto-merge of the initial-template"
+	elif arguments == "request merge-test":
+		print " - request merge-test <id>                        |  Perform a test jinja2 merge of the final template with a keystore ID"
+	elif arguments == "request initial-merge":
+		print(cfact.request(config.running["initialfilename"], "10.0.0.1"))
 	elif arguments[:18] == "request merge-test" and len(sys.argv) >= 4:
 		cfact.merge_test(sys.argv[3], "final")
 	##### SERVICE #####
@@ -762,10 +754,10 @@ def interpreter():
 		print " - show status                                    |  Show the status of the ZTP background service"
 		print " - show version                                   |  Show the current version of ZTP"
 		print "-------------------------------------------------------------------------------------------------------------------------------"
-		print " - set finalsuffix <value>                        |  Set the file name suffix used by target when requesting the final config"
-		print " - set startfilename <value>                      |  Set the file name used by the target during the initial config request"
-		print " - set startsnmpcommunity <value>                 |  Set the SNMP community you want to use for target ID identification"
-		print " - set startsnmpoid <value>                       |  Set the SNMP OID to use to pull the target ID during identification"
+		print " - set suffix <value>                             |  Set the file name suffix used by target when requesting the final config"
+		print " - set initialfilename <value>                    |  Set the file name used by the target during the initial config request"
+		print " - set community <value>                          |  Set the SNMP community you want to use for target ID identification"
+		print " - set snmpoid <value>                            |  Set the SNMP OID to use to pull the target ID during identification"
 		print "------------------------------------------------"
 		print " - set initial-template <end_char>                |  Set the initial configuration j2 template used to prep target for identification"
 		print " - set final-template <end_char>                  |  Set the final configuration j2 template pushed to host after discovery/identification"
@@ -777,6 +769,7 @@ def interpreter():
 		print " - clear idarray <arrayname>                      |  Delete an ID array from the configuration"
 		print "-------------------------------------------------------------------------------------------------------------------------------"
 		print " - request merge-test <id>                        |  Perform a test jinja2 merge of the final template with a keystore ID"
+		print " - request initial-merge                          |  See the result of an auto-merge of the initial-template"
 		print "-------------------------------------------------------------------------------------------------------------------------------"
 		print " - service (start|stop|restart|status)            |  Start, Stop, or Restart the installed ZTP service"
 		print "-------------------------------------------------------------------------------------------------------------------------------"
