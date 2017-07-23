@@ -3,30 +3,30 @@
 A zero-touch provisioning system built for Cisco Catalyst switches.
 
 
-####   VERSION   ####
 -----------------------------------------
+####   VERSION   ####
 The version of FreeZTP documented here is: **v0.1.0 Beta**
 
 
-####   TABLE OF CONTENTS   ####
 -----------------------------------------
+####   TABLE OF CONTENTS   ####
 1. [What is FreeZTP?](#what-is-freeztp)
 
 
-####   WHAT IS FREEZTP   ####
 -----------------------------------------
+####   WHAT IS FREEZTP   ####
 FreeZTP is a dynamic TFTP server built to automatically configure Cisco Catalyst switches upon first boot (Zero-Touch Provisioning). FreeZTP does this using the 'AutoInstall' feature built into Cisco IOS and automatically enabled by default. FreeZTP configures switches with individual, templatized configurations based upon the unique ID of the switch (usually the serial number).
 
 
+-----------------------------------------
 ####   REQUIREMENTS   ####
---------------------------------------
 OS: **CentOS7**
 
 Interpreter: **Python 2.7.5+**
 
 
-####   TERMINOLOGY   ####
 -----------------------------------------
+####   TERMINOLOGY   ####
 Due to the unique nature of how FreeZTP works and performs discovery of switches, there are a few terms you will need to know to understand the application.
   - **Template**
 	  - FreeZTP relies on the Jinja2 templating standard to take a common Cisco IOS configuration and templatize it: creating variables (with the `{{ i_am_a_variable }}` syntax) in the template where unique values can be inserted for a specific switch upon configuration push.
@@ -48,8 +48,8 @@ Due to the unique nature of how FreeZTP works and performs discovery of switches
 		  - The **Array ID List** is a list of real switch IDs (serial numbers) which, when searched for, will resolve to the Array Name before mapping to a Keystore ID. When configuring an IDArray in the CLI, each ID in the list is separated by a space.
 
 
-####   ZTP PROCESS   ####
 -----------------------------------------
+####   ZTP PROCESS   ####
 FreeZTP relies on the 'AutoInstall' function of a Cisco Catalyst switch to configure the switch upon first boot. The process followed to configure the switch is outlined below.
   1. The Catalyst switch is powered on (or rebooted) with no startup-configuration. The switch should be connected (via one of its ports) to another switch on a VLAN which is ready to serve DHCP. The DHCP scope should have DHCP OPTION 66 configured with the IP address (string) of the ZTP server.
   2. Once the operating system is loaded on the switch and it completes the boot-up process, it will start the AutoInstall process
