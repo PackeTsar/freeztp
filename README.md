@@ -10,12 +10,19 @@ The version of FreeZTP documented here is: **v0.1.0 Beta**
 
 ####   TABLE OF CONTENTS   ####
 -----------------------------------------
-1. [What is FreeZTP?](#what-is-freetp)
+1. [What is FreeZTP?](#what-is-freeztp)
 
 
 ####   WHAT IS FREEZTP   ####
 -----------------------------------------
-FreeZTP is dynamic TFTP server built to automatically configure Cisco Catalyst switches upon first boot (Zero-Touch Provisioning). FreeZTP does this using the 'AutoInstall' feature built into Cisco IOS and automatically enabled by default. FreeZTP configures switches with individual, templatized configurations based upon the unique ID of the switch (usually the serial number).
+FreeZTP is a dynamic TFTP server built to automatically configure Cisco Catalyst switches upon first boot (Zero-Touch Provisioning). FreeZTP does this using the 'AutoInstall' feature built into Cisco IOS and automatically enabled by default. FreeZTP configures switches with individual, templatized configurations based upon the unique ID of the switch (usually the serial number).
+
+
+####   REQUIREMENTS   ####
+--------------------------------------
+OS: **CentOS7**
+
+Interpreter: **Python 2.7.5+**
 
 
 ####   TERMINOLOGY   ####
@@ -23,7 +30,7 @@ FreeZTP is dynamic TFTP server built to automatically configure Cisco Catalyst s
 Due to the unique nature of how FreeZTP works and performs discovery of switches, there are a few terms you will need to know to understand the application.
   - **Template**
 	  - FreeZTP relies on the Jinja2 templating standard to take a common Cisco IOS configuration and templatize it: creating variables (with the `{{ i_am_a_variable }}` syntax) in the template where unique values can be inserted for a specific switch upon configuration push.
-	  - FreeZTP uses two different templates: the 'initial-template', and the 'final-template'. The initial-template is used to set the switch up for discovery, the final-template is used to push the final configuation once the discovery is complete and the switch has been identified (this will make more sense in the **ZTP Process** section).
+	  - FreeZTP uses two different templates: the 'initial-template', and the 'final-template'. The initial-template is used to set the switch up for discovery, the final-template is used to push the final configuration once the discovery is complete and the switch has been identified (this will make more sense in the **ZTP Process** section).
   - **Keystore**
 	  - The counterpart to the template (specifically: the final-template) is the keystore. The keystore is the part of the ZTP configuration which holds the unique configuration values for specific switches (or for an array of switches). The keystore provides those values for the merge of the final-template once the switch has been identified by the discovery process.
 	  - **Keystore ID**
@@ -38,10 +45,10 @@ Due to the unique nature of how FreeZTP works and performs discovery of switches
 	  - An ID Array is a method of mapping one or more real switch IDs (ie: serial numbers) to a specific keystore. Multiple real IDs can be mapped to the same Keystore ID, which comes in handy when building a configuration for a switch stack (which could take on the serial number of any of the member switches when it boots up).
 	  - The ID array has two pieces:
 		  - The **Array Name** is the name of the specific array. The Array Name must match a Keystore ID in order to pull values from that keystore.
-		  - The **Array ID List** is a list of real switch IDs (serial numbers) which, when searched for, will resolve to the Array Name before mapping to a Keystore ID. When configuring an IDArray in the CLI, each ID in the list is seperated by a space.
+		  - The **Array ID List** is a list of real switch IDs (serial numbers) which, when searched for, will resolve to the Array Name before mapping to a Keystore ID. When configuring an IDArray in the CLI, each ID in the list is separated by a space.
 
 
-####   ZTP Process   ####
+####   ZTP PROCESS   ####
 -----------------------------------------
 FreeZTP relies on the 'AutoInstall' function of a Cisco Catalyst switch to configure the switch upon first boot. The process followed to configure the switch is outlined below.
   1. The Catalyst switch is powered on (or rebooted) with no startup-configuration. The switch should be connected (via one of its ports) to another switch on a VLAN which is ready to serve DHCP. The DHCP scope should have DHCP OPTION 66 configured with the IP address (string) of the ZTP server.
@@ -50,13 +57,13 @@ FreeZTP relies on the 'AutoInstall' function of a Cisco Catalyst switch to confi
 	  - 2.2 The switch will enable interface (SVI) Vlan1 and begin sending out DHCP requests from interface Vlan1.
 	  - 2.3 Once the switch receives a DHCP lease with a TFTP server option (option 66), it will send a TFTP request for a file named "network-confg".
   3. When the request for the "network-confg" file is received by the ZTP server, it performs an automatic merge with the initial-template:
-	  - 3.1 The `{{ hostname }}` variable is filled by an internally generated hexadecimal temporary name (example: ZTP-22F1388804). This temporary name is saved in memory by the ZTP server for future reference because the switch will use this name to request a new TFTP file in a later step.
-	  - 3.2 The `{{ basesnmpcom }}` variable is filled with the value set in the `startsnmpcommunity` configuration field
+	  - 3.1 The `{{ autohostname }}` variable is filled by an internally generated hexadecimal temporary name (example: ZTP-22F1388804). This temporary name is saved in memory by the ZTP server for future reference because the switch will use this name to request a new TFTP file in a later step.
+	  - 3.2 The `{{ community }}` variable is filled with the value set in the `community` configuration field
 	  - 3.3 This merged configuration is passed to the Cisco switch as the "network-confg" file. The switch will load it into its active running-config and proceed to step 5.
   4. After the file is passed to the switch, the ZTP server initiates a SNMP discovery of the switch
 	  - 4.1 The SNMP request targets the source IP of the initial TFTP request for the "network-confg" file
-	  - 4.2 The SNMP request uses the value of the `startsnmpcommunity` as the authentication community (which the switch should honor once it loads the configuration from the "network-confg" file)
-	  - 4.3 The SNMP request uses the OID from the `startsnmpoid` which, by default, is the OID to obtain the serial number of the switch.
+	  - 4.2 The SNMP request uses the value of the `community` configuration field as the authentication community (which the switch should honor once it loads the configuration from the "network-confg" file)
+	  - 4.3 The SNMP request uses the OID from the `snmpoid` configuration field which, by default, is the OID to obtain the serial number of the switch.
 	  - 4.4 Once the SNMP query succeeds, the ZTP server maps the serial number of the discovered switch to its temporary hostname generated in step 3.
   5. After the switch loads the "network-confg" file into its running-config, it sends out a new TFTP request to the ZTP server
 	  - 5.1 The file name for the new TFTP request is based upon the hostname passed to the switch in the initial ("network-confg") file (example filename: "ZTP-22F1388804-confg")
