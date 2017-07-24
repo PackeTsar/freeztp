@@ -145,6 +145,74 @@ Below is the CLI guide for FreeZTP. You can see this at the command line by ente
 -------------------------------------------------------------------------------------------------------------------------------
 ```
 
+The following is the default configuration seen on the ZTP server after installation when doing a `ztp show config`.
+
+```
+[root@ZTP ~]# ztp show config 
+!
+ztp set suffix -confg
+ztp set initialfilename network-confg
+ztp set community secretcommunity
+ztp set snmpoid 1.3.6.1.2.1.47.1.1.1.1.11.1000
+!
+!
+!
+ztp set idarray STACK1 SERIAL1 SERIAL2 SERIAL3
+!
+!
+!
+!
+ztp set keystore SERIAL100 vl1_ip_address 10.0.0.201
+ztp set keystore SERIAL100 hostname ACCESSSWITCH
+!
+ztp set keystore STACK1 vl1_ip_address 10.0.0.200
+ztp set keystore STACK1 hostname CORESWITCH
+!
+!
+#######################################################
+ztp set initial-template ^
+hostname {{ autohostname }}
+!
+snmp-server community {{ community }} RO
+!
+end
+^
+!
+!
+!
+#######################################################
+ztp set final-template ^
+hostname {{ hostname }}
+!
+interface Vlan1
+ ip address {{ vl1_ip_address }} 255.255.255.0
+ no shut
+!
+ip domain-name test.com
+!
+username admin privilege 15 secret password123
+!
+aaa new-model
+!
+!
+aaa authentication login CONSOLE local
+aaa authorization console
+aaa authorization exec default local if-authenticated
+!
+crypto key generate rsa modulus 2048
+!
+ip ssh version 2
+!
+line vty 0 15
+login authentication default
+transport input ssh
+line console 0
+login authentication CONSOLE
+end
+^
+[root@ZTP ~]# 
+```
+
 
 -----------------------------------------
 ###   CONTRIBUTING   ###
