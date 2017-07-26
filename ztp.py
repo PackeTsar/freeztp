@@ -636,7 +636,10 @@ def interpreter():
 	global config
 	global cfact
 	config = config_manager()
-	cfact = config_factory()
+	try:
+		cfact = config_factory()
+	except AttributeError:
+		print("Cannot mount cfact")
 	##### RUN #####
 	if arguments == "run":
 		start_tftp()
