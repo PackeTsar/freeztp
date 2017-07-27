@@ -30,6 +30,13 @@ import logging
 import commands
 import threading
 
+
+def interceptor(afile, raddress, rport):
+	if cfact.lookup(afile, raddress):
+		return ztp_dyn_file(afile, raddress, rport)
+	else:
+		return None
+
 ##### Dynamic file object: instantiated by the tftpy server to generate   #####
 #####   TFTP files                                                        #####
 class ztp_dyn_file:
@@ -60,6 +67,30 @@ class config_factory:
 		self.uniquesuffix = config.running["suffix"]
 		self.finaltemplate = config.running["finaltemplate"]
 		self.keyvalstore = config.running["keyvalstore"]
+	def lookup(self, filename, ipaddr):
+		tempid = filename.replace(self.uniquesuffix, "")
+		if filename == self.basefilename:
+			return True
+		elif self.uniquesuffix in filename and tempid in list(self.snmprequests):
+			if self.snmprequests[tempid].complete:
+				if self.id_configured(self.snmprequests[tempid].response):
+					return True
+		if "ztp-" in tempid.lower():
+			print("Creating new SNMP request for %s: %s" % (str(tempid), str(ipaddr)))
+			self.create_snmp_request(tempid, ipaddr)
+		return False
+	def id_configured(self, serial):
+		if serial in list(config.running["keyvalstore"]):
+			return True
+		else:
+			arraykeys = []
+			for array in config.running["idarrays"]:
+				for iden in config.running["idarrays"][array]:
+					arraykeys.append(iden)
+			if serial in arraykeys:
+				return True
+			else:
+				return False
 	def request(self, filename, ipaddr):
 		if filename == self.basefilename:
 			tempid = self._generate_name()
@@ -67,11 +98,14 @@ class config_factory:
 			return self.merge_base_config(tempid)
 		else:
 			tempid = filename.replace(self.uniquesuffix, "")
-			if self.snmprequests[tempid].complete:
-				print("SUCCESS!!!!!")
-				return self.merge_final_config(tempid)
+			if self.uniquesuffix in filename and tempid in list(self.snmprequests):
+				if self.snmprequests[tempid].complete:
+					print("SUCCESS!!!!!")
+					return self.merge_final_config(tempid)
+				else:
+					print("ERRORRRRRR!!!!!!!")
 			else:
-				print("ERRORRRRRR!!!!!!!")
+				return None
 	def create_snmp_request(self, tempid, ipaddr):
 		newquery = snmp_query(ipaddr, self.basesnmpcom, self.snmpoid)
 		self.snmprequests.update({tempid: newquery})
@@ -136,7 +170,7 @@ class config_factory:
 #####   retains the real ID of the switch which is mapped to a            #####
 #####   keystore ID when the final template is requested                  #####
 class snmp_query:
-	def __init__(self, host, community, oid, timeout=30):
+	def __init__(self, host, community, oid, timeout=10):
 		self.complete = False
 		self.status = "starting"
 		self.response = None
@@ -615,7 +649,7 @@ for dynamic file creations
 #####   passed in as the dynamic file function.                           #####
 def start_tftp():
 	tftpy.setLogLevel(logging.DEBUG)
-	server = tftpy.TftpServer("/", dyn_file_func=ztp_dyn_file)
+	server = tftpy.TftpServer("/", dyn_file_func=interceptor)
 	server.listen(listenip="", listenport=69)
 
 
