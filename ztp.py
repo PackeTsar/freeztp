@@ -72,16 +72,8 @@ class config_factory:
 		if filename == self.basefilename:
 			return True
 		elif self.uniquesuffix in filename and tempid in list(self.snmprequests):
-			print("############ STEP 1 Good!")
-			print(filename)
-			print(tempid)
-			print(list(self.snmprequests))
 			if self.snmprequests[tempid].complete:
-				print("############ STEP 2 Good!")
-				print(self.snmprequests[tempid].complete)
-				print(self.snmprequests[tempid].response)
 				if self.id_configured(self.snmprequests[tempid].response):
-					print("############ STEP 2 Good!")
 					return True
 		if "ztp-" in tempid.lower():
 			print("Creating new SNMP request for %s: %s" % (str(tempid), str(ipaddr)))
