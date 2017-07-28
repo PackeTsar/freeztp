@@ -170,7 +170,7 @@ class config_factory:
 #####   retains the real ID of the switch which is mapped to a            #####
 #####   keystore ID when the final template is requested                  #####
 class snmp_query:
-	def __init__(self, host, community, oid, timeout=10):
+	def __init__(self, host, community, oid, timeout=30):
 		self.complete = False
 		self.status = "starting"
 		self.response = None
@@ -200,7 +200,7 @@ class snmp_query:
 				print("snmp_query._query_worker: Timeout Expired, Query Thread Terminating")
 				break
 			else:
-				time.sleep(5)
+				time.sleep(3)
 	def _get_oid(self):
 		errorIndication, errorStatus, errorIndex, varBinds = next(
 			pysnmp.hlapi.getCmd(pysnmp.hlapi.SnmpEngine(),
