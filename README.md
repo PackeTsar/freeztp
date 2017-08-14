@@ -5,7 +5,7 @@ A zero-touch provisioning system built for Cisco Catalyst switches.
 
 -----------------------------------------
 ###   VERSION   ###
-The version of FreeZTP documented here is: **v0.1.0 Beta**
+The version of FreeZTP documented here is: **v0.2.0 Beta**
 
 
 -----------------------------------------
@@ -16,7 +16,8 @@ The version of FreeZTP documented here is: **v0.1.0 Beta**
 4. [ZTP Process](#ztp-process)
 5. [Installation](#installation)
 6. [Command Interface](#command-interface)
-7. [Contributing](#contributing)
+7. [0.1.0 TO 0.2.0 Updates](#updates-in-v010----v020)
+8. [Contributing](#contributing)
 
 
 -----------------------------------------
@@ -36,9 +37,9 @@ Interpreter: **Python 2.7.5+**
 Due to the unique nature of how FreeZTP works and performs discovery of switches, there are a few terms you will need to know to understand the application.
   - **Template**
 	  - FreeZTP relies on the Jinja2 templating standard to take a common Cisco IOS configuration and templatize it: creating variables (with the `{{ i_am_a_variable }}` syntax) in the template where unique values can be inserted for a specific switch upon configuration push.
-	  - FreeZTP uses two different templates: the 'initial-template', and the 'final-template'. The initial-template is used to set the switch up for discovery, the final-template is used to push the final configuration once the discovery is complete and the switch has been identified (this will make more sense in the **ZTP Process** section).
+	  - FreeZTP uses two different template types: the 'initial-template', and the custom named final templates. The initial-template is used to set the switch up for discovery, the final templates are used to push the final configuration once the discovery is complete and the switch has been identified (this will make more sense in the **ZTP Process** section).
   - **Keystore**
-	  - The counterpart to the template (specifically: the final-template) is the keystore. The keystore is the part of the ZTP configuration which holds the unique configuration values for specific switches (or for an array of switches). The keystore provides those values for the merge of the final-template once the switch has been identified by the discovery process.
+	  - The counterpart to the template (specifically: the final templates) is the keystore. The keystore is the part of the ZTP configuration which holds the unique configuration values for specific switches (or for an array of switches). The keystore provides those values for the merge of the final-template once the switch has been identified by the discovery process.
 	  - **Keystore ID**
 		  - A Keystore ID is the named identifier for a specific store which holds a set of key-value pairs.
 	  - **Keystore Key**
@@ -52,6 +53,8 @@ Due to the unique nature of how FreeZTP works and performs discovery of switches
 	  - The ID array has two pieces:
 		  - The **Array Name** is the name of the specific array. The Array Name must match a Keystore ID in order to pull values from that keystore.
 		  - The **Array ID List** is a list of real switch IDs (serial numbers) which, when searched for, will resolve to the Array Name before mapping to a Keystore ID. When configuring an IDArray in the CLI, each ID in the list is separated by a space.
+  - **Associations**
+    - An association is a configuration element which maps a keystore to a named template. An association is required for each keystore in order to tell FreeZTP which template to use to do the merge when using certain keystore.
 
 
 -----------------------------------------
@@ -75,11 +78,11 @@ FreeZTP relies on the 'AutoInstall' function of a Cisco Catalyst switch to confi
 	  - 5.1 The file name for the new TFTP request is based upon the hostname passed to the switch in the initial ("network-confg") file (example filename: "ZTP-22F1388804-confg")
   6. The ZTP server receives the new TFTP request and uses the requested filename to identify the requesting switch
 	  - 6.1 The ZTP server receives a TFTP request for a file based on a temporary hostname (example filename: "ZTP-22F1388804-confg").
-	  - 6.2 It uses this hostname to look up the discovery information (serial number) of the requesting switch (it was saved in step 4.4). This discovery information/ID can be referred to as the "real ID" of the switch. Once the real ID of the requesting switch is known, the ZTP server begins the process of merging the final configuration for the switch using the final-template and the Keystore/IDArrays.
+	  - 6.2 It uses this hostname to look up the discovery information (serial number) of the requesting switch (it was saved in step 4.4). This discovery information/ID can be referred to as the "real ID" of the switch. Once the real ID of the requesting switch is known, the ZTP server begins the process of merging the final configuration for the switch using the IDArray/Keystore and its associated template.
   7. The ZTP server uses the switch's real ID to assemble the final configuration and pass it to the switch to be loaded into the running-config
 	  - 7.1 The real ID is used to search through all of the Keystore IDs to see if one of them matches the real ID. If a Keystore ID matches, then the server proceeds to 7.3 with that Keystore ID.
 	  - 7.2 If there is no match between the real-ID and a Keystore ID, then the server looks to the IDArrays for a match. It searches through the ID list in each IDArray, once a match is found, the server resolves the real-ID to the IDArray Name and re-searches the Keystore IDs for a match using the resolved IDArray name. Once a match is found, the server continues to step 7.3 with the matched Keystore ID.
-	  - 7.3 Once a candidate Keystore ID is found the server performs a Jinja2 merge between the final-template and the key-value pairs in the matched Keystore ID.
+	  - 7.3 Once a candidate Keystore ID is found the server performs a Jinja2 merge between the key-value pairs in the matched Keystore ID and that Keystore ID's associated template.
 	  - This merged configuration is then passed to the switch via TFTP with the filename requested by the switch ("ZTP-22F1388804-confg" in this case).
   8. The switch loads this final configuration into its active running-config and begins normal operations
 	  - 8.1 If you configured static IP addresses in the final-template, then the switch starts using those static IPs and can be remotely accessible via them (assuming you also included config for AAA and SSH)
@@ -107,42 +110,45 @@ The command interface is fully featured with helpers which can be seen either by
 
 All commands which change the ZTP configuration use the `set` or `clear` arguments. Commands issued with the `set` argument will overwrite an existing configuration item if that item already exists. The `clear` argument allows you to remove configuration items.
 
-The initial and final template configurations are entered as multi-line text blocks. To facilitate this, you must specify a delineation character in the `set` command. As an example, you will issue the command `ztp set final-template ^` where the carat (`^`) character is set as the delineation character. After that command is issued, you can paste in the multi-line Cisco IOS template text. Once finished, enter that delineation character (`^` in this case) on a line by itself to exit the text block entry mode.
+The initial and final template configurations are entered as multi-line text blocks. To facilitate this, you must specify a delineation character in the `set` command. As an example, you will issue the command `ztp set template MY_TEMPLATE ^` where the carat (`^`) character is set as the delineation character. After that command is issued, you can paste in the multi-line Cisco IOS template text. Once finished, enter that delineation character (`^` in this case) on a line by itself to exit the text block entry mode.
 
 Below is the CLI guide for FreeZTP. You can see this at the command line by entering `ztp` and hitting ENTER (after installation). 
 ```
--------------------------------------------------------------------------------------------------------------------------------
-                     ARGUMENTS                    |                                  DESCRIPTIONS
--------------------------------------------------------------------------------------------------------------------------------
- - run                                            |  Run the ZTP main program in shell mode begin listening for TFTP requests
--------------------------------------------------------------------------------------------------------------------------------
- - install                                        |  Run the ZTP installer
--------------------------------------------------------------------------------------------------------------------------------
- - show (config|run)                              |  Show the current ZTP configuration
- - show status                                    |  Show the status of the ZTP background service
- - show version                                   |  Show the current version of ZTP
--------------------------------------------------------------------------------------------------------------------------------
- - set suffix <value>                             |  Set the file name suffix used by target when requesting the final config
- - set initialfilename <value>                    |  Set the file name used by the target during the initial config request
- - set community <value>                          |  Set the SNMP community you want to use for target ID identification
- - set snmpoid <value>                            |  Set the SNMP OID to use to pull the target ID during identification
-------------------------------------------------
- - set initial-template <end_char>                |  Set the initial configuration j2 template used to prep target for identification
- - set final-template <end_char>                  |  Set the final configuration j2 template pushed to host after discovery/identification
-------------------------------------------------
- - set keystore <id/arrayname> <keyword> <value>  |  Create a keystore entry to be used when merging final configurations
- - set idarray <arrayname> <id_#1> <id_#2> ...    |  Create an ID array to allow multiple real ids to match one keystore id
--------------------------------------------------------------------------------------------------------------------------------
- - clear keystore <id> (all|<keyword>)            |  Delete an individual key or a whole keystore ID from the configuration
- - clear idarray <arrayname>                      |  Delete an ID array from the configuration
--------------------------------------------------------------------------------------------------------------------------------
- - request merge-test <id>                        |  Perform a test jinja2 merge of the final template with a keystore ID
- - request initial-merge                          |  See the result of an auto-merge of the initial-template
--------------------------------------------------------------------------------------------------------------------------------
- - service (start|stop|restart|status)            |  Start, Stop, or Restart the installed ZTP service
--------------------------------------------------------------------------------------------------------------------------------
- - version                                        |  Show the current version of ZTP
--------------------------------------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------------------------------------------------
+                     ARGUMENTS                                 |                                  DESCRIPTIONS
+----------------------------------------------------------------------------------------------------------------------------------------------
+ - run                                                         |  Run the ZTP main program in shell mode begin listening for TFTP requests
+----------------------------------------------------------------------------------------------------------------------------------------------
+ - install                                                     |  Run the ZTP installer
+----------------------------------------------------------------------------------------------------------------------------------------------
+ - show (config|run)                                           |  Show the current ZTP configuration
+ - show status                                                 |  Show the status of the ZTP background service
+ - show version                                                |  Show the current version of ZTP
+----------------------------------------------------------------------------------------------------------------------------------------------
+ - set suffix <value>                                          |  Set the file name suffix used by target when requesting the final config
+ - set initialfilename <value>                                 |  Set the file name used by the target during the initial config request
+ - set community <value>                                       |  Set the SNMP community you want to use for target ID identification
+ - set snmpoid <value>                                         |  Set the SNMP OID to use to pull the target ID during identification
+---------------------------------------------------------------
+ - set initial-template <end_char>                             |  Set the initial configuration j2 template used to prep target for identification
+ - set template <template_name> <end_char>                     |  Create/Modify a named J2 tempate which is used for the final config push
+---------------------------------------------------------------
+ - set keystore <id/arrayname> <keyword> <value>               |  Create a keystore entry to be used when merging final configurations
+ - set idarray <arrayname> <id_#1> <id_#2> ...                 |  Create an ID array to allow multiple real ids to match one keystore id
+ - set association id <id/arrayname> template <template_name>  |  Associate a keystore id or an idarray to a specific named template
+----------------------------------------------------------------------------------------------------------------------------------------------
+ - clear template <template_name>                              |  Delete a named configuration template
+ - clear keystore <id> (all|<keyword>)                         |  Delete an individual key or a whole keystore ID from the configuration
+ - clear idarray <arrayname>                                   |  Delete an ID array from the configuration
+ - clear association <id/arrayname>                            |  Delete an association from the configuration
+----------------------------------------------------------------------------------------------------------------------------------------------
+ - request merge-test <id>                                     |  Perform a test jinja2 merge of the final template with a keystore ID
+ - request initial-merge                                       |  See the result of an auto-merge of the initial-template
+----------------------------------------------------------------------------------------------------------------------------------------------
+ - service (start|stop|restart|status)                         |  Start, Stop, or Restart the installed ZTP service
+----------------------------------------------------------------------------------------------------------------------------------------------
+ - version                                                     |  Show the current version of ZTP
+----------------------------------------------------------------------------------------------------------------------------------------------
 ```
 
 The following is the default configuration seen on the ZTP server after installation when doing a `ztp show config`.
@@ -163,10 +169,17 @@ ztp set idarray STACK1 SERIAL1 SERIAL2 SERIAL3
 !
 !
 ztp set keystore SERIAL100 vl1_ip_address 10.0.0.201
-ztp set keystore SERIAL100 hostname ACCESSSWITCH
+ztp set keystore SERIAL100 hostname SOMEDEVICE
 !
 ztp set keystore STACK1 vl1_ip_address 10.0.0.200
 ztp set keystore STACK1 hostname CORESWITCH
+!
+!
+!
+!
+ztp set association id SERIAL100 template SHORT_TEMPLATE
+!
+ztp set association id STACK1 template LONG_TEMPLATE
 !
 !
 #######################################################
@@ -181,7 +194,20 @@ end
 !
 !
 #######################################################
-ztp set final-template ^
+ztp set template SHORT_TEMPLATE ^
+hostname {{ hostname }}
+!
+interface Vlan1
+ ip address {{ vl1_ip_address }} 255.255.255.0
+ no shut
+!
+end
+^
+!
+!
+!
+#######################################################
+ztp set template LONG_TEMPLATE ^
 hostname {{ hostname }}
 !
 interface Vlan1
@@ -210,8 +236,21 @@ line console 0
 login authentication CONSOLE
 end
 ^
+!
+!
+!
+#######################################################
+
 [root@ZTP ~]# 
 ```
+
+
+--------------------------------------
+####   UPDATES IN V0.1.0 --> V0.2.0   ####
+
+**ADDED FEATURES:**
+
+- Support has been added for using multiple templates in ZTP simultaneously (using custom named templates). The use of multiple templates requires that associations be created between each keystore and a named template using the `set association` command. The new configuration elements are made apparent in the new default configuration.
 
 
 -----------------------------------------
