@@ -1,14 +1,14 @@
 #!/usr/bin/python
 
 
-#####         FreeZTP Server v0.1.0          #####
+#####         FreeZTP Server v0.2.0          #####
 #####        Written by John W Kerns         #####
 #####       http://blog.packetsar.com        #####
 ##### https://github.com/convergeone/freeztp #####
 
 
 ##### Inform FreeZTP version here #####
-version = "v0.1.0"
+version = "v0.2.0"
 
 
 ##### Try to import non-native modules, fail gracefully #####
@@ -65,8 +65,9 @@ class config_factory:
 		self.snmpoid = config.running["snmpoid"]
 		self.baseconfig = config.running["starttemplate"]
 		self.uniquesuffix = config.running["suffix"]
-		self.finaltemplate = config.running["finaltemplate"]
+		self.templates = config.running["templates"]
 		self.keyvalstore = config.running["keyvalstore"]
+		self.associations = config.running["associations"]
 	def lookup(self, filename, ipaddr):
 		tempid = filename.replace(self.uniquesuffix, "")
 		if filename == self.basefilename:
@@ -118,9 +119,10 @@ class config_factory:
 		template = j2.Template(self.baseconfig)
 		return template.render(autohostname=tempid, community=self.basesnmpcom)
 	def merge_final_config(self, tempid):
-		template = j2.Template(self.finaltemplate)
 		identifier = self.snmprequests[tempid].response
 		keystoreid = self.get_keystore_id(identifier)
+		templatedata = self.get_template(keystoreid)
+		template = j2.Template(templatedata)
 		vals = config.running["keyvalstore"][keystoreid]
 		return template.render(vals)
 	def get_keystore_id(self, iden):
@@ -134,18 +136,31 @@ class config_factory:
 					print("ID '%s' resolved to arrayname '%s'" % (iden, identity))
 					break
 			return identity
+	def get_template(self, identity):
+		response = False
+		for association in self.associations:
+			if identity == association:
+				templatename = self.associations[association]
+				if templatename in self.templates:
+					response = self.templates[templatename]
+		return response
 	def merge_test(self, iden, template):
-		env = Environment()
-		if template == "final":
-			j2template = j2.Template(self.finaltemplate)
-			ast = env.parse(self.finaltemplate)
-		elif template == "initial":
-			j2template = j2.Template(self.baseconfig)
-			ast = env.parse(self.finaltemplate)
 		identity = self.get_keystore_id(iden)
 		if not identity:
 			print("ID '%s' does not exist in keystore!" % iden)
 		else:
+			env = Environment()
+			if template == "final":
+				templatedata = self.get_template(identity)
+				if not templatedata:
+					print("No tempate associated with identity %s" % iden)
+					quit()
+				else:
+					j2template = j2.Template(templatedata)
+					ast = env.parse(templatedata)
+			elif template == "initial":
+				j2template = j2.Template(self.baseconfig)
+				ast = env.parse(self.baseconfig)
 			templatevarlist = list(meta.find_undeclared_variables(ast))
 			varsmissing = False
 			missingvarlist = []
@@ -161,6 +176,7 @@ class config_factory:
 			print("##############################")
 			print(j2template.render(config.running["keyvalstore"][identity]))
 			print("##############################")
+	
 
 
 ##### SNMP Querying object: It is instantiated by the config_factory      #####
@@ -233,12 +249,13 @@ class config_manager:
 			f.close()
 			self.running = json.loads(self.rawconfig)
 			self.suffix = self.running["suffix"]
-			self.finaltemplate = self.running["finaltemplate"]
+			self.templates = self.running["templates"]
 			self.keyvalstore = self.running["keyvalstore"]
 			self.initialfilename = self.running["initialfilename"]
 			self.community = self.running["community"]
 			self.snmpoid = self.running["snmpoid"]
 			self.starttemplate = self.running["starttemplate"]
+			self.associations = self.running["associations"]
 		else:
 			print("No Config File Found! Please install app!")
 			#quit()
@@ -250,21 +267,27 @@ class config_manager:
 	def set(self, args):
 		setting = args[2]
 		value = args[3]
-		exceptions = ["finaltemplate", "keyvalstore", "starttemplate"]
+		exceptions = ["keyvalstore", "starttemplate"]
 		if setting in exceptions:
 			print("Cannot configure this way")
 		elif "template" in setting:
-			print("Enter each line of the template ending with '%s' on a line by itself" % value)
-			newinitial = self.multilineinput(value)
+			print("Enter each line of the template ending with '%s' on a line by itself" % args[4])
+			newtemplate = self.multilineinput(args[4])
 			if setting == "initial-template":
-				self.running["starttemplate"] = newinitial
-			elif setting == "final-template":
-				self.running["finaltemplate"] = newinitial
+				self.running["starttemplate"] = newtemplate
+			elif setting == "template":
+				if "templates" not in list(self.running):
+					self.running.update({"templates": {}})
+				self.running["templates"][value] = newtemplate
 			self.save()
 		elif setting == "keystore":
 			self.set_keystore(args[3], args[4], args[5] )
 		elif setting == "idarray":
 			self.set_idarray(value, args[4:])
+		elif setting == "association":
+			iden = args[4]
+			template = args[6]
+			self.set_association(iden, template)
 		else:
 			if setting in list(self.running):
 				self.running[setting] = value
@@ -273,8 +296,8 @@ class config_manager:
 				print("Unknown Setting!")
 	def clear(self, args):
 		setting = args[2]
+		iden = args[3]
 		if setting == "keystore":
-			iden = args[3]
 			key = args[4]
 			if iden not in list(self.running["keyvalstore"]):
 				print("ID does not exist in keystore: %s" % iden)
@@ -289,11 +312,24 @@ class config_manager:
 						if self.running["keyvalstore"][iden] == {}: # No keys left
 							del self.running["keyvalstore"][iden]
 		elif setting == "idarray":
-			iden = args[3]
 			if iden not in list(self.running["idarrays"]):
 				print("ID does not exist in the idarrays: %s" % iden)
 			else:
 				del self.running["idarrays"][iden]
+		elif setting == "template":
+			if "templates" not in list(self.running):
+				print("No templates are currently configured")
+			elif iden not in list(self.running["templates"]):
+				print("Template '%s' is not currently configured" % iden)
+			else:
+				del self.running["templates"][iden] 
+		elif setting == "association":
+			if "associations" not in list(self.running):
+				print("No associations are currently configured")
+			elif iden not in list(self.running["associations"]):
+				print("Association '%s' is not currently configured" % iden)
+			else:
+				del self.running["associations"][iden] 
 		self.save()
 	def multilineinput(self, ending):
 		result = ""
@@ -312,13 +348,22 @@ class config_manager:
 		else:
 			self.running["idarrays"].update({arrayname: idlist})
 		self.save()
+	def set_association(self, iden, template):
+		if "associations" not in list(self.running):
+			self.running.update({"associations": {}})
+		self.running["associations"].update({iden: template})
+		self.save()
 	def show_config(self):
 		cmdlist = []
 		simplevals = ["suffix", "initialfilename", "community", "snmpoid"]
 		for each in simplevals:
 			cmdlist.append("ztp set %s %s" % (each, self.running[each]))
 		itemp = "ztp set initial-template ^\n%s\n^" % self.running["starttemplate"]
-		ftemp = "ztp set final-template ^\n%s\n^" % self.running["finaltemplate"]
+		###########
+		templatetext = ""
+		for template in self.running["templates"]:
+			templatetext += "ztp set template %s ^\n%s\n^" % (template, self.running["templates"][template])
+			templatetext += "\n!\n!\n!\n#######################################################\n"
 		###########
 		idarraylist = []
 		for arrayname in self.running["idarrays"]:
@@ -334,6 +379,12 @@ class config_manager:
 				keylist.append("ztp set keystore %s %s %s" % (iden, key, value))
 			keylist.append("!")
 		############
+		associationlist = []
+		for association in self.running["associations"]:
+			template = self.running["associations"][association]
+			associationlist.append("ztp set association id %s template %s" % (association, template))
+			associationlist.append("!")
+		############
 		configtext = "!\n"
 		for cmd in cmdlist:
 			configtext += cmd + "\n"
@@ -343,11 +394,14 @@ class config_manager:
 		configtext += "!\n!\n!\n"
 		for cmd in keylist:
 			configtext += cmd + "\n"
+		configtext += "!\n!\n!\n"
+		for cmd in associationlist:
+			configtext += cmd + "\n"
 		###########
 		configtext += "!\n#######################################################\n"
 		configtext += itemp
 		configtext += "\n!\n!\n!\n#######################################################\n"
-		configtext += ftemp
+		configtext += templatetext
 		print(configtext)
 	def hidden_list_ids(self):
 		for iden in list(self.running["keyvalstore"]):
@@ -361,12 +415,28 @@ class config_manager:
 	def hidden_list_arrays(self):
 		for arrayname in list(self.running["idarrays"]):
 			print(arrayname)
+	def hidden_list_templates(self):
+		for template in self.running["templates"]:
+			print(template)
+	def hidden_list_associations(self):
+		for association in self.running["associations"]:
+			print(association)
+	def hidden_list_all_ids(self):
+		allids = {}  # Using a dict to automatically remove duplicates
+		for iden in list(self.running["keyvalstore"]):
+			allids.update({iden: None})
+		for arrayname in list(self.running["idarrays"]):
+			allids.update({arrayname: None})
+		for association in self.running["associations"]:
+			allids.update({association: None})
+		for each in list(allids):
+			print(each)
 
 
 ##### Installer class: A simple holder class which contains all of the    #####
 #####   installation scripts used to install/upgrade the ZTP server       #####
 class installer:
-	defaultconfig = '''{\n    "suffix": "-confg", \n    "finaltemplate": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} 255.255.255.0\\n no shut\\n!\\nip domain-name test.com\\n!\\nusername admin privilege 15 secret password123\\n!\\naaa new-model\\n!\\n!\\naaa authentication login CONSOLE local\\naaa authorization console\\naaa authorization exec default local if-authenticated\\n!\\ncrypto key generate rsa modulus 2048\\n!\\nip ssh version 2\\n!\\nline vty 0 15\\nlogin authentication default\\ntransport input ssh\\nline console 0\\nlogin authentication CONSOLE\\nend", \n    "idarrays": {\n        "STACK1": [\n            "SERIAL1", \n            "SERIAL2", \n            "SERIAL3"\n        ]\n    }, \n    "keyvalstore": {\n        "SERIAL100": {\n            "hostname": "ACCESSSWITCH", \n            "vl1_ip_address": "10.0.0.201"\n        }, \n        "STACK1": {\n            "hostname": "CORESWITCH", \n            "vl1_ip_address": "10.0.0.200"\n        }\n    }, \n    "initialfilename": "network-confg", \n    "community": "secretcommunity", \n    "snmpoid": "1.3.6.1.2.1.47.1.1.1.1.11.1000", \n    "starttemplate": "hostname {{ autohostname }}\\n!\\nsnmp-server community {{ community }} RO\\n!\\nend"\n}'''
+	defaultconfig = '''{\n    "associations": {\n        "SERIAL100": "SHORT_TEMPLATE", \n        "STACK1": "LONG_TEMPLATE"\n    }, \n    "community": "secretcommunity", \n    "idarrays": {\n        "STACK1": [\n            "SERIAL1", \n            "SERIAL2", \n            "SERIAL3"\n        ]\n    }, \n    "initialfilename": "network-confg", \n    "keyvalstore": {\n        "SERIAL100": {\n            "hostname": "SOMEDEVICE", \n            "vl1_ip_address": "10.0.0.201"\n        }, \n        "STACK1": {\n            "hostname": "CORESWITCH", \n            "vl1_ip_address": "10.0.0.200"\n        }\n    }, \n    "snmpoid": "1.3.6.1.2.1.47.1.1.1.1.11.1000", \n    "starttemplate": "hostname {{ autohostname }}\\n!\\nsnmp-server community {{ community }} RO\\n!\\nend", \n    "suffix": "-confg", \n    "templates": {\n        "LONG_TEMPLATE": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} 255.255.255.0\\n no shut\\n!\\nip domain-name test.com\\n!\\nusername admin privilege 15 secret password123\\n!\\naaa new-model\\n!\\n!\\naaa authentication login CONSOLE local\\naaa authorization console\\naaa authorization exec default local if-authenticated\\n!\\ncrypto key generate rsa modulus 2048\\n!\\nip ssh version 2\\n!\\nline vty 0 15\\nlogin authentication default\\ntransport input ssh\\nline console 0\\nlogin authentication CONSOLE\\nend", \n        "SHORT_TEMPLATE": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} 255.255.255.0\\n no shut\\n!\\nend"\n    }\n}'''
 	def copy_binary(self):
 		binpath = "/bin/"
 		binname = "ztp"
@@ -523,10 +593,10 @@ _ztp_complete()
         COMPREPLY=( $(compgen -W "config run status version" -- $cur) )
         ;;
       "set")
-        COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template final-template keystore idarray" -- $cur) )
+        COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template template keystore idarray association" -- $cur) )
         ;;
       "clear")
-        COMPREPLY=( $(compgen -W "keystore idarray" -- $cur) )
+        COMPREPLY=( $(compgen -W "keystore idarray template association" -- $cur) )
         ;;
       "request")
         COMPREPLY=( $(compgen -W "merge-test initial-merge" -- $cur) )
@@ -564,9 +634,13 @@ _ztp_complete()
           COMPREPLY=( $(compgen -W "<deliniation_character> -" -- $cur) )
         fi
         ;;
-      final-template)
+      template)
+        local templates=$(for k in `ztp show templates`; do echo $k ; done)
         if [ "$prev2" == "set" ]; then
-          COMPREPLY=( $(compgen -W "<deliniation_character> -" -- $cur) )
+          COMPREPLY=( $(compgen -W "${templates} <template_name> -" -- $cur) )
+        fi
+        if [ "$prev2" == "clear" ]; then
+          COMPREPLY=( $(compgen -W "${templates}" -- $cur) )
         fi
         ;;
       keystore)
@@ -584,6 +658,15 @@ _ztp_complete()
           COMPREPLY=( $(compgen -W "${ids} <new_array_name> -" -- $cur) )
         fi
         if [ "$prev2" == "clear" ]; then
+          COMPREPLY=( $(compgen -W "${ids}" -- $cur) )
+        fi
+        ;;
+      association)
+        if [ "$prev2" == "set" ]; then
+          COMPREPLY=( $(compgen -W "id" -- $cur) )
+        fi
+        if [ "$prev2" == "clear" ]; then
+          local ids=$(for id in `ztp show associations`; do echo $id ; done)
           COMPREPLY=( $(compgen -W "${ids}" -- $cur) )
         fi
         ;;
@@ -612,12 +695,37 @@ _ztp_complete()
         COMPREPLY=( $(compgen -W "<id's_seperated_by_spaces> -" -- $cur) )
       fi
     fi
+    if [ "$prev2" == "template" ]; then
+      if [ "$prev3" == "set" ]; then
+        COMPREPLY=( $(compgen -W "<end_char> -" -- $cur) )
+      fi
+    fi
+    if [ "$prev2" == "association" ]; then
+      if [ "$prev3" == "set" ]; then
+        local allids=$(for k in `ztp show all_ids`; do echo $k ; done)
+        COMPREPLY=( $(compgen -W "<id/arrayname> ${allids} -" -- $cur) )
+      fi
+    fi
   elif [ $COMP_CWORD -eq 5 ]; then
     prev3=${COMP_WORDS[COMP_CWORD-3]}
     prev4=${COMP_WORDS[COMP_CWORD-4]}
     if [ "$prev4" == "set" ]; then
       if [ "$prev3" == "keystore" ]; then
         COMPREPLY=( $(compgen -W "<value> -" -- $cur) )
+      fi
+    fi
+    if [ "$prev4" == "set" ]; then
+      if [ "$prev3" == "association" ]; then
+        COMPREPLY=( $(compgen -W "template" -- $cur) )
+      fi
+    fi
+  elif [ $COMP_CWORD -eq 6 ]; then
+    prev4=${COMP_WORDS[COMP_CWORD-4]}
+    prev5=${COMP_WORDS[COMP_CWORD-5]}
+    if [ "$prev5" == "set" ]; then
+      if [ "$prev4" == "association" ]; then
+        local templates=$(for k in `ztp show templates`; do echo $k ; done)
+        COMPREPLY=( $(compgen -W "<template_name> ${templates} -" -- $cur) )
       fi
     fi
   fi
@@ -679,6 +787,9 @@ def interpreter():
 		start_tftp()
 		config = config_factory()
 	##### INSTALL #####
+	elif arguments == "install completion":
+		inst = installer()
+		inst.install_completion()
 	elif arguments == "install":
 		print("***** Are you sure you want to install/upgrade FreeZTP using version %s?*****" % version)
 		answer = raw_input(">>>>> If you are sure you want to do this, type in 'CONFIRM' and hit ENTER >>>>")
@@ -701,6 +812,12 @@ def interpreter():
 		config.hidden_list_keys(sys.argv[3])
 	elif arguments == "show arrays":
 		config.hidden_list_arrays()
+	elif arguments == "show templates":
+		config.hidden_list_templates()
+	elif arguments == "show associations":
+		config.hidden_list_associations()
+	elif arguments == "show all_ids":
+		config.hidden_list_all_ids()
 	##### SHOW #####
 	elif arguments == "show":
 		print " - show (config|run)                              |  Show the current ZTP configuration"
@@ -714,14 +831,15 @@ def interpreter():
 		print("FreeZTP %s" % version)
 	##### SET #####
 	elif arguments == "set":
-		print " - set suffix <value>                             |  Set the file name suffix used by target when requesting the final config"
-		print " - set initialfilename <value>                      |  Set the file name used by the target during the initial config request"
-		print " - set community <value>                          |  Set the SNMP community you want to use for target ID identification"
-		print " - set snmpoid <value>                            |  Set the SNMP OID to use to pull the target ID during identification"
-		print " - set initial-template <end_char>                |  Set the initial configuration j2 template used to prep target for identification"
-		print " - set final-template <end_char>                  |  Set the final configuration j2 template pushed to host after discovery/identification"
-		print " - set keystore <id/arrayname> <keyword> <value>  |  Create a keystore entry to be used when merging final configurations"
-		print " - set idarray <arrayname> <id's>                 |  Create an ID array to allow multiple real ids to match one keystore id"
+		print " - set suffix <value>                                          |  Set the file name suffix used by target when requesting the final config"
+		print " - set initialfilename <value>                                 |  Set the file name used by the target during the initial config request"
+		print " - set community <value>                                       |  Set the SNMP community you want to use for target ID identification"
+		print " - set snmpoid <value>                                         |  Set the SNMP OID to use to pull the target ID during identification"
+		print " - set initial-template <end_char>                             |  Set the initial configuration j2 template used to prep target for identification"
+		print " - set template <template_name> <end_char>                     |  Create/Modify a named J2 tempate which is used for the final config push"
+		print " - set keystore <id/arrayname> <keyword> <value>               |  Create a keystore entry to be used when merging final configurations"
+		print " - set idarray <arrayname> <id's>                              |  Create an ID array to allow multiple real ids to match one keystore id"
+		print " - set association id <id/arrayname> template <template_name>  |  Associate a keystore id or an idarray to a specific named template"
 	elif arguments == "set suffix":
 		print " - set suffix <value>                             |  Set the file name suffix used by target when requesting the final config"
 	elif arguments == "set initialfilename":
@@ -732,25 +850,37 @@ def interpreter():
 		print " - set snmpoid <value>                            |  Set the SNMP OID to use to pull the target ID during identification"
 	elif arguments == "set initial-template":
 		print " - set initial-template <end_char>                |  Set the initial configuration j2 template used to prep target for identification"
-	elif arguments == "set final-template":
-		print " - set final-template <end_char>                  |  Set the final configuration j2 template pushed to host after discovery/identification"
+	elif (arguments[:12] == "set template" and len(sys.argv) < 5) or arguments == "set template":
+		print " - set template <template_name> <end_char>        |  Set the final configuration j2 template pushed to host after discovery/identification"
 	elif (arguments[:12] == "set keystore" and len(sys.argv) < 6) or arguments == "set keystore":
 		print " - set keystore <id/arrayname> <keyword> <value>  |  Create a keystore entry to be used when merging final configurations"
 	elif (arguments[:11] == "set idarray" and len(sys.argv) < 5) or arguments == "set idarray":
 		print " - set idarray <arrayname> <id_#1> <id_#2> ...    |  Create an ID array to allow multiple real ids to match one keystore id"
+	elif (arguments[:15] == "set association" and len(sys.argv) < 7) or arguments == "set association":
+		print " - set association id <id/arrayname> template <template_name>  |  Associate a keystore id or an idarray to a specific named template"
 	elif arguments[:3] == "set" and len(sys.argv) >= 4:
 		config.set(sys.argv)
 	##### CLEAR #####
 	elif arguments == "clear":
+		print " - clear template <template_name>                 |  Delete a named configuration template"
 		print " - clear keystore <id> (all|<keyword>)            |  Delete an individual key or a whole keystore ID from the configuration"
 		print " - clear idarray <arrayname>                      |  Delete an ID array from the configuration"
+		print " - clear association <id/arrayname>               |  Delete an association from the configuration"
+	elif (arguments[:14] == "clear template" and len(sys.argv) < 4) or arguments == "clear template":
+		print " - clear template <template_name>                 |  Delete a named configuration template"
 	elif (arguments[:14] == "clear keystore" and len(sys.argv) < 5) or arguments == "clear keystore":
 		print " - clear keystore <id> (all|<keyword>)            |  Delete an individual key or a whole keystore ID from the configuration"
 	elif (arguments[:13] == "clear idarray" and len(sys.argv) < 4) or arguments == "clear idarray":
 		print " - clear idarray <arrayname>                      |  Delete an ID array from the configuration"
+	elif (arguments[:17] == "clear association" and len(sys.argv) < 4) or arguments == "clear association":
+		print " - clear association <id/arrayname>               |  Delete an association from the configuration"
+	elif arguments[:14] == "clear template" and len(sys.argv) >= 4:
+		config.clear(sys.argv)
 	elif arguments[:14] == "clear keystore" and len(sys.argv) >= 5:
 		config.clear(sys.argv)
 	elif arguments[:13] == "clear idarray" and len(sys.argv) >= 4:
+		config.clear(sys.argv)
+	elif arguments[:17] == "clear association" and len(sys.argv) >= 4:
 		config.clear(sys.argv)
 	##### REQUEST #####
 	elif arguments == "request":
@@ -780,38 +910,41 @@ def interpreter():
 	elif arguments == "version":
 		print("FreeZTP %s" % version)
 	else:
-		print "-------------------------------------------------------------------------------------------------------------------------------"
-		print "                     ARGUMENTS                    |                                  DESCRIPTIONS"
-		print "-------------------------------------------------------------------------------------------------------------------------------"
-		print " - run                                            |  Run the ZTP main program in shell mode begin listening for TFTP requests"
-		print "-------------------------------------------------------------------------------------------------------------------------------"
-		print " - install                                        |  Run the ZTP installer"
-		print "-------------------------------------------------------------------------------------------------------------------------------"
-		print " - show (config|run)                              |  Show the current ZTP configuration"
-		print " - show status                                    |  Show the status of the ZTP background service"
-		print " - show version                                   |  Show the current version of ZTP"
-		print "-------------------------------------------------------------------------------------------------------------------------------"
-		print " - set suffix <value>                             |  Set the file name suffix used by target when requesting the final config"
-		print " - set initialfilename <value>                    |  Set the file name used by the target during the initial config request"
-		print " - set community <value>                          |  Set the SNMP community you want to use for target ID identification"
-		print " - set snmpoid <value>                            |  Set the SNMP OID to use to pull the target ID during identification"
-		print "------------------------------------------------"
-		print " - set initial-template <end_char>                |  Set the initial configuration j2 template used to prep target for identification"
-		print " - set final-template <end_char>                  |  Set the final configuration j2 template pushed to host after discovery/identification"
-		print "------------------------------------------------"
-		print " - set keystore <id/arrayname> <keyword> <value>  |  Create a keystore entry to be used when merging final configurations"
-		print " - set idarray <arrayname> <id_#1> <id_#2> ...    |  Create an ID array to allow multiple real ids to match one keystore id"
-		print "-------------------------------------------------------------------------------------------------------------------------------"
-		print " - clear keystore <id> (all|<keyword>)            |  Delete an individual key or a whole keystore ID from the configuration"
-		print " - clear idarray <arrayname>                      |  Delete an ID array from the configuration"
-		print "-------------------------------------------------------------------------------------------------------------------------------"
-		print " - request merge-test <id>                        |  Perform a test jinja2 merge of the final template with a keystore ID"
-		print " - request initial-merge                          |  See the result of an auto-merge of the initial-template"
-		print "-------------------------------------------------------------------------------------------------------------------------------"
-		print " - service (start|stop|restart|status)            |  Start, Stop, or Restart the installed ZTP service"
-		print "-------------------------------------------------------------------------------------------------------------------------------"
-		print " - version                                        |  Show the current version of ZTP"
-		print "-------------------------------------------------------------------------------------------------------------------------------"
+		print "----------------------------------------------------------------------------------------------------------------------------------------------"
+		print "                     ARGUMENTS                                 |                                  DESCRIPTIONS"
+		print "----------------------------------------------------------------------------------------------------------------------------------------------"
+		print " - run                                                         |  Run the ZTP main program in shell mode begin listening for TFTP requests"
+		print "----------------------------------------------------------------------------------------------------------------------------------------------"
+		print " - install                                                     |  Run the ZTP installer"
+		print "----------------------------------------------------------------------------------------------------------------------------------------------"
+		print " - show (config|run)                                           |  Show the current ZTP configuration"
+		print " - show status                                                 |  Show the status of the ZTP background service"
+		print " - show version                                                |  Show the current version of ZTP"
+		print "----------------------------------------------------------------------------------------------------------------------------------------------"
+		print " - set suffix <value>                                          |  Set the file name suffix used by target when requesting the final config"
+		print " - set initialfilename <value>                                 |  Set the file name used by the target during the initial config request"
+		print " - set community <value>                                       |  Set the SNMP community you want to use for target ID identification"
+		print " - set snmpoid <value>                                         |  Set the SNMP OID to use to pull the target ID during identification"
+		print "---------------------------------------------------------------"
+		print " - set initial-template <end_char>                             |  Set the initial configuration j2 template used to prep target for identification"
+		print " - set template <template_name> <end_char>                     |  Create/Modify a named J2 tempate which is used for the final config push"
+		print "---------------------------------------------------------------"
+		print " - set keystore <id/arrayname> <keyword> <value>               |  Create a keystore entry to be used when merging final configurations"
+		print " - set idarray <arrayname> <id_#1> <id_#2> ...                 |  Create an ID array to allow multiple real ids to match one keystore id"
+		print " - set association id <id/arrayname> template <template_name>  |  Associate a keystore id or an idarray to a specific named template"
+		print "----------------------------------------------------------------------------------------------------------------------------------------------"
+		print " - clear template <template_name>                              |  Delete a named configuration template"
+		print " - clear keystore <id> (all|<keyword>)                         |  Delete an individual key or a whole keystore ID from the configuration"
+		print " - clear idarray <arrayname>                                   |  Delete an ID array from the configuration"
+		print " - clear association <id/arrayname>                            |  Delete an association from the configuration"
+		print "----------------------------------------------------------------------------------------------------------------------------------------------"
+		print " - request merge-test <id>                                     |  Perform a test jinja2 merge of the final template with a keystore ID"
+		print " - request initial-merge                                       |  See the result of an auto-merge of the initial-template"
+		print "----------------------------------------------------------------------------------------------------------------------------------------------"
+		print " - service (start|stop|restart|status)                         |  Start, Stop, or Restart the installed ZTP service"
+		print "----------------------------------------------------------------------------------------------------------------------------------------------"
+		print " - version                                                     |  Show the current version of ZTP"
+		print "----------------------------------------------------------------------------------------------------------------------------------------------"
 
 
 if __name__ == "__main__":
