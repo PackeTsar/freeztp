@@ -350,7 +350,7 @@ class config_manager:
 			console("Cannot configure this way")
 		elif "template" in setting:
 			console("Enter each line of the template ending with '%s' on a line by itself" % args[3])
-			newtemplate = self.multilineinput(args[3])
+			newtemplate = self.multilineinput(args[4])
 			if setting == "initial-template":
 				self.running["starttemplate"] = newtemplate
 			elif setting == "template":
