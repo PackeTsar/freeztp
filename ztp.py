@@ -1,14 +1,14 @@
 #!/usr/bin/python
 
 
-#####         FreeZTP Server v0.3.0          #####
+#####         FreeZTP Server v0.4.0          #####
 #####        Written by John W Kerns         #####
 #####       http://blog.packetsar.com        #####
 ##### https://github.com/convergeone/freeztp #####
 
 
 ##### Inform FreeZTP version here #####
-version = "v0.3.0"
+version = "v0.4.0"
 
 
 ##### Try to import non-native modules, fail gracefully #####
@@ -285,7 +285,7 @@ class snmp_query:
 				self.response = response
 				self.status = "success"
 				self.complete = True
-				log("snmp_query._query_worker: SNMP Query Successful")
+				log("snmp_query._query_worker: SNMP Query Successful on host (%s)" % self.host)
 			except IndexError:
 				self.status = "retrying"
 				log("snmp_query._query_worker: SNMP Query Timed Out")
@@ -571,6 +571,11 @@ class log_management:
 				self._console("Invalid input '%s'" % args[3])
 	def tail(self, length="25"):
 		os.system("tail -fn %s %s" % (length, self.logfile))
+	def clear(self):
+		f = open(self.logfile, 'w')
+		f.write("")
+		f.close()
+		
 
 
 
@@ -737,7 +742,7 @@ _ztp_complete()
         COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template template keystore idarray association default-keystore" -- $cur) )
         ;;
       "clear")
-        COMPREPLY=( $(compgen -W "keystore idarray template association" -- $cur) )
+        COMPREPLY=( $(compgen -W "keystore idarray template association log" -- $cur) )
         ;;
       "request")
         COMPREPLY=( $(compgen -W "merge-test initial-merge default-keystore-test" -- $cur) )
@@ -913,9 +918,11 @@ for dynamic file creations
 #####   main program loop. It is started with the ztp_dyn_file class      #####
 #####   passed in as the dynamic file function.                           #####
 def start_tftp():
+	log("start_tftp: Starting Up TFTPy")
 	tftpy.setLogLevel(logging.DEBUG)
 	server = tftpy.TftpServer("/", dyn_file_func=interceptor)
 	server.listen(listenip="", listenport=69)
+	log("start_tftp: Started up successfully")
 
 
 ##### Concatenate a list of words into a space-seperated string           #####
@@ -943,11 +950,11 @@ def interpreter():
 		console("Cannot mount cfact")
 	##### TEST #####
 	if arguments == "test":
-		print(cfact._default_lookup())
+		pass
 	##### RUN #####
 	elif arguments == "run":
+		log("interpreter: Command to run received. Calling start_tftp")
 		start_tftp()
-		config = config_factory()
 	##### INSTALL #####
 	elif arguments == "install":
 		console("***** Are you sure you want to install FreeZTP using version %s?*****" % version)
@@ -1049,6 +1056,7 @@ def interpreter():
 		console(" - clear keystore <id> (all|<keyword>)            |  Delete an individual key or a whole keystore ID from the configuration")
 		console(" - clear idarray <arrayname>                      |  Delete an ID array from the configuration")
 		console(" - clear association <id/arrayname>               |  Delete an association from the configuration")
+		console(" - clear log                                      |  Delete the logging info from the logfile")
 	elif (arguments[:14] == "clear template" and len(sys.argv) < 4) or arguments == "clear template":
 		console(" - clear template <template_name>                 |  Delete a named configuration template")
 	elif (arguments[:14] == "clear keystore" and len(sys.argv) < 5) or arguments == "clear keystore":
@@ -1065,6 +1073,9 @@ def interpreter():
 		config.clear(sys.argv)
 	elif arguments[:17] == "clear association" and len(sys.argv) >= 4:
 		config.clear(sys.argv)
+	elif arguments == "clear log":
+		logger.clear()
+		log("Log file has been cleared")
 	##### REQUEST #####
 	elif arguments == "request":
 		console(" - request merge-test <id>                        |  Perform a test jinja2 merge of the final template with a keystore ID")
@@ -1084,14 +1095,23 @@ def interpreter():
 	elif arguments == "service":
 		console(" - service (start|stop|restart|status)            |  Start, Stop, or Restart the installed ZTP service")
 	elif arguments == "service start":
+		log("#########################################################")
+		log("Starting the ZTP Service")
 		os.system('systemctl start ztp')
 		os.system('systemctl status ztp')
+		log("#########################################################")
 	elif arguments == "service stop":
+		log("#########################################################")
+		log("Stopping the ZTP Service")
 		os.system('systemctl stop ztp')
 		os.system('systemctl status ztp')
+		log("#########################################################")
 	elif arguments == "service restart":
+		log("#########################################################")
+		log("Restarting the ZTP Service")
 		os.system('systemctl restart ztp')
 		os.system('systemctl status ztp')
+		log("#########################################################")
 	elif arguments == "service status":
 		os.system('systemctl status ztp')
 	##### VERSION #####
@@ -1130,6 +1150,7 @@ def interpreter():
 		console(" - clear keystore <id> (all|<keyword>)                         |  Delete an individual key or a whole keystore ID from the configuration")
 		console(" - clear idarray <arrayname>                                   |  Delete an ID array from the configuration")
 		console(" - clear association <id/arrayname>                            |  Delete an association from the configuration")
+		console(" - clear log                                                   |  Delete the logging info from the logfile")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console(" - request merge-test <id>                                     |  Perform a test jinja2 merge of the final template with a keystore ID")
 		console(" - request initial-merge                                       |  See the result of an auto-merge of the initial-template")
