@@ -1,14 +1,14 @@
 #!/usr/bin/python
 
 
-#####         FreeZTP Server v0.4.0          #####
+#####         FreeZTP Server v0.5.0          #####
 #####        Written by John W Kerns         #####
 #####       http://blog.packetsar.com        #####
 ##### https://github.com/convergeone/freeztp #####
 
 
 ##### Inform FreeZTP version here #####
-version = "v0.4.0"
+version = "v0.5.0"
 
 
 ##### Try to import non-native modules, fail gracefully #####
@@ -476,7 +476,11 @@ class config_manager:
 		configtext += itemp
 		configtext += "\n!\n#######################################################\n"
 		configtext += "#######################################################\n"
-		############
+		###########
+		###########
+		configtext += "\n!\n!\n!\n#######################################################\n"
+		configtext += templatetext
+		###########
 		configtext += "!\n!\n!\n"
 		for cmd in keylist:
 			configtext += cmd + "\n"
@@ -489,10 +493,6 @@ class config_manager:
 		configtext += "!\n!\n"
 		configtext += dkeystore
 		###########
-		#configtext += "!\n#######################################################\n"
-		#configtext += itemp
-		configtext += "\n!\n!\n!\n#######################################################\n"
-		configtext += templatetext
 		console(configtext)
 	def hidden_list_ids(self):
 		for iden in list(self.running["keyvalstore"]):
