@@ -96,7 +96,7 @@ class config_factory:
 				log("cfact.lookup: The target ID is NOT in the Keystore or in an IDArray, but a default is configured")
 				return True
 		if "ztp-" in tempid.lower():
-			log("Creating new SNMP request for %s: %s" % (str(tempid), str(ipaddr)))
+			log("cfact.lookup: Creating new SNMP request for %s: %s" % (str(tempid), str(ipaddr)))
 			self.create_snmp_request(tempid, ipaddr)
 		return False
 	def _default_lookup(self):
@@ -1081,6 +1081,7 @@ def interpreter():
 		console(" - request merge-test <id>                        |  Perform a test jinja2 merge of the final template with a keystore ID")
 		console(" - request initial-merge                          |  See the result of an auto-merge of the initial-template")
 		console(" - request default-keystore-test                  |  Check that the default-keystore is fully configured to return a template")
+		console(" - request snmp-test <ip-address>                 |  Run a SNMP test using the configured community and OID against an IP")
 	elif arguments == "request merge-test":
 		console(" - request merge-test <id>                        |  Perform a test jinja2 merge of the final template with a keystore ID")
 	elif arguments == "request initial-merge":
@@ -1089,8 +1090,12 @@ def interpreter():
 		default = cfact._default_lookup()
 		if default:
 			cfact.merge_test(default, "final")
+	elif arguments == "request snmp-test":
+		console(" - request snmp-test <ip-address>                 |  Run a SNMP test using the configured community and OID against an IP")
 	elif arguments[:18] == "request merge-test" and len(sys.argv) >= 4:
 		cfact.merge_test(sys.argv[3], "final")
+	elif arguments[:18] == "request snmp-test" and len(sys.argv) >= 4:
+		print("heeeeeere")
 	##### SERVICE #####
 	elif arguments == "service":
 		console(" - service (start|stop|restart|status)            |  Start, Stop, or Restart the installed ZTP service")
@@ -1155,6 +1160,7 @@ def interpreter():
 		console(" - request merge-test <id>                                     |  Perform a test jinja2 merge of the final template with a keystore ID")
 		console(" - request initial-merge                                       |  See the result of an auto-merge of the initial-template")
 		console(" - request default-keystore-test                               |  Check that the default-keystore is fully configured to return a template")
+		console(" - request snmp-test <ip-address>                              |  Run a SNMP test using the configured community and OID against an IP")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console(" - service (start|stop|restart|status)                         |  Start, Stop, or Restart the installed ZTP service")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
