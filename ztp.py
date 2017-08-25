@@ -1,14 +1,14 @@
 #!/usr/bin/python
 
 
-#####         FreeZTP Server v0.5.0          #####
+#####         FreeZTP Server v0.5.1          #####
 #####        Written by John W Kerns         #####
 #####       http://blog.packetsar.com        #####
 ##### https://github.com/convergeone/freeztp #####
 
 
 ##### Inform FreeZTP version here #####
-version = "v0.5.0"
+version = "v0.5.1"
 
 
 ##### Try to import non-native modules, fail gracefully #####
@@ -285,7 +285,7 @@ class snmp_query:
 				self.response = response
 				self.status = "success"
 				self.complete = True
-				log("snmp_query._query_worker: SNMP Query Successful on host (%s)" % self.host)
+				log("snmp_query._query_worker: SNMP Query Successful. Host (%s) responded with (%s)" % (self.host, str(self.response)))
 			except IndexError:
 				self.status = "retrying"
 				log("snmp_query._query_worker: SNMP Query Timed Out")
