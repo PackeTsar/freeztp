@@ -1,14 +1,14 @@
 #!/usr/bin/python
 
 
-#####         FreeZTP Server v0.5.1          #####
+#####         FreeZTP Server v0.5.2          #####
 #####        Written by John W Kerns         #####
 #####       http://blog.packetsar.com        #####
 ##### https://github.com/convergeone/freeztp #####
 
 
 ##### Inform FreeZTP version here #####
-version = "v0.5.1"
+version = "v0.5.2"
 
 
 ##### Try to import non-native modules, fail gracefully #####
