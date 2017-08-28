@@ -46,17 +46,28 @@ def interceptor(afile, raddress, rport):
 #####   TFTP files                                                        #####
 class ztp_dyn_file:
 	closed = False
+	position = 0
 	def __init__(self, afile, raddress, rport):
 		log("ztp_dyn_file: Instantiated as (%s)" % str(self))
 		self.data = cfact.request(afile, raddress)
+		log("ztp_dyn_file: File size is %s bytes" % len(self.data))
 		pass
 	def tell(self):
+		log("ztp_dyn_file.tell: Called")
 		return len(self.data)
 	def read(self, size):
-		return str(self.data[0:size])
+		start = self.position
+		end = self.position + size
+		log("ztp_dyn_file.read: Called with size (%s)" % str(size))
+		result = str(self.data[start:end])
+		log("ztp_dyn_file.read: Returning position %s to %s:\n%s" % (str(start), str(end), result))
+		self.position = end
+		return result
 	def seek(self, arg1, arg2):
+		log("ztp_dyn_file.seek: Called with args (%s) and (%s)" % (str(arg1), str(arg1)))
 		pass
 	def close(self):
+		log("ztp_dyn_file.close: Called")
 		self.closed = True
 
 
