@@ -1,14 +1,14 @@
 #!/usr/bin/python
 
 
-#####         FreeZTP Server v0.5.2          #####
+#####         FreeZTP Server v0.6.0          #####
 #####        Written by John W Kerns         #####
 #####       http://blog.packetsar.com        #####
 ##### https://github.com/convergeone/freeztp #####
 
 
 ##### Inform FreeZTP version here #####
-version = "v0.5.2"
+version = "v0.6.0"
 
 
 ##### Try to import non-native modules, fail gracefully #####
@@ -756,7 +756,7 @@ _ztp_complete()
         COMPREPLY=( $(compgen -W "keystore idarray template association log" -- $cur) )
         ;;
       "request")
-        COMPREPLY=( $(compgen -W "merge-test initial-merge default-keystore-test" -- $cur) )
+        COMPREPLY=( $(compgen -W "merge-test initial-merge default-keystore-test, snmp-test" -- $cur) )
         ;;
       "service")
         COMPREPLY=( $(compgen -W "start stop restart status" -- $cur) )
@@ -842,6 +842,11 @@ _ztp_complete()
         local ids=$(for id in `ztp show ids`; do echo $id ; done)
         if [ "$prev2" == "request" ]; then
           COMPREPLY=( $(compgen -W "${ids}" -- $cur) )
+        fi
+        ;;
+      snmp-test)
+        if [ "$prev2" == "request" ]; then
+          COMPREPLY=( $(compgen -W "<ip-address> -" -- $cur) )
         fi
         ;;
       *)
@@ -1105,8 +1110,14 @@ def interpreter():
 		console(" - request snmp-test <ip-address>                 |  Run a SNMP test using the configured community and OID against an IP")
 	elif arguments[:18] == "request merge-test" and len(sys.argv) >= 4:
 		cfact.merge_test(sys.argv[3], "final")
-	elif arguments[:18] == "request snmp-test" and len(sys.argv) >= 4:
-		print("heeeeeere")
+	elif arguments[:17] == "request snmp-test" and len(sys.argv) >= 4:
+		community = config.running["community"]
+		oid = config.running["snmpoid"]
+		console("\n\nHit CTRL+C to kill the SNMP query test")
+		console("\nQuerying %s using community (%s) and OID (%s)\n" % (sys.argv[3], community, oid))
+		query = snmp_query(sys.argv[3], community, oid)
+		while query.thread.isAlive():
+			time.sleep(3)
 	##### SERVICE #####
 	elif arguments == "service":
 		console(" - service (start|stop|restart|status)            |  Start, Stop, or Restart the installed ZTP service")
