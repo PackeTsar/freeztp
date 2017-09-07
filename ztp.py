@@ -1,14 +1,14 @@
 #!/usr/bin/python
 
 
-#####         FreeZTP Server v0.6.0          #####
+#####             FreeZTP Server             #####
 #####        Written by John W Kerns         #####
 #####       http://blog.packetsar.com        #####
 ##### https://github.com/convergeone/freeztp #####
 
 
 ##### Inform FreeZTP version here #####
-version = "v0.6.0"
+version = "v0.7.0"
 
 
 ##### Try to import non-native modules, fail gracefully #####
@@ -78,6 +78,7 @@ class config_factory:
 		self.state = {}
 		self.snmprequests = {}
 		self.basefilename = config.running["initialfilename"]
+		self.imagediscoveryfile = config.running["imagediscoveryfile"]
 		self.basesnmpcom = config.running["community"]
 		self.snmpoid = config.running["snmpoid"]
 		self.baseconfig = config.running["starttemplate"]
@@ -92,6 +93,10 @@ class config_factory:
 		log("cfact.lookup: Current SNMP Requests: %s" % list(self.snmprequests))
 		if filename == self.basefilename:
 			log("cfact.lookup: TempID matches the initialfilename. Returning True")
+			return True
+		if filename == self.imagediscoveryfile:
+			log("cfact.lookup: TempID matches the imagediscoveryfile. Returning True")
+			log("cfact.lookup: #############IOS UPGRADE ABOUT TO BEGIN!!!#############")
 			return True
 		elif self.uniquesuffix in filename and tempid in list(self.snmprequests):  # If the filname contains the suffix and it has an entry in the snmp request list
 			log("cfact.lookup: Seeing the suffix in the filename and the TempID in the SNMPRequests")
@@ -157,6 +162,11 @@ class config_factory:
 			log("cfact.request: Generated a SNMP Request with TempID (%s) and IP (%s)" % (tempid, ipaddr))
 			result = self.merge_base_config(tempid)
 			log("cfact.request: Returning below config to TFTPy:\n%s" % result)
+			return result
+		elif filename == self.imagediscoveryfile:
+			log("cfact.request: Filename (%s) matches the configured imagediscoveryfile" % filename)
+			result = config.running["imagefile"]
+			log("cfact.request: Returning the value of the imagefile setting (%s)" % result)
 			return result
 		else:
 			log("cfact.request: Filename (%s) does NOT the configured initialfilename" % self.basefilename)
@@ -449,7 +459,7 @@ class config_manager:
 		self.save()
 	def show_config(self):
 		cmdlist = []
-		simplevals = ["suffix", "initialfilename", "community", "snmpoid"]
+		simplevals = ["suffix", "initialfilename", "community", "snmpoid", "tftproot", "imagediscoveryfile"]
 		for each in simplevals:
 			cmdlist.append("ztp set %s %s" % (each, self.running[each]))
 		itemp = "ztp set initial-template ^\n%s\n^" % self.running["starttemplate"]
@@ -479,6 +489,7 @@ class config_manager:
 			associationlist.append("ztp set association id %s template %s" % (association, template))
 		############
 		dkeystore = "ztp set default-keystore %s"  % str(self.running["default-keystore"])
+		imagefile = "ztp set imagefile %s"  % str(self.running["imagefile"])
 		############
 		configtext = "!\n!\n!\n"
 		for cmd in cmdlist:
@@ -503,8 +514,66 @@ class config_manager:
 			configtext += cmd + "\n"
 		configtext += "!\n!\n"
 		configtext += dkeystore
+		configtext += "\n"
+		configtext += imagefile
 		###########
 		console(configtext)
+	def calcopt125hex(self):
+		# Basedata meaning as follows:
+		### 00 00 00 09 = ??
+		basedata = "000000090a05"
+		filenamedata = self.running["imagediscoveryfile"].encode("hex")
+		lenval = hex(len(filenamedata)/2).replace("0x", "")
+		if len(lenval) < 2:
+			lenval = "0"+lenval
+		return basedata+lenval+filenamedata
+	def ciscohex(self, hexdata):
+		last = 0
+		current = 1
+		templist = []
+		for char in hexdata:
+			if (len(hexdata) - last) < 4:
+				templist.append(hexdata[last:len(hexdata)])
+				break
+			elif current%4 == 0:
+				templist.append(hexdata[last:current])
+				last = current
+			current += 1
+		result = ""
+		for quad in templist:
+			result += quad + "."
+		return result[:len(result)-1]
+	def opt125(self, mode):
+		if mode == "windows":
+			console("""
+	Follow the below Instructions:
+		- Open the Windows DHCP Server admin window
+		- Right click on the "IPv4" object under the DHCP server name
+			- Select "Set Predefined Options"
+		- Click the "Add" button
+			- Set the following values
+				- Name        = Cisco Image Discovery File
+				- Data Type   = Encapsulated
+				- Code        = 125
+				- Description = Used by FreeZTP for IOS upgrade
+			- Click OK
+		- Click OK again
+		
+		- Find the DHCP scope serving ZTP devices
+		- Expand the scope and right click "Scope Options"
+			- Click "Configure Options"
+		- Scroll down and check the box for option "125 Cisco Image Discovery File"
+		- Place the typing cursor into the data field under "Binary"
+		- Copy and paste the below hex code into the firewalld
+			- Hex code between quotes - "%s"
+		- You should see the ZTP configured imagediscoveryfile name under the "ASCII" field
+		- Click OK
+		- Close the Windows DHCP Server admin window
+			""" % self.calcopt125hex())
+		elif mode == "cisco":
+			optiondata = self.running["imagediscoveryfile"].encode("hex")
+			console("\n\nAdd the below line to your 'ip dhcp pool XXXX' config:\n")
+			console("option 125 hex %s\n\n" % self.ciscohex(self.calcopt125hex()))
 	def hidden_list_ids(self):
 		for iden in list(self.running["keyvalstore"]):
 			console(iden)
@@ -533,6 +602,9 @@ class config_manager:
 			allids.update({association: None})
 		for each in list(allids):
 			console(each)
+	def hidden_list_image_files(self):
+		for each in os.listdir(self.running["tftproot"]):
+			print(each)
 
 
 ##### Log Management Class: Handles all prnting to console and logging    #####
@@ -593,7 +665,19 @@ class log_management:
 ##### Installer class: A simple holder class which contains all of the    #####
 #####   installation scripts used to install/upgrade the ZTP server       #####
 class installer:
-	defaultconfig = '''{\n    "associations": {\n        "MY_DEFAULT": "LONG_TEMPLATE", \n        "SERIAL100": "SHORT_TEMPLATE", \n        "STACK1": "LONG_TEMPLATE"\n    }, \n    "community": "secretcommunity", \n    "default-keystore": "MY_DEFAULT", \n    "idarrays": {\n        "STACK1": [\n            "SERIAL1", \n            "SERIAL2", \n            "SERIAL3"\n        ]\n    }, \n    "initialfilename": "network-confg", \n    "keyvalstore": {\n        "MY_DEFAULT": {\n            "hostname": "UNKNOWN_HOST", \n            "vl1_ip_address": "dhcp"\n        }, \n        "SERIAL100": {\n            "hostname": "SOMEDEVICE", \n            "vl1_ip_address": "10.0.0.201"\n        }, \n        "STACK1": {\n            "hostname": "CORESWITCH", \n            "vl1_ip_address": "10.0.0.200", \n            "vl1_netmask": "255.255.255.0"\n        }\n    }, \n    "snmpoid": "1.3.6.1.2.1.47.1.1.1.1.11.1000", \n    "starttemplate": "hostname {{ autohostname }}\\n!\\nsnmp-server community {{ community }} RO\\n!\\nend", \n    "suffix": "-confg", \n    "templates": {\n        "LONG_TEMPLATE": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} {{ vl1_netmask }}\\n no shut\\n!\\nip domain-name test.com\\n!\\nusername admin privilege 15 secret password123\\n!\\naaa new-model\\n!\\n!\\naaa authentication login CONSOLE local\\naaa authorization console\\naaa authorization exec default local if-authenticated\\n!\\ncrypto key generate rsa modulus 2048\\n!\\nip ssh version 2\\n!\\nline vty 0 15\\nlogin authentication default\\ntransport input ssh\\nline console 0\\nlogin authentication CONSOLE\\nend", \n        "SHORT_TEMPLATE": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} 255.255.255.0\\n no shut\\n!\\nend"\n    }\n}'''
+	defaultconfig = '''{\n    "associations": {\n        "MY_DEFAULT": "LONG_TEMPLATE", \n        "SERIAL100": "SHORT_TEMPLATE", \n        "STACK1": "LONG_TEMPLATE"\n    }, \n    "community": "secretcommunity", \n    "default-keystore": "MY_DEFAULT", \n    "idarrays": {\n        "STACK1": [\n            "SERIAL1", \n            "SERIAL2", \n            "SERIAL3"\n        ]\n    }, \n    "imagediscoveryfile": "freeztp_ios_upgrade", \n    "imagefile": "cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin", \n    "initialfilename": "network-confg", \n    "keyvalstore": {\n        "MY_DEFAULT": {\n            "hostname": "UNKNOWN_HOST", \n            "vl1_ip_address": "dhcp"\n        }, \n        "SERIAL100": {\n            "hostname": "SOMEDEVICE", \n            "vl1_ip_address": "10.0.0.201"\n        }, \n        "STACK1": {\n            "hostname": "CORESWITCH", \n            "vl1_ip_address": "10.0.0.200", \n            "vl1_netmask": "255.255.255.0"\n        }\n    }, \n    "snmpoid": "1.3.6.1.2.1.47.1.1.1.1.11.1000", \n    "starttemplate": "hostname {{ autohostname }}\\n!\\nsnmp-server community {{ community }} RO\\n!\\nend", \n    "suffix": "-confg", \n    "templates": {\n        "LONG_TEMPLATE": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} {{ vl1_netmask }}\\n no shut\\n!\\nip domain-name test.com\\n!\\nusername admin privilege 15 secret password123\\n!\\naaa new-model\\n!\\n!\\naaa authentication login CONSOLE local\\naaa authorization console\\naaa authorization exec default local if-authenticated\\n!\\ncrypto key generate rsa modulus 2048\\n!\\nip ssh version 2\\n!\\nline vty 0 15\\nlogin authentication default\\ntransport input ssh\\nline console 0\\nlogin authentication CONSOLE\\nend", \n        "SHORT_TEMPLATE": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} 255.255.255.0\\n no shut\\n!\\nend"\n    }, \n    "tftproot": "/etc/ztp/tftproot/"\n}'''
+	def minor_update_script(self):
+		os.system('mkdir -p ' + "/etc/ztp/tftproot/")  # Create new tftproot dir
+		newconfigkeys = {
+		"imagediscoveryfile": "autoinstall_dhcp",
+		"imagefile": "cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin",
+		"tftproot": "/etc/ztp/tftproot/"
+		}
+		for key in newconfigkeys:
+			if key not in list(config.running):
+				console("Adding (%s) to config schema" % key)
+				config.running.update({key: newconfigkeys[key]})
+		config.save()
 	def copy_binary(self):
 		binpath = "/bin/"
 		binname = "ztp"
@@ -606,6 +690,7 @@ class installer:
 		configfilepath = "/etc/ztp/"
 		configfilename = "ztp.cfg"
 		os.system('mkdir -p ' + configfilepath)
+		os.system('mkdir -p ' + "/etc/ztp/tftproot/")
 		f = open(configfilepath + configfilename, "w")
 		f.write(rawconfig)
 		f.close()
@@ -750,13 +835,13 @@ _ztp_complete()
         COMPREPLY=( $(compgen -W "config run status version log" -- $cur) )
         ;;
       "set")
-        COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template template keystore idarray association default-keystore" -- $cur) )
+        COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile template keystore idarray association default-keystore imagefile" -- $cur) )
         ;;
       "clear")
         COMPREPLY=( $(compgen -W "keystore idarray template association log" -- $cur) )
         ;;
       "request")
-        COMPREPLY=( $(compgen -W "merge-test initial-merge default-keystore-test, snmp-test" -- $cur) )
+        COMPREPLY=( $(compgen -W "merge-test initial-merge default-keystore-test snmp-test dhcp-option-125" -- $cur) )
         ;;
       "service")
         COMPREPLY=( $(compgen -W "start stop restart status" -- $cur) )
@@ -794,6 +879,16 @@ _ztp_complete()
       initial-template)
         if [ "$prev2" == "set" ]; then
           COMPREPLY=( $(compgen -W "<deliniation_character> -" -- $cur) )
+        fi
+        ;;
+      tftproot)
+        if [ "$prev2" == "set" ]; then
+          COMPREPLY=( $(compgen -W "<tftp_root_directory> -" -- $cur) )
+        fi
+        ;;
+      imagediscoveryfile)
+        if [ "$prev2" == "set" ]; then
+          COMPREPLY=( $(compgen -W "<filename> -" -- $cur) )
         fi
         ;;
       template)
@@ -838,6 +933,12 @@ _ztp_complete()
           COMPREPLY=( $(compgen -W "${ids} <keystore-id> None -" -- $cur) )
         fi
         ;;
+      imagefile)
+        if [ "$prev2" == "set" ]; then
+          local ids=$(for id in `ztp show imagefiles`; do echo $id ; done)
+          COMPREPLY=( $(compgen -W "${ids} <binary_image_file_name> -" -- $cur) )
+        fi
+        ;;
       merge-test)
         local ids=$(for id in `ztp show ids`; do echo $id ; done)
         if [ "$prev2" == "request" ]; then
@@ -847,6 +948,11 @@ _ztp_complete()
       snmp-test)
         if [ "$prev2" == "request" ]; then
           COMPREPLY=( $(compgen -W "<ip-address> -" -- $cur) )
+        fi
+        ;;
+      dhcp-option-125)
+        if [ "$prev2" == "request" ]; then
+          COMPREPLY=( $(compgen -W "cisco windows" -- $cur) )
         fi
         ;;
       *)
@@ -936,7 +1042,12 @@ for dynamic file creations
 def start_tftp():
 	log("start_tftp: Starting Up TFTPy")
 	tftpy.setLogLevel(logging.DEBUG)
-	server = tftpy.TftpServer("/", dyn_file_func=interceptor)
+	try:
+		server = tftpy.TftpServer(config.running["tftproot"], dyn_file_func=interceptor)
+	except tftpy.TftpShared.TftpException:
+		log("start_tftp: ERROR: TFTP Root path doesn't exist. Creating...")
+		os.system('mkdir -p ' + config.running["tftproot"])
+		server = tftpy.TftpServer(config.running["tftproot"], dyn_file_func=interceptor)
 	server.listen(listenip="", listenport=69)
 	log("start_tftp: Started up successfully")
 
@@ -999,6 +1110,7 @@ def interpreter():
 			#inst.disable_firewall()
 			#inst.install_dependencies()
 			#inst.create_service()
+			inst.minor_update_script()
 			console("\nInstall complete! Logout and log back into SSH to activate auto-complete")
 			console("\nMake sure to run 'ztp service restart' to restart the service for the new software to take effect")
 		else:
@@ -1016,6 +1128,8 @@ def interpreter():
 		config.hidden_list_associations()
 	elif arguments == "show all_ids":
 		config.hidden_list_all_ids()
+	elif arguments == "show imagefiles":
+		config.hidden_list_image_files()
 	##### SHOW #####
 	elif arguments == "show":
 		console(" - show (config|run)                              |  Show the current ZTP configuration")
@@ -1038,12 +1152,15 @@ def interpreter():
 		console(" - set community <value>                                       |  Set the SNMP community you want to use for target ID identification")
 		console(" - set snmpoid <value>                                         |  Set the SNMP OID to use to pull the target ID during identification")
 		console(" - set initial-template <end_char>                             |  Set the initial configuration j2 template used for target identification")
+		console(" - set tftproot <tftp_root_directory>                          |  Set the root directory for TFTP files")
+		console(" - set imagediscoveryfile <filename>                           |  Set the name of the IOS image discovery file used for IOS upgrades")
 		console("--------------------------------------------------------- SETTINGS YOU SHOULD CHANGE ---------------------------------------------------------")
 		console(" - set template <template_name> <end_char>                     |  Create/Modify a named J2 tempate which is used for the final config push")
 		console(" - set keystore <id/arrayname> <keyword> <value>               |  Create a keystore entry to be used when merging final configurations")
 		console(" - set idarray <arrayname> <id's>                              |  Create an ID array to allow multiple real ids to match one keystore id")
 		console(" - set association id <id/arrayname> template <template_name>  |  Associate a keystore id or an idarray to a specific named template")
 		console(" - set default-keystore (none|keystore-id)                     |  Set a last-resort keystore and template for when target identification fails")
+		console(" - set imagefile <binary_image_file_name>                      |  Set the image file name to be used for upgrades (must be in tftp root dir)")
 	elif arguments == "set suffix":
 		console(" - set suffix <value>                             |  Set the file name suffix used by target when requesting the final config")
 	elif arguments == "set initialfilename":
@@ -1054,6 +1171,10 @@ def interpreter():
 		console(" - set snmpoid <value>                            |  Set the SNMP OID to use to pull the target ID during identification")
 	elif arguments == "set initial-template":
 		console(" - set initial-template <end_char>                |  Set the initial configuration j2 template used for target identification")
+	elif arguments == "set tftproot":
+		console(" - set tftproot <tftp_root_directory>             |  Set the root directory for TFTP files")
+	elif arguments == "set imagediscoveryfile":
+		console(" - set imagediscoveryfile <filename>              |  Set the name of the IOS image discovery file used for IOS upgrades")
 	elif (arguments[:12] == "set template" and len(sys.argv) < 5) or arguments == "set template":
 		console(" - set template <template_name> <end_char>        |  Set the final configuration j2 template pushed to host after discovery/identification")
 	elif (arguments[:12] == "set keystore" and len(sys.argv) < 6) or arguments == "set keystore":
@@ -1064,6 +1185,8 @@ def interpreter():
 		console(" - set association id <id/arrayname> template <template_name>  |  Associate a keystore id or an idarray to a specific named template")
 	elif (arguments[:20] == "set default-keystore" and len(sys.argv) < 4) or arguments == "default-keystore":
 		console(" - set default-keystore (none|keystore-id)        |  Set a last-resort keystore and template for when target identification fails")
+	elif arguments == "set imagefile":
+		console(" - set imagefile <binary_image_file_name>         |  Set the image file name to be used for upgrades (must be in tftp root dir)")
 	elif arguments[:3] == "set" and len(sys.argv) >= 4:
 		config.set(sys.argv)
 	##### CLEAR #####
@@ -1098,8 +1221,11 @@ def interpreter():
 		console(" - request initial-merge                          |  See the result of an auto-merge of the initial-template")
 		console(" - request default-keystore-test                  |  Check that the default-keystore is fully configured to return a template")
 		console(" - request snmp-test <ip-address>                 |  Run a SNMP test using the configured community and OID against an IP")
+		console(" - request dhcp-option-125 (windows|cisco)        |  Show the DHCP Option 125 Hex value to use on the DHCP server for OS upgrades")
 	elif arguments == "request merge-test":
 		console(" - request merge-test <id>                        |  Perform a test jinja2 merge of the final template with a keystore ID")
+	elif arguments == "request dhcp-option-125":
+		console(" - request dhcp-option-125 (windows|cisco)        |  Show the DHCP Option 125 Hex value to use on the DHCP server for OS upgrades")
 	elif arguments == "request initial-merge":
 		console(cfact.request(config.running["initialfilename"], "10.0.0.1"))
 	elif arguments == "request default-keystore-test":
@@ -1118,6 +1244,8 @@ def interpreter():
 		query = snmp_query(sys.argv[3], community, oid)
 		while query.thread.isAlive():
 			time.sleep(3)
+	elif arguments[:23] == "request dhcp-option-125" and (sys.argv[3] == "cisco" or sys.argv[3] == "windows"):
+		config.opt125(sys.argv[3])
 	##### SERVICE #####
 	elif arguments == "service":
 		console(" - service (start|stop|restart|status)            |  Start, Stop, or Restart the installed ZTP service")
@@ -1165,12 +1293,15 @@ def interpreter():
 		console(" - set community <value>                                       |  Set the SNMP community you want to use for target ID identification")
 		console(" - set snmpoid <value>                                         |  Set the SNMP OID to use to pull the target ID during identification")
 		console(" - set initial-template <end_char>                             |  Set the initial configuration j2 template used for target identification")
+		console(" - set tftproot <tftp_root_directory>                          |  Set the root directory for TFTP files")
+		console(" - set imagediscoveryfile <filename>                           |  Set the name of the IOS image discovery file used for IOS upgrades")
 		console("--------------------------------------------------------- SETTINGS YOU SHOULD CHANGE ---------------------------------------------------------")
 		console(" - set template <template_name> <end_char>                     |  Create/Modify a named J2 tempate which is used for the final config push")
 		console(" - set keystore <id/arrayname> <keyword> <value>               |  Create a keystore entry to be used when merging final configurations")
 		console(" - set idarray <arrayname> <id_#1> <id_#2> ...                 |  Create an ID array to allow multiple real ids to match one keystore id")
 		console(" - set association id <id/arrayname> template <template_name>  |  Associate a keystore id or an idarray to a specific named template")
 		console(" - set default-keystore (none|keystore-id)                     |  Set a last-resort keystore and template for when target identification fails")
+		console(" - set imagefile <binary_image_file_name>                      |  Set the image file name to be used for upgrades (must be in tftp root dir)")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console(" - clear template <template_name>                              |  Delete a named configuration template")
@@ -1183,6 +1314,7 @@ def interpreter():
 		console(" - request initial-merge                                       |  See the result of an auto-merge of the initial-template")
 		console(" - request default-keystore-test                               |  Check that the default-keystore is fully configured to return a template")
 		console(" - request snmp-test <ip-address>                              |  Run a SNMP test using the configured community and OID against an IP")
+		console(" - request dhcp-option-125 (windows|cisco)                     |  Show the DHCP Option 125 Hex value to use on the DHCP server for OS upgrades")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console(" - service (start|stop|restart|status)                         |  Start, Stop, or Restart the installed ZTP service")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
