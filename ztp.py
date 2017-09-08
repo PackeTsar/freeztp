@@ -8,7 +8,7 @@
 
 
 ##### Inform FreeZTP version here #####
-version = "v0.7.0"
+version = "v0.7.1"
 
 
 ##### Try to import non-native modules, fail gracefully #####
@@ -41,6 +41,7 @@ def interceptor(afile, raddress, rport):
 	else:
 		log("interceptor: Returning None")
 		return None
+
 
 ##### Dynamic file object: instantiated by the tftpy server to generate   #####
 #####   TFTP files                                                        #####
@@ -77,15 +78,18 @@ class config_factory:
 	def __init__(self):
 		self.state = {}
 		self.snmprequests = {}
-		self.basefilename = config.running["initialfilename"]
-		self.imagediscoveryfile = config.running["imagediscoveryfile"]
-		self.basesnmpcom = config.running["community"]
-		self.snmpoid = config.running["snmpoid"]
-		self.baseconfig = config.running["starttemplate"]
-		self.uniquesuffix = config.running["suffix"]
-		self.templates = config.running["templates"]
-		self.keyvalstore = config.running["keyvalstore"]
-		self.associations = config.running["associations"]
+		try:
+			self.basefilename = config.running["initialfilename"]
+			self.imagediscoveryfile = config.running["imagediscoveryfile"]
+			self.basesnmpcom = config.running["community"]
+			self.snmpoid = config.running["snmpoid"]
+			self.baseconfig = config.running["starttemplate"]
+			self.uniquesuffix = config.running["suffix"]
+			self.templates = config.running["templates"]
+			self.keyvalstore = config.running["keyvalstore"]
+			self.associations = config.running["associations"]
+		except:
+			console("cfact.__init__: Error pulling settings from config file")
 	def lookup(self, filename, ipaddr):
 		log("cfact.lookup: Called. Checking filename (%s) and IP (%s)" % (filename, ipaddr))
 		tempid = filename.replace(self.uniquesuffix, "")
