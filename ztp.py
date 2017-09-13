@@ -8,7 +8,7 @@
 
 
 ##### Inform FreeZTP version here #####
-version = "v0.7.1"
+version = "v0.7.2"
 
 
 ##### Try to import non-native modules, fail gracefully #####
@@ -374,7 +374,7 @@ class config_manager:
 		if setting in exceptions:
 			console("Cannot configure this way")
 		elif "template" in setting:
-			console("Enter each line of the template ending with '%s' on a line by itself" % args[3])
+			console("Enter each line of the template ending with '%s' on a line by itself" % args[4])
 			newtemplate = self.multilineinput(args[4])
 			if setting == "initial-template":
 				self.running["starttemplate"] = newtemplate
