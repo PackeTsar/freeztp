@@ -8,7 +8,7 @@
 
 
 ##### Inform FreeZTP version here #####
-version = "dev0.7.3"
+version = "v0.7.3a"
 
 
 ##### Try to import non-native modules, fail gracefully #####
@@ -281,7 +281,6 @@ class config_factory:
 			console("##############################")
 			console(j2template.render(config.running["keyvalstore"][identity]))
 			console("##############################")
-	
 
 
 ##### SNMP Querying object: It is instantiated by the config_factory      #####
@@ -685,8 +684,6 @@ class log_management:
 		f = open(self.logfile, 'w')
 		f.write("")
 		f.close()
-		
-
 
 
 ##### Installer class: A simple holder class which contains all of the    #####
@@ -1054,13 +1051,284 @@ bind 'set show-all-if-ambiguous on'"""
 		console("Auto-complete script installed to /etc/profile.d/ztp-complete.sh")
 
 
+# Overwrite of a TFTPY function to notify when downloads complete
+def end(self):
+	"""Finish up the context."""
+	tftpy.TftpContext.end(self)
+	self.metrics.end_time = time.time()
+	#cfact.file_closed(self.file_to_transfer, self.host)  # Notify
+	print("################### ENDING %s %s %s #############################" % (self.host, str(self.port), self.file_to_transfer) * 10)
+	tracking.report({
+		"ipaddr": self.host,
+		"port": self.port,
+		"block": None,
+		"filename": self.file_to_transfer,
+		"source": "end"})
+	#print(" ENDING %s %s %s" % (self.host, str(self.port), self.file_to_transfer))
+	tftpy.log.debug("Set metrics.end_time to %s", self.metrics.end_time)
+	self.metrics.compute()
+
+tftpy.TftpContextServer.end = end  # Overwrite the function
+
+
+# Overwrite of a TFTPY function to notify when downloads start
+def start(self, buffer):
+	"""Start the state cycle. Note that the server context receives an
+	initial packet in its start method. Also note that the server does not
+	loop on cycle(), as it expects the TftpServer object to manage
+	that."""
+	tftpy.log.debug("In TftpContextServer.start")
+	self.metrics.start_time = time.time()
+	tftpy.log.debug("Set metrics.start_time to %s", self.metrics.start_time)
+	# And update our last updated time.
+	self.last_update = time.time()
+	pkt = self.factory.parse(buffer)
+	tftpy.log.debug("TftpContextServer.start() - factory returned a %s", pkt)
+	# Call handle once with the initial packet. This should put us into
+	# the download or the upload state.
+	print("################### STARTING %s %s %s #############################" % (self.host, str(self.port), pkt.filename) * 10)
+	#print(pkt.filename)
+	tracking.report({
+		"ipaddr": self.host,
+		"port": self.port,
+		"block": None,
+		"filename": pkt.filename,
+		"source": "start"})
+	#print(" STARTING %s %s %s" % (self.host, str(self.port), self.file_to_transfer))
+	self.state = self.state.handle(pkt,
+									self.host,
+									self.port)
+
+tftpy.TftpContextServer.start = start  # Overwrite the function
+
+
+def handle(self, pkt, raddress, rport):
+    "Handle a packet, hopefully an ACK since we just sent a DAT."
+    if isinstance(pkt, tftpy.TftpPacketACK):
+        tftpy.log.debug("Received ACK for packet %d" % pkt.blocknumber)
+        print("################### PACKET %s %s %s #############################" % (pkt.blocknumber, raddress, rport) * 10)
+        tracking.report({
+            "ipaddr": raddress,
+            "port": rport,
+            "block": pkt.blocknumber,
+            "filename": None,
+            "source": "handle"})
+        print(tracking._working)
+        for each in tracking._working:
+            print tracking._working[each].active
+        print(tracking._master)
+        for each in tracking._master:
+            filesize = tracking._master[each].filesize
+            sent = tracking._master[each].lastblock*512
+            print(str(sent)+"/"+str(filesize))
+            print tracking._master[each].active
+            print tracking._master[each].lastblock
+            print tracking._master[each].sessionports
+        # Is this an ack to the one we just sent?
+        if self.context.next_block == pkt.blocknumber:
+            if self.context.pending_complete:
+                tftpy.log.info("Received ACK to final DAT, we're done.")
+                return None
+            else:
+                tftpy.log.debug("Good ACK, sending next DAT")
+                self.context.next_block += 1
+                tftpy.log.debug("Incremented next_block to %d",
+                    self.context.next_block)
+                self.context.pending_complete = self.sendDAT()
+        elif pkt.blocknumber < self.context.next_block:
+            tftpy.log.warn("Received duplicate ACK for block %d"
+                % pkt.blocknumber)
+            self.context.metrics.add_dup(pkt)
+        else:
+            tftpy.log.warn("Oooh, time warp. Received ACK to packet we "
+                     "didn't send yet. Discarding.")
+            self.context.metrics.errors += 1
+        return self
+    elif isinstance(pkt, tftpy.TftpPacketERR):
+        tftpy.log.error("Received ERR packet from peer: %s" % str(pkt))
+        raise tftpy.TftpException("Received ERR packet from peer: %s" % str(pkt))
+    else:
+        tftpy.log.warn("Discarding unsupported packet: %s" % str(pkt))
+        return self
+
+tftpy.TftpStateExpectACK.handle = handle
 
 
 
-"""
-Fire up the TFTP server referencing the dyn_file_func class
-for dynamic file creations
-"""
+
+
+
+
+
+
+# NEXT: write percent calc and get a clean output on a show command
+# NEXT: Set up garbage collection of complete sessions
+# NEXT: Crashing with unknown filename
+
+
+class tracking_class:
+	def __init__(self):
+		self._master = {}
+		self._working = {}
+		self.status = {}
+		self.store = persistent_store("tracking")
+		self.thread = threading.Thread(target=self._maintenance)
+		self.thread.daemon = True
+		self.thread.start()
+	def report(self, args):
+		ipaddr = args["ipaddr"]
+		port = args["port"]
+		portpair = ipaddr+":"+str(port)
+		if portpair in self._working:  # If init session exists
+			self._working[portpair].update(args)  # Update the session
+		else:
+			# Create a new session
+			self._working.update({portpair: self.request_class(args, self)})
+	def _calc_percent(self, partial, total):
+		pass
+	def _maintenance(self):
+		while True:
+			time.sleep(1)
+			print("LOOPING")
+			for session in self._master:
+				key = self._master[session].ipaddr+":"+str(self._master[session].filename)
+				data = {
+					"ipaddr": self._master[session].ipaddr,
+					"port": self._master[session].port,
+					"filename": self._master[session].filename,
+					"lastblock": self._master[session].lastblock,
+					"bytessent": self._master[session].lastblock*512,
+					"sessionports": self._master[session].sessionports,
+					"active": self._master[session].active,
+					"filesize": self._master[session].filesize
+				}
+				self.status.update({key: data})
+			self.store(self.status)
+	class request_class:
+		def __init__(self, args, tracking, redirect=False, master=False):
+			self.ipaddr = None
+			self.port = None
+			self.filename = None
+			self.lastblock = None
+			self.redirect = redirect
+			self.parent = tracking
+			self.sessionports = []
+			self.master = master
+			self.active = True
+			self.filesize = None
+			self.update(args)
+			if self.master:
+				self.init_master()
+		def update(self, args):
+			if type(self.redirect) != type(True):  # If we are redirecting updates
+				target = self.redirect  # Setup to send the updates
+				print("Forwarding Update")
+			else:  # Otherwise
+				target = self  # Update outselves
+			for arg in args:  # For each passed attrib
+				if args[arg]:  # If it has a value
+					if arg == "ipaddr":
+						target.ipaddr = args[arg]
+					elif arg == "port":
+						target.port = args[arg]
+					elif arg == "filename":
+						target.filename = args[arg]
+					elif arg == "block":
+						target.lastblock = args[arg]
+					elif arg == "source":  # If called by end()
+						if args[arg] == "end":
+							self.active = False  # Unset active for cleanup
+			if not self.redirect and self.filename:  # If transferring
+				self.transfer()
+		def transfer(self):
+			filepair = self.ipaddr+":"+self.filename
+			if filepair in self.parent._master:
+				self.redirect = self.parent._master[filepair]
+				self.redirect.sessionports.append(self.port)
+			else:
+				args = {"ipaddr":self.ipaddr, "port":self.port, "filename": self.filename}
+				newsession = self.parent.request_class(args, self.parent, True, True)
+				newsession.sessionports.append(self.port)
+				#newsession.redirect = newsession
+				#self.redirect = newsession
+				self.parent._master.update({filepair: newsession})
+				self.redirect = newsession
+		def check_file(self):
+			path = config.running["tftproot"]+self.filename
+			if os.path.isfile(path):
+				self.filesize = os.path.getsize(path)
+		def init_master(self):
+			self.check_file()
+
+#t = tracking_class()
+#t.report({"ipaddr": "10.0.0.1", "port": 65000, "filename": None, "block": None})
+#t._working
+#t._master
+#
+#t.report({"ipaddr": "10.0.0.1", "port": 65000, "filename": "test", "block": None})
+#t._working
+#t._master
+#t._working[list(t._working)[0]].lastblock
+#t._master[list(t._master)[0]].lastblock
+#
+#t.report({"ipaddr": "10.0.0.1", "port": 65000, "filename": "test", "block": 100})
+#t._master[list(t._master)[0]].lastblock
+#t._working[list(t._working)[0]].lastblock
+#
+#t.report({"ipaddr": "10.0.0.1", "port": 65000, "filename": "test", "block": 200})
+#t._master[list(t._master)[0]].lastblock
+#t._working[list(t._working)[0]].lastblock
+#
+#t.report({"ipaddr": "10.0.0.1", "port": 65100, "filename": None, "block": None})
+#t._working
+#t._master
+#t.report({"ipaddr": "10.0.0.1", "port": 65100, "filename": "test", "block": 5000})
+
+
+class persistent_store:
+	def __init__(self, dbid):
+		self._file = "/etc/ztp/pdb"
+		self._dbid = dbid
+		self._running = {}
+		self._read()
+	def __call__(self, data):
+		self._read()
+		self._running = data
+		self._write()
+	def recall(self):
+		self._read
+		return self._running
+	def _write(self):
+		fulldb = self._pull_full_db()  # Pull a full copy of the db
+		fulldb.update({self._dbid: self._running})  # Update it
+		rawout = json.dumps(fulldb, indent=4, sort_keys=True)
+		f = open(self._file, "w")
+		f.write(rawout)
+		f.close()
+	def _create_blank(self):
+		f = open(self._file, "w")
+		f.write("{}")
+		f.close()
+	def _read(self):
+		data = self._pull_full_db()
+		try:
+			self._running = data[self._dbid]
+		except KeyError:
+			self._write()
+	def _pull_full_db(self):
+		try:
+			f = open(self._file, "r")
+		except IOError as e:
+			self._create_blank()
+			f = open(self._file, "r")
+		rawdata = f.read()
+		f.close()
+		result = json.loads(rawdata)
+		return result
+
+#s = persistent_store("mydb1")
+#s("something here")
+#s.recall()
 
 
 ##### TFTP Server main entry. Starts the TFTP server listener and is the  #####
@@ -1108,6 +1376,8 @@ def interpreter():
 	##### RUN #####
 	elif arguments == "run":
 		log("interpreter: Command to run received. Calling start_tftp")
+		global tracking
+		tracking = tracking_class()
 		start_tftp()
 	##### INSTALL #####
 	elif arguments == "install":
