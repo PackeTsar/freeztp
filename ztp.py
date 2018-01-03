@@ -8,7 +8,7 @@
 
 
 ##### Inform FreeZTP version here #####
-version = "v0.7.2"
+version = "dev0.7.3"
 
 
 ##### Try to import non-native modules, fail gracefully #####
@@ -17,6 +17,8 @@ try:
 	from jinja2 import Environment, meta
 	import pysnmp.hlapi
 	import tftpy
+	import ipaddress
+	import netifaces
 except ImportError:
 	print("Had some import errors, may not have dependencies installed yet")
 
@@ -396,6 +398,8 @@ class config_manager:
 				value = None
 			self.running[setting] = value
 			self.save()
+		elif setting == "dhcpd":
+			self.set_dhcpd(args)
 		else:
 			if setting in list(self.running):
 				self.running[setting] = value
@@ -460,6 +464,25 @@ class config_manager:
 		if "associations" not in list(self.running):
 			self.running.update({"associations": {}})
 		self.running["associations"].update({iden: template})
+		self.save()
+	def set_dhcpd(self, args):
+		if len(args) < 6:
+			print("ERROR: Incomplete Command!")
+			quit()
+		scope = args[3]
+		setting = args[4]
+		value = args[5]
+		simplesettings = ["subnet", "first-address", "last-address", "gateway",
+			"ztp-tftp-address", "imagediscoveryfile-option", "domain-name"]
+		if "dhcpd" not in list(self.running):
+			self.running.update({"dhcpd": {}})
+		if scope not in self.running["dhcpd"]:
+			self.running["dhcpd"].update({scope: {}})
+		if setting in simplesettings:
+			self.running["dhcpd"][scope].update({setting: value})
+		elif setting == "dns-servers":
+			value = ", ".join(args[5:])
+			self.running["dhcpd"][scope].update({setting: value})
 		self.save()
 	def show_config(self):
 		cmdlist = []
@@ -1165,6 +1188,7 @@ def interpreter():
 		console(" - set association id <id/arrayname> template <template_name>  |  Associate a keystore id or an idarray to a specific named template")
 		console(" - set default-keystore (none|keystore-id)                     |  Set a last-resort keystore and template for when target identification fails")
 		console(" - set imagefile <binary_image_file_name>                      |  Set the image file name to be used for upgrades (must be in tftp root dir)")
+		console(" - set dhcpd <scope-name> [parameters]                         |  Configure DHCP scope(s) to serve IP addresses to ZTP clients")
 	elif arguments == "set suffix":
 		console(" - set suffix <value>                             |  Set the file name suffix used by target when requesting the final config")
 	elif arguments == "set initialfilename":
@@ -1191,6 +1215,8 @@ def interpreter():
 		console(" - set default-keystore (none|keystore-id)        |  Set a last-resort keystore and template for when target identification fails")
 	elif arguments == "set imagefile":
 		console(" - set imagefile <binary_image_file_name>         |  Set the image file name to be used for upgrades (must be in tftp root dir)")
+	elif arguments == "set dhcpd":
+		console(" - set dhcpd <scope-name> [parameters]            |  Configure DHCP scope(s) to serve IP addresses to ZTP clients")
 	elif arguments[:3] == "set" and len(sys.argv) >= 4:
 		config.set(sys.argv)
 	##### CLEAR #####
@@ -1306,6 +1332,7 @@ def interpreter():
 		console(" - set association id <id/arrayname> template <template_name>  |  Associate a keystore id or an idarray to a specific named template")
 		console(" - set default-keystore (none|keystore-id)                     |  Set a last-resort keystore and template for when target identification fails")
 		console(" - set imagefile <binary_image_file_name>                      |  Set the image file name to be used for upgrades (must be in tftp root dir)")
+		console(" - set dhcpd <scope-name> [parameters]                         |  Configure DHCP scope(s) to serve IP addresses to ZTP clients")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console(" - clear template <template_name>                              |  Delete a named configuration template")
