@@ -929,13 +929,13 @@ class installer:
 		os.system("pip install netaddr")
 		os.system("pip install netifaces")
 	def dhcp_setup(self):
+		console("\n\nInstalling DHCPD...\n")
+		os.system("yum -y install dhcp")
 		console("\n\nPerforming DHCPD Auto-Setup...\n")
 		console("\n\nRetrying Module Imports...")
 		try:
-			import jinja2 as j2
-			from jinja2 import Environment, meta
-			import pysnmp.hlapi
-			import tftpy
+			global netaddr
+			global netifaces
 			import netaddr
 			import netifaces
 			console("Success!\n")
