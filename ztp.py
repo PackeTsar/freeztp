@@ -930,11 +930,22 @@ class installer:
 		os.system("pip install netifaces")
 	def dhcp_setup(self):
 		console("\n\nPerforming DHCPD Auto-Setup...\n")
-		time.sleep(2)
-		config.auto_dhcpd()
-		time.sleep(2)
-		config.dhcpd_commit()
-		console("\n\nDHCPD Auto-Setup Complete\n")
+		console("\n\nRetrying Module Imports...")
+		try:
+			import jinja2 as j2
+			from jinja2 import Environment, meta
+			import pysnmp.hlapi
+			import tftpy
+			import netaddr
+			import netifaces
+			console("Success!\n")
+			time.sleep(2)
+			config.auto_dhcpd()
+			time.sleep(2)
+			config.dhcpd_commit()
+			console("\n\nDHCPD Auto-Setup Complete\n")
+		except ImportError:
+			console("Failed!\n")
 	def create_service(self):
 		systemd_startfile = '''[Unit]
 Description=FreeZTP Service
