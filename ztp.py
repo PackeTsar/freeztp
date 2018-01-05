@@ -931,6 +931,9 @@ class installer:
 	def dhcp_setup(self):
 		console("\n\nInstalling DHCPD...\n")
 		os.system("yum -y install dhcp")
+		console("\n\nSucking in config file...\n")
+		global config
+		config = config_manager()
 		console("\n\nPerforming DHCPD Auto-Setup...\n")
 		console("\n\nRetrying Module Imports...")
 		try:
