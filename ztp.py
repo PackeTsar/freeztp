@@ -890,6 +890,11 @@ class installer:
 				console("Adding (%s) to config schema" % key)
 				config.running.update({key: newconfigkeys[key]})
 		config.save()
+		#### DHCPD Install Process
+		console("\n\nInstalling some new dependencies...\n")
+		os.system("pip install netaddr")
+		os.system("pip install netifaces")
+		self.dhcp_setup()
 	def copy_binary(self):
 		binpath = "/bin/"
 		binname = "ztp"
@@ -934,7 +939,6 @@ class installer:
 		console("\n\nSucking in config file...\n")
 		global config
 		config = config_manager()
-		console("\n\nPerforming DHCPD Auto-Setup...\n")
 		console("\n\nRetrying Module Imports...")
 		try:
 			global netaddr
@@ -942,6 +946,7 @@ class installer:
 			import netaddr
 			import netifaces
 			console("Success!\n")
+			console("\n\nPerforming DHCPD Auto-Setup...\n")
 			time.sleep(2)
 			config.auto_dhcpd()
 			time.sleep(2)
@@ -1370,7 +1375,10 @@ def handle(self, pkt, raddress, rport):
         print(tracking._master)
         for each in tracking._master:
             filesize = tracking._master[each].filesize
-            sent = tracking._master[each].lastblock*512
+            if not tracking._master[each].lastblock:
+                sent = 0
+            else:
+                sent = tracking._master[each].lastblock*512
             print(str(sent)+"/"+str(filesize))
             print tracking._master[each].active
             print tracking._master[each].lastblock
