@@ -8,7 +8,7 @@
 
 
 ##### Inform FreeZTP version here #####
-version = "v0.7.3a"
+version = "v0.8.0"
 
 
 ##### Try to import non-native modules, fail gracefully #####
@@ -811,9 +811,9 @@ class config_manager:
 			subnet = net[3].encode()
 			myip = net[1].encode()
 			cmd1 = "ztp set dhcpd %s subnet %s" % (scopename, subnet)
-			api1 = ['ztp.py', 'set', 'dhcpd', scopename, 'subnet', subnet]
+			api1 = ['ztp', 'set', 'dhcpd', scopename, 'subnet', subnet]
 			cmd2 = "ztp set dhcpd %s ztp-tftp-address %s" % (scopename, myip)
-			api2 = ['ztp.py', 'set', 'dhcpd', scopename, 'ztp-tftp-address', myip]
+			api2 = ['ztp', 'set', 'dhcpd', scopename, 'ztp-tftp-address', myip]
 			console("    Injecting Command: %s" % cmd1)
 			self.set_dhcpd(api1)
 			console("    Injecting Command: %s" % cmd2)
