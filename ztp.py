@@ -890,11 +890,14 @@ class installer:
 				console("Adding (%s) to config schema" % key)
 				config.running.update({key: newconfigkeys[key]})
 		config.save()
-		#### DHCPD Install Process
-		console("\n\nInstalling some new dependencies...\n")
-		os.system("pip install netaddr")
-		os.system("pip install netifaces")
-		self.dhcp_setup()
+		try:
+			import netifaces
+		except ImportError:
+			#### DHCPD Install Process
+			console("\n\nInstalling some new dependencies...\n")
+			os.system("pip install netaddr")
+			os.system("pip install netifaces")
+			self.dhcp_setup()
 	def copy_binary(self):
 		binpath = "/bin/"
 		binname = "ztp"
