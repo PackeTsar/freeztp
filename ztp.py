@@ -8,7 +8,7 @@
 
 
 ##### Inform FreeZTP version here #####
-version = "v0.7.2"
+version = "v0.8.0"
 
 
 ##### Try to import non-native modules, fail gracefully #####
@@ -17,6 +17,8 @@ try:
 	from jinja2 import Environment, meta
 	import pysnmp.hlapi
 	import tftpy
+	import netaddr
+	import netifaces
 except ImportError:
 	print("Had some import errors, may not have dependencies installed yet")
 
@@ -279,7 +281,6 @@ class config_factory:
 			console("##############################")
 			console(j2template.render(config.running["keyvalstore"][identity]))
 			console("##############################")
-	
 
 
 ##### SNMP Querying object: It is instantiated by the config_factory      #####
@@ -396,6 +397,8 @@ class config_manager:
 				value = None
 			self.running[setting] = value
 			self.save()
+		elif setting == "dhcpd":
+			self.set_dhcpd(args)
 		else:
 			if setting in list(self.running):
 				self.running[setting] = value
@@ -437,7 +440,16 @@ class config_manager:
 			elif iden not in list(self.running["associations"]):
 				console("Association '%s' is not currently configured" % iden)
 			else:
-				del self.running["associations"][iden] 
+				del self.running["associations"][iden]
+		elif setting == "dhcpd":
+			if "dhcpd" not in list(self.running):
+				console("No DHCP scopes are currently configured")
+			elif iden not in list(self.running["dhcpd"]):
+				console("DHCP Scope '%s' is not currently configured" % iden)
+			else:
+				del self.running["dhcpd"][iden]
+		else:
+			console("Unknown Setting!")
 		self.save()
 	def multilineinput(self, ending):
 		result = ""
@@ -461,6 +473,49 @@ class config_manager:
 			self.running.update({"associations": {}})
 		self.running["associations"].update({iden: template})
 		self.save()
+	def set_dhcpd(self, args):
+		if len(args) < 6:
+			print("ERROR: Incomplete Command!")
+			quit()
+		scope = args[3]
+		setting = args[4]
+		value = args[5]
+		checks = {"subnet": self.is_net, "first-address": self.is_ip, "last-address": self.is_ip, "gateway": self.is_ip, "ztp-tftp-address": self.is_ip, "imagediscoveryfile-option": self.make_true, "domain-name": self.make_true}
+		#### Build Path
+		if "dhcpd" not in list(self.running):
+			self.running.update({"dhcpd": {}})
+		if scope not in self.running["dhcpd"]:
+			self.running["dhcpd"].update({scope: {"imagediscoveryfile-option": "enable"}})
+		###############
+		if setting in checks:
+			check = checks[setting](value)
+			if check == True:
+				self.running["dhcpd"][scope].update({setting: value})
+			else:
+				print(check)
+		elif setting == "dns-servers":
+			value = ", ".join(args[5:])
+			self.running["dhcpd"][scope].update({setting: value})
+		else:
+			print("BAD COMMAND!")
+		self.save()
+	def is_ip(self, data):
+		try:
+			netaddr.IPAddress(data)
+			return True
+		except Exception as err:
+			return err
+	def is_net(self, data):
+		try:
+			ipobj = netaddr.IPNetwork(data)
+			if str(ipobj.cidr) == data:
+				return True
+			else:
+				return "Please provide a CIDR address (ie: 10.0.0.0/24)"
+		except ValueError as err:
+			return err
+	def make_true(self, data):
+		return True
 	def show_config(self):
 		cmdlist = []
 		simplevals = ["suffix", "initialfilename", "community", "snmpoid", "tftproot", "imagediscoveryfile"]
@@ -495,6 +550,16 @@ class config_manager:
 		dkeystore = "ztp set default-keystore %s"  % str(self.running["default-keystore"])
 		imagefile = "ztp set imagefile %s"  % str(self.running["imagefile"])
 		############
+		scopelist = []
+		for scope in self.running["dhcpd"]:
+			for option in self.running["dhcpd"][scope]:
+				value = self.running["dhcpd"][scope][option]
+				command = "ztp set dhcpd %s %s %s" % (scope, option, value)
+				command = command.replace(",", "")
+				scopelist.append(command)
+			scopelist.append("!")
+		scopelist = scopelist[:len(scopelist)-1] # Remove last !
+		############
 		configtext = "!\n!\n!\n"
 		for cmd in cmdlist:
 			configtext += cmd + "\n"
@@ -521,10 +586,14 @@ class config_manager:
 		configtext += "\n"
 		configtext += imagefile
 		###########
+		configtext += "\n!\n"
+		for cmd in scopelist:
+			configtext += cmd + "\n"
+		###########
 		console(configtext)
 	def calcopt125hex(self):
 		# Basedata meaning as follows:
-		### 00 00 00 09 = ??
+		### 00 00 00 09 = Cisco vendor specific code
 		basedata = "000000090a05"
 		filenamedata = self.running["imagediscoveryfile"].encode("hex")
 		lenval = hex(len(filenamedata)/2).replace("0x", "")
@@ -547,6 +616,8 @@ class config_manager:
 		for quad in templist:
 			result += quad + "."
 		return result[:len(result)-1]
+	def isc_hex(self, hexdata):
+		return ":".join(map(''.join, zip(*[iter(hexdata)]*2))).upper()
 	def opt125(self, mode):
 		if mode == "windows":
 			console("""
@@ -578,6 +649,8 @@ class config_manager:
 			optiondata = self.running["imagediscoveryfile"].encode("hex")
 			console("\n\nAdd the below line to your 'ip dhcp pool XXXX' config:\n")
 			console("option 125 hex %s\n\n" % self.ciscohex(self.calcopt125hex()))
+		elif mode == "isc":
+			return self.isc_hex(self.calcopt125hex())
 	def hidden_list_ids(self):
 		for iden in list(self.running["keyvalstore"]):
 			console(iden)
@@ -609,6 +682,143 @@ class config_manager:
 	def hidden_list_image_files(self):
 		for each in os.listdir(self.running["tftproot"]):
 			print(each)
+	def hidden_list_dhcpd_scopes(self):
+		for scope in self.running["dhcpd"]:
+			console(scope)
+	def dhcpd_compile(self):
+		result = "########### FREEZTP DHCP SCOPES ###########\n"
+		result += "############## DO NOT MODIFY ##############\n"
+		result += "option ztp-tftp-address code 150 = { ip-address };\n"
+		result += "option imagediscoveryfile-option code 125 = string;\n"
+		result += "#\n"
+		result += "#"
+		mappings = {
+		"gateway": " option routers <value>;",
+		"dns-servers": " option domain-name-servers <value>;",
+		"domain-name": ' option domain-name "<value>";',
+		"ztp-tftp-address": " option ztp-tftp-address <value>;"
+		}
+		for scope in self.running["dhcpd"]:
+			### Run Basic Checks
+			if "subnet" not in self.running["dhcpd"][scope]:
+				console("ERROR: DHCP Scope %s has no subnet defined. A subnet is required!. Compiling stopped." % scope)
+				quit()
+			elif "first-address" in self.running["dhcpd"][scope] and "last-address" not in self.running["dhcpd"][scope]:
+				console("ERROR: Need to define a 'last-address' in scope %s. Compiling stopped." % scope)
+				quit()
+			elif "last-address" in self.running["dhcpd"][scope] and "first-address" not in self.running["dhcpd"][scope]:
+				console("ERROR: Need to define a 'first-address' in scope %s. Compiling stopped." % scope)
+				quit()
+			else:
+				### Start Compiling
+				scopetext = "#### Scope: %s ####" % scope
+				ending = " }\n" + "#" * len(scopetext)
+				scopetext = "\n#\n" + scopetext + "\n"
+				##
+				subnet = netaddr.IPNetwork(self.running["dhcpd"][scope]["subnet"])
+				net = str(subnet.network)
+				mask = str(subnet.netmask)
+				scopetext += "subnet %s netmask %s {\n" % (net, mask)
+				##
+				for option in self.running["dhcpd"][scope]:
+					if option in mappings:
+						value = self.running["dhcpd"][scope][option]
+						txt = mappings[option].replace("<value>", value)
+						scopetext += txt + "\n"
+					elif option == "first-address":
+						first = self.running["dhcpd"][scope]["first-address"]
+						last = self.running["dhcpd"][scope]["last-address"]
+						txt = " range %s %s;" % (first, last)
+						scopetext += txt + "\n"
+				if self.running["dhcpd"][scope]["imagediscoveryfile-option"] == "enable":
+					opt125val = self.opt125("isc")
+					txt = " send imagediscoveryfile-option %s;" % opt125val
+					scopetext += txt + "\n"
+				##
+				scopetext += ending
+				result += scopetext
+		return result
+		# option ztp-tftp-address code 150 = { ip-address };
+	def dhcpd_commit(self):
+		dhcpdata = self.dhcpd_compile()
+		filedatalist = open("/etc/dhcp/dhcpd.conf").readlines()
+		index = 1
+		for line in filedatalist:
+			if line == '########### FREEZTP DHCP SCOPES ###########\n':
+				break
+			else:
+				index += 1
+		strippeddata = ""
+		for line in filedatalist[:index-1]:
+			strippeddata += line
+		strippeddata += dhcpdata
+		console("\n################## Writing the below to the DHCP config file ##################")
+		console("###############################################################################")
+		console(strippeddata)
+		console("###############################################################################")
+		console("###############################################################################")
+		f = open("/etc/dhcp/dhcpd.conf", "w")
+		f.write(strippeddata)
+		f.close()
+		console("\nWrite Complete. Restarting DHCP Service...\n")
+		os.system('systemctl restart dhcpd')
+		os.system('systemctl status dhcpd')
+	def get_addresses(self):
+		result = []
+		for iface in netifaces.interfaces():
+			addressdict = netifaces.ifaddresses(iface)
+			for addid in addressdict:
+				for d in addressdict[addid]:
+					if "addr" in d:
+						addr = d["addr"]
+					addr = d["addr"] if "addr" in d else "none"
+					netmask = d["netmask"] if "netmask" in d else "none"
+					result.append((iface, addr, netmask))
+		return result
+	def filter_ips(self, iplist):
+		result = []
+		for adtup in iplist:
+			try:
+				bits = netaddr.IPAddress(adtup[2]).netmask_bits()
+				ip = adtup[1] + "/" + str(bits)
+				i = netaddr.IPNetwork(ip)
+				uni = i.is_unicast()
+				loc = i.is_link_local()
+				loop = i.is_loopback()
+				multi = i.is_multicast()
+				priv = i.is_private()
+				res = i.is_reserved()
+				if (uni, loc, loop, multi, priv, res) == (True, False, False, False, True, False):
+					# Is a private IPv4 address
+					result.append((adtup[0], adtup[1], adtup[2], str(i.cidr)))
+				elif (uni, loc, loop, multi, priv, res) == (True, False, False, False, False, False):
+					# Is a public IPv4 address
+					result.append((adtup[0], adtup[1], adtup[2], str(i.cidr)))
+			except Exception as e:
+				pass
+		return result
+	def auto_dhcpd(self):
+		console("INFO: Autodetection can often detect an incorrect subnet mask. You may need to correct the subnet on auto built scopes")
+		console("INFO: You will need to set the 'first-address' and 'last-address' settings on any auto-built scope for it to actually serve IP addresses ")
+		console("Detecting interfaces and determining usable IP addresses...")
+		ips = self.filter_ips(self.get_addresses())
+		console("  Found: %s\nCreating Scopes..." % ips)
+		for net in ips:
+			scopename = "INTERFACE-" + net[0].encode().upper()
+			console("  Building Scope %s" % scopename)
+			if net[2].encode() == "255.255.255.255":
+				console("    WARNING: Scope %s has a /32 subnet size. You may need to adjust it if you want to serve IP addresses on that subnet" % scopename)
+			subnet = net[3].encode()
+			myip = net[1].encode()
+			cmd1 = "ztp set dhcpd %s subnet %s" % (scopename, subnet)
+			api1 = ['ztp', 'set', 'dhcpd', scopename, 'subnet', subnet]
+			cmd2 = "ztp set dhcpd %s ztp-tftp-address %s" % (scopename, myip)
+			api2 = ['ztp', 'set', 'dhcpd', scopename, 'ztp-tftp-address', myip]
+			console("    Injecting Command: %s" % cmd1)
+			self.set_dhcpd(api1)
+			console("    Injecting Command: %s" % cmd2)
+			self.set_dhcpd(api2)
+		console("\n\nComplete!\n\nRemember to commit the new DHCP config using the command 'ztp request dhcpd-commit'\n")
 
 
 ##### Log Management Class: Handles all prnting to console and logging    #####
@@ -662,8 +872,6 @@ class log_management:
 		f = open(self.logfile, 'w')
 		f.write("")
 		f.close()
-		
-
 
 
 ##### Installer class: A simple holder class which contains all of the    #####
@@ -682,6 +890,14 @@ class installer:
 				console("Adding (%s) to config schema" % key)
 				config.running.update({key: newconfigkeys[key]})
 		config.save()
+		try:
+			import netifaces
+		except ImportError:
+			#### DHCPD Install Process
+			console("\n\nInstalling some new dependencies...\n")
+			os.system("pip install netaddr")
+			os.system("pip install netifaces")
+			self.dhcp_setup()
 	def copy_binary(self):
 		binpath = "/bin/"
 		binname = "ztp"
@@ -718,6 +934,29 @@ class installer:
 		os.system("yum -y install gcc gmp python-devel")
 		os.system("pip install pysnmp")
 		os.system("pip install jinja2")
+		os.system("pip install netaddr")
+		os.system("pip install netifaces")
+	def dhcp_setup(self):
+		console("\n\nInstalling DHCPD...\n")
+		os.system("yum -y install dhcp")
+		console("\n\nSucking in config file...\n")
+		global config
+		config = config_manager()
+		console("\n\nRetrying Module Imports...")
+		try:
+			global netaddr
+			global netifaces
+			import netaddr
+			import netifaces
+			console("Success!\n")
+			console("\n\nPerforming DHCPD Auto-Setup...\n")
+			time.sleep(2)
+			config.auto_dhcpd()
+			time.sleep(2)
+			config.dhcpd_commit()
+			console("\n\nDHCPD Auto-Setup Complete\n")
+		except ImportError:
+			console("Failed!\n")
 	def create_service(self):
 		systemd_startfile = '''[Unit]
 Description=FreeZTP Service
@@ -839,13 +1078,13 @@ _ztp_complete()
         COMPREPLY=( $(compgen -W "config run status version log" -- $cur) )
         ;;
       "set")
-        COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile template keystore idarray association default-keystore imagefile" -- $cur) )
+        COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile template keystore idarray association default-keystore imagefile dhcpd" -- $cur) )
         ;;
       "clear")
-        COMPREPLY=( $(compgen -W "keystore idarray template association log" -- $cur) )
+        COMPREPLY=( $(compgen -W "keystore idarray template association dhcpd log" -- $cur) )
         ;;
       "request")
-        COMPREPLY=( $(compgen -W "merge-test initial-merge default-keystore-test snmp-test dhcp-option-125" -- $cur) )
+        COMPREPLY=( $(compgen -W "merge-test initial-merge default-keystore-test snmp-test dhcp-option-125 dhcpd-commit auto-dhcpd" -- $cur) )
         ;;
       "service")
         COMPREPLY=( $(compgen -W "start stop restart status" -- $cur) )
@@ -943,6 +1182,16 @@ _ztp_complete()
           COMPREPLY=( $(compgen -W "${ids} <binary_image_file_name> -" -- $cur) )
         fi
         ;;
+      dhcpd)
+        if [ "$prev2" == "set" ]; then
+          local ids=$(for id in `ztp show dhcpd`; do echo $id ; done)
+          COMPREPLY=( $(compgen -W "${ids} <new_dhcp_scope_name> -" -- $cur) )
+        fi
+        if [ "$prev2" == "clear" ]; then
+          local ids=$(for id in `ztp show dhcpd`; do echo $id ; done)
+          COMPREPLY=( $(compgen -W "${ids}" -- $cur) )
+        fi
+        ;;
       merge-test)
         local ids=$(for id in `ztp show ids`; do echo $id ; done)
         if [ "$prev2" == "request" ]; then
@@ -994,6 +1243,11 @@ _ztp_complete()
         COMPREPLY=( $(compgen -W "<id/arrayname> ${allids} -" -- $cur) )
       fi
     fi
+    if [ "$prev2" == "dhcpd" ]; then
+      if [ "$prev3" == "set" ]; then
+        COMPREPLY=( $(compgen -W "subnet first-address last-address gateway ztp-tftp-address imagediscoveryfile-option dns-servers domain-name" -- $cur) )
+      fi
+    fi
   elif [ $COMP_CWORD -eq 5 ]; then
     prev3=${COMP_WORDS[COMP_CWORD-3]}
     prev4=${COMP_WORDS[COMP_CWORD-4]}
@@ -1005,6 +1259,34 @@ _ztp_complete()
     if [ "$prev4" == "set" ]; then
       if [ "$prev3" == "association" ]; then
         COMPREPLY=( $(compgen -W "template" -- $cur) )
+      fi
+    fi
+    if [ "$prev4" == "set" ]; then
+      if [ "$prev3" == "dhcpd" ]; then
+        if [ "$prev" == "subnet" ]; then
+          COMPREPLY=( $(compgen -W "<ipv4_subnet_value> -" -- $cur) )
+        fi
+        if [ "$prev" == "first-address" ]; then
+          COMPREPLY=( $(compgen -W "<first_address_to_lease> -" -- $cur) )
+        fi
+        if [ "$prev" == "last-address" ]; then
+          COMPREPLY=( $(compgen -W "<last_address_to_lease> -" -- $cur) )
+        fi
+        if [ "$prev" == "gateway" ]; then
+          COMPREPLY=( $(compgen -W "<gateway_ipv4_address> -" -- $cur) )
+        fi
+        if [ "$prev" == "ztp-tftp-address" ]; then
+          COMPREPLY=( $(compgen -W "<ztp_server_ipv4_address> -" -- $cur) )
+        fi
+        if [ "$prev" == "imagediscoveryfile-option" ]; then
+          COMPREPLY=( $(compgen -W "enable disable" -- $cur) )
+        fi
+        if [ "$prev" == "dns-servers" ]; then
+          COMPREPLY=( $(compgen -W "<first_dns_ipv4_address> 8.8.8.8" -- $cur) )
+        fi
+        if [ "$prev" == "domain-name" ]; then
+          COMPREPLY=( $(compgen -W "<dns_search_domain> -" -- $cur) )
+        fi
       fi
     fi
   elif [ $COMP_CWORD -eq 6 ]; then
@@ -1031,13 +1313,289 @@ bind 'set show-all-if-ambiguous on'"""
 		console("Auto-complete script installed to /etc/profile.d/ztp-complete.sh")
 
 
+# Overwrite of a TFTPY function to notify when downloads complete
+def end(self):
+	"""Finish up the context."""
+	tftpy.TftpContext.end(self)
+	self.metrics.end_time = time.time()
+	#cfact.file_closed(self.file_to_transfer, self.host)  # Notify
+	print("################### ENDING %s %s %s #############################" % (self.host, str(self.port), self.file_to_transfer) * 10)
+	tracking.report({
+		"ipaddr": self.host,
+		"port": self.port,
+		"block": None,
+		"filename": self.file_to_transfer,
+		"source": "end"})
+	#print(" ENDING %s %s %s" % (self.host, str(self.port), self.file_to_transfer))
+	tftpy.log.debug("Set metrics.end_time to %s", self.metrics.end_time)
+	self.metrics.compute()
+
+
+# Overwrite of a TFTPY function to notify when downloads start
+def start(self, buffer):
+	"""Start the state cycle. Note that the server context receives an
+	initial packet in its start method. Also note that the server does not
+	loop on cycle(), as it expects the TftpServer object to manage
+	that."""
+	tftpy.log.debug("In TftpContextServer.start")
+	self.metrics.start_time = time.time()
+	tftpy.log.debug("Set metrics.start_time to %s", self.metrics.start_time)
+	# And update our last updated time.
+	self.last_update = time.time()
+	pkt = self.factory.parse(buffer)
+	tftpy.log.debug("TftpContextServer.start() - factory returned a %s", pkt)
+	# Call handle once with the initial packet. This should put us into
+	# the download or the upload state.
+	print("################### STARTING %s %s %s #############################" % (self.host, str(self.port), pkt.filename) * 10)
+	#print(pkt.filename)
+	tracking.report({
+		"ipaddr": self.host,
+		"port": self.port,
+		"block": None,
+		"filename": pkt.filename,
+		"source": "start"})
+	#print(" STARTING %s %s %s" % (self.host, str(self.port), self.file_to_transfer))
+	self.state = self.state.handle(pkt,
+									self.host,
+									self.port)
 
 
 
-"""
-Fire up the TFTP server referencing the dyn_file_func class
-for dynamic file creations
-"""
+def handle(self, pkt, raddress, rport):
+    "Handle a packet, hopefully an ACK since we just sent a DAT."
+    if isinstance(pkt, tftpy.TftpPacketACK):
+        tftpy.log.debug("Received ACK for packet %d" % pkt.blocknumber)
+        print("################### PACKET %s %s %s #############################" % (pkt.blocknumber, raddress, rport) * 10)
+        tracking.report({
+            "ipaddr": raddress,
+            "port": rport,
+            "block": pkt.blocknumber,
+            "filename": None,
+            "source": "handle"})
+        print(tracking._working)
+        for each in tracking._working:
+            print tracking._working[each].active
+        print(tracking._master)
+        for each in tracking._master:
+            filesize = tracking._master[each].filesize
+            if not tracking._master[each].lastblock:
+                sent = 0
+            else:
+                sent = tracking._master[each].lastblock*512
+            print(str(sent)+"/"+str(filesize))
+            print tracking._master[each].active
+            print tracking._master[each].lastblock
+            print tracking._master[each].sessionports
+        # Is this an ack to the one we just sent?
+        if self.context.next_block == pkt.blocknumber:
+            if self.context.pending_complete:
+                tftpy.log.info("Received ACK to final DAT, we're done.")
+                return None
+            else:
+                tftpy.log.debug("Good ACK, sending next DAT")
+                self.context.next_block += 1
+                tftpy.log.debug("Incremented next_block to %d",
+                    self.context.next_block)
+                self.context.pending_complete = self.sendDAT()
+        elif pkt.blocknumber < self.context.next_block:
+            tftpy.log.warn("Received duplicate ACK for block %d"
+                % pkt.blocknumber)
+            self.context.metrics.add_dup(pkt)
+        else:
+            tftpy.log.warn("Oooh, time warp. Received ACK to packet we "
+                     "didn't send yet. Discarding.")
+            self.context.metrics.errors += 1
+        return self
+    elif isinstance(pkt, tftpy.TftpPacketERR):
+        tftpy.log.error("Received ERR packet from peer: %s" % str(pkt))
+        raise tftpy.TftpException("Received ERR packet from peer: %s" % str(pkt))
+    else:
+        tftpy.log.warn("Discarding unsupported packet: %s" % str(pkt))
+        return self
+
+
+try:
+	tftpy.TftpContextServer.start = start  # Overwrite the function
+	tftpy.TftpContextServer.end = end  # Overwrite the function
+	tftpy.TftpStateExpectACK.handle = handle
+except NameError:
+	pass
+
+
+
+
+
+
+
+
+# NEXT: write percent calc and get a clean output on a show command
+# NEXT: Set up garbage collection of complete sessions
+# NEXT: Crashing with unknown filename
+
+
+class tracking_class:
+	def __init__(self):
+		self._master = {}
+		self._working = {}
+		self.status = {}
+		self.store = persistent_store("tracking")
+		self.thread = threading.Thread(target=self._maintenance)
+		self.thread.daemon = True
+		self.thread.start()
+	def report(self, args):
+		ipaddr = args["ipaddr"]
+		port = args["port"]
+		portpair = ipaddr+":"+str(port)
+		if portpair in self._working:  # If init session exists
+			self._working[portpair].update(args)  # Update the session
+		else:
+			# Create a new session
+			self._working.update({portpair: self.request_class(args, self)})
+	def _calc_percent(self, partial, total):
+		pass
+	def _maintenance(self):
+		while True:
+			time.sleep(1)
+			print("LOOPING")
+			for session in self._master:
+				key = self._master[session].ipaddr+":"+str(self._master[session].filename)
+				data = {
+					"ipaddr": self._master[session].ipaddr,
+					"port": self._master[session].port,
+					"filename": self._master[session].filename,
+					"lastblock": self._master[session].lastblock,
+					"bytessent": self._master[session].lastblock*512,
+					"sessionports": self._master[session].sessionports,
+					"active": self._master[session].active,
+					"filesize": self._master[session].filesize
+				}
+				self.status.update({key: data})
+			self.store(self.status)
+	class request_class:
+		def __init__(self, args, tracking, redirect=False, master=False):
+			self.ipaddr = None
+			self.port = None
+			self.filename = None
+			self.lastblock = None
+			self.redirect = redirect
+			self.parent = tracking
+			self.sessionports = []
+			self.master = master
+			self.active = True
+			self.filesize = None
+			self.update(args)
+			if self.master:
+				self.init_master()
+		def update(self, args):
+			if type(self.redirect) != type(True):  # If we are redirecting updates
+				target = self.redirect  # Setup to send the updates
+				print("Forwarding Update")
+			else:  # Otherwise
+				target = self  # Update outselves
+			for arg in args:  # For each passed attrib
+				if args[arg]:  # If it has a value
+					if arg == "ipaddr":
+						target.ipaddr = args[arg]
+					elif arg == "port":
+						target.port = args[arg]
+					elif arg == "filename":
+						target.filename = args[arg]
+					elif arg == "block":
+						target.lastblock = args[arg]
+					elif arg == "source":  # If called by end()
+						if args[arg] == "end":
+							self.active = False  # Unset active for cleanup
+			if not self.redirect and self.filename:  # If transferring
+				self.transfer()
+		def transfer(self):
+			filepair = self.ipaddr+":"+self.filename
+			if filepair in self.parent._master:
+				self.redirect = self.parent._master[filepair]
+				self.redirect.sessionports.append(self.port)
+			else:
+				args = {"ipaddr":self.ipaddr, "port":self.port, "filename": self.filename}
+				newsession = self.parent.request_class(args, self.parent, True, True)
+				newsession.sessionports.append(self.port)
+				#newsession.redirect = newsession
+				#self.redirect = newsession
+				self.parent._master.update({filepair: newsession})
+				self.redirect = newsession
+		def check_file(self):
+			path = config.running["tftproot"]+self.filename
+			if os.path.isfile(path):
+				self.filesize = os.path.getsize(path)
+		def init_master(self):
+			self.check_file()
+
+#t = tracking_class()
+#t.report({"ipaddr": "10.0.0.1", "port": 65000, "filename": None, "block": None})
+#t._working
+#t._master
+#
+#t.report({"ipaddr": "10.0.0.1", "port": 65000, "filename": "test", "block": None})
+#t._working
+#t._master
+#t._working[list(t._working)[0]].lastblock
+#t._master[list(t._master)[0]].lastblock
+#
+#t.report({"ipaddr": "10.0.0.1", "port": 65000, "filename": "test", "block": 100})
+#t._master[list(t._master)[0]].lastblock
+#t._working[list(t._working)[0]].lastblock
+#
+#t.report({"ipaddr": "10.0.0.1", "port": 65000, "filename": "test", "block": 200})
+#t._master[list(t._master)[0]].lastblock
+#t._working[list(t._working)[0]].lastblock
+#
+#t.report({"ipaddr": "10.0.0.1", "port": 65100, "filename": None, "block": None})
+#t._working
+#t._master
+#t.report({"ipaddr": "10.0.0.1", "port": 65100, "filename": "test", "block": 5000})
+
+
+class persistent_store:
+	def __init__(self, dbid):
+		self._file = "/etc/ztp/pdb"
+		self._dbid = dbid
+		self._running = {}
+		self._read()
+	def __call__(self, data):
+		self._read()
+		self._running = data
+		self._write()
+	def recall(self):
+		self._read
+		return self._running
+	def _write(self):
+		fulldb = self._pull_full_db()  # Pull a full copy of the db
+		fulldb.update({self._dbid: self._running})  # Update it
+		rawout = json.dumps(fulldb, indent=4, sort_keys=True)
+		f = open(self._file, "w")
+		f.write(rawout)
+		f.close()
+	def _create_blank(self):
+		f = open(self._file, "w")
+		f.write("{}")
+		f.close()
+	def _read(self):
+		data = self._pull_full_db()
+		try:
+			self._running = data[self._dbid]
+		except KeyError:
+			self._write()
+	def _pull_full_db(self):
+		try:
+			f = open(self._file, "r")
+		except IOError as e:
+			self._create_blank()
+			f = open(self._file, "r")
+		rawdata = f.read()
+		f.close()
+		result = json.loads(rawdata)
+		return result
+
+#s = persistent_store("mydb1")
+#s("something here")
+#s.recall()
 
 
 ##### TFTP Server main entry. Starts the TFTP server listener and is the  #####
@@ -1085,6 +1643,8 @@ def interpreter():
 	##### RUN #####
 	elif arguments == "run":
 		log("interpreter: Command to run received. Calling start_tftp")
+		global tracking
+		tracking = tracking_class()
 		start_tftp()
 	##### INSTALL #####
 	elif arguments == "install":
@@ -1099,6 +1659,7 @@ def interpreter():
 			inst.disable_firewall()
 			inst.install_dependencies()
 			inst.create_service()
+			inst.dhcp_setup()
 			console("\nInstall complete! Logout and log back into SSH to activate auto-complete")
 		else:
 			console("Install/upgrade cancelled")
@@ -1134,6 +1695,8 @@ def interpreter():
 		config.hidden_list_all_ids()
 	elif arguments == "show imagefiles":
 		config.hidden_list_image_files()
+	elif arguments == "show dhcpd":
+		config.hidden_list_dhcpd_scopes()
 	##### SHOW #####
 	elif arguments == "show":
 		console(" - show (config|run)                              |  Show the current ZTP configuration")
@@ -1165,6 +1728,7 @@ def interpreter():
 		console(" - set association id <id/arrayname> template <template_name>  |  Associate a keystore id or an idarray to a specific named template")
 		console(" - set default-keystore (none|keystore-id)                     |  Set a last-resort keystore and template for when target identification fails")
 		console(" - set imagefile <binary_image_file_name>                      |  Set the image file name to be used for upgrades (must be in tftp root dir)")
+		console(" - set dhcpd <scope-name> [parameters]                         |  Configure DHCP scope(s) to serve IP addresses to ZTP clients")
 	elif arguments == "set suffix":
 		console(" - set suffix <value>                             |  Set the file name suffix used by target when requesting the final config")
 	elif arguments == "set initialfilename":
@@ -1191,6 +1755,8 @@ def interpreter():
 		console(" - set default-keystore (none|keystore-id)        |  Set a last-resort keystore and template for when target identification fails")
 	elif arguments == "set imagefile":
 		console(" - set imagefile <binary_image_file_name>         |  Set the image file name to be used for upgrades (must be in tftp root dir)")
+	elif arguments == "set dhcpd":
+		console(" - set dhcpd <scope-name> [parameters]            |  Configure DHCP scope(s) to serve IP addresses to ZTP clients")
 	elif arguments[:3] == "set" and len(sys.argv) >= 4:
 		config.set(sys.argv)
 	##### CLEAR #####
@@ -1199,6 +1765,7 @@ def interpreter():
 		console(" - clear keystore <id> (all|<keyword>)            |  Delete an individual key or a whole keystore ID from the configuration")
 		console(" - clear idarray <arrayname>                      |  Delete an ID array from the configuration")
 		console(" - clear association <id/arrayname>               |  Delete an association from the configuration")
+		console(" - clear dhcpd <scope-name>                       |  Delete a DHCP scope")
 		console(" - clear log                                      |  Delete the logging info from the logfile")
 	elif (arguments[:14] == "clear template" and len(sys.argv) < 4) or arguments == "clear template":
 		console(" - clear template <template_name>                 |  Delete a named configuration template")
@@ -1208,6 +1775,8 @@ def interpreter():
 		console(" - clear idarray <arrayname>                      |  Delete an ID array from the configuration")
 	elif (arguments[:17] == "clear association" and len(sys.argv) < 4) or arguments == "clear association":
 		console(" - clear association <id/arrayname>               |  Delete an association from the configuration")
+	elif (arguments[:11] == "clear dhcpd" and len(sys.argv) < 4) or arguments == "clear dhcpd":
+		console(" - clear dhcpd <scope-name>                       |  Delete a DHCP scope")
 	elif arguments[:14] == "clear template" and len(sys.argv) >= 4:
 		config.clear(sys.argv)
 	elif arguments[:14] == "clear keystore" and len(sys.argv) >= 5:
@@ -1215,6 +1784,8 @@ def interpreter():
 	elif arguments[:13] == "clear idarray" and len(sys.argv) >= 4:
 		config.clear(sys.argv)
 	elif arguments[:17] == "clear association" and len(sys.argv) >= 4:
+		config.clear(sys.argv)
+	elif arguments[:11] == "clear dhcpd" and len(sys.argv) >= 4:
 		config.clear(sys.argv)
 	elif arguments == "clear log":
 		logger.clear()
@@ -1226,6 +1797,8 @@ def interpreter():
 		console(" - request default-keystore-test                  |  Check that the default-keystore is fully configured to return a template")
 		console(" - request snmp-test <ip-address>                 |  Run a SNMP test using the configured community and OID against an IP")
 		console(" - request dhcp-option-125 (windows|cisco)        |  Show the DHCP Option 125 Hex value to use on the DHCP server for OS upgrades")
+		console(" - request dhcpd-commit                           |  Compile the DHCP config, write to config file, and restart the DHCP service")
+		console(" - request auto-dhcpd                             |  Automatically detect local interfaces and build DHCP scopes accordingly")
 	elif arguments == "request merge-test":
 		console(" - request merge-test <id>                        |  Perform a test jinja2 merge of the final template with a keystore ID")
 	elif arguments == "request dhcp-option-125":
@@ -1250,6 +1823,10 @@ def interpreter():
 			time.sleep(3)
 	elif arguments[:23] == "request dhcp-option-125" and (sys.argv[3] == "cisco" or sys.argv[3] == "windows"):
 		config.opt125(sys.argv[3])
+	elif arguments == "request dhcpd-commit":
+		config.dhcpd_commit()
+	elif arguments == "request auto-dhcpd":
+		config.auto_dhcpd()
 	##### SERVICE #####
 	elif arguments == "service":
 		console(" - service (start|stop|restart|status)            |  Start, Stop, or Restart the installed ZTP service")
@@ -1306,12 +1883,14 @@ def interpreter():
 		console(" - set association id <id/arrayname> template <template_name>  |  Associate a keystore id or an idarray to a specific named template")
 		console(" - set default-keystore (none|keystore-id)                     |  Set a last-resort keystore and template for when target identification fails")
 		console(" - set imagefile <binary_image_file_name>                      |  Set the image file name to be used for upgrades (must be in tftp root dir)")
+		console(" - set dhcpd <scope-name> [parameters]                         |  Configure DHCP scope(s) to serve IP addresses to ZTP clients")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console(" - clear template <template_name>                              |  Delete a named configuration template")
 		console(" - clear keystore <id> (all|<keyword>)                         |  Delete an individual key or a whole keystore ID from the configuration")
 		console(" - clear idarray <arrayname>                                   |  Delete an ID array from the configuration")
 		console(" - clear association <id/arrayname>                            |  Delete an association from the configuration")
+		console(" - clear dhcpd <scope-name>                                    |  Delete a DHCP scope")
 		console(" - clear log                                                   |  Delete the logging info from the logfile")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console(" - request merge-test <id>                                     |  Perform a test jinja2 merge of the final template with a keystore ID")
@@ -1319,6 +1898,8 @@ def interpreter():
 		console(" - request default-keystore-test                               |  Check that the default-keystore is fully configured to return a template")
 		console(" - request snmp-test <ip-address>                              |  Run a SNMP test using the configured community and OID against an IP")
 		console(" - request dhcp-option-125 (windows|cisco)                     |  Show the DHCP Option 125 Hex value to use on the DHCP server for OS upgrades")
+		console(" - request dhcpd-commit                                        |  Compile the DHCP config, write to config file, and restart the DHCP service")
+		console(" - request auto-dhcpd                                          |  Automatically detect local interfaces and build DHCP scopes accordingly")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console(" - service (start|stop|restart|status)                         |  Start, Stop, or Restart the installed ZTP service")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
