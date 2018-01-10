@@ -8,7 +8,7 @@
 
 
 ##### Inform FreeZTP version here #####
-version = "v0.8.0"
+version = "v0.8.1"
 
 
 ##### Try to import non-native modules, fail gracefully #####
@@ -1318,6 +1318,7 @@ def end(self):
 	"""Finish up the context."""
 	tftpy.TftpContext.end(self)
 	self.metrics.end_time = time.time()
+	#### BEGIN CHANGES ####
 	#cfact.file_closed(self.file_to_transfer, self.host)  # Notify
 	print("################### ENDING %s %s %s #############################" % (self.host, str(self.port), self.file_to_transfer) * 10)
 	tracking.report({
@@ -1327,6 +1328,7 @@ def end(self):
 		"filename": self.file_to_transfer,
 		"source": "end"})
 	#print(" ENDING %s %s %s" % (self.host, str(self.port), self.file_to_transfer))
+	#### END CHANGES ####
 	tftpy.log.debug("Set metrics.end_time to %s", self.metrics.end_time)
 	self.metrics.compute()
 
@@ -1346,6 +1348,7 @@ def start(self, buffer):
 	tftpy.log.debug("TftpContextServer.start() - factory returned a %s", pkt)
 	# Call handle once with the initial packet. This should put us into
 	# the download or the upload state.
+	#### BEGIN CHANGES ####
 	print("################### STARTING %s %s %s #############################" % (self.host, str(self.port), pkt.filename) * 10)
 	#print(pkt.filename)
 	tracking.report({
@@ -1355,6 +1358,7 @@ def start(self, buffer):
 		"filename": pkt.filename,
 		"source": "start"})
 	#print(" STARTING %s %s %s" % (self.host, str(self.port), self.file_to_transfer))
+	#### END CHANGES ####
 	self.state = self.state.handle(pkt,
 									self.host,
 									self.port)
@@ -1365,6 +1369,7 @@ def handle(self, pkt, raddress, rport):
     "Handle a packet, hopefully an ACK since we just sent a DAT."
     if isinstance(pkt, tftpy.TftpPacketACK):
         tftpy.log.debug("Received ACK for packet %d" % pkt.blocknumber)
+        #### BEGIN CHANGES ####
         print("################### PACKET %s %s %s #############################" % (pkt.blocknumber, raddress, rport) * 10)
         tracking.report({
             "ipaddr": raddress,
@@ -1382,10 +1387,11 @@ def handle(self, pkt, raddress, rport):
                 sent = 0
             else:
                 sent = tracking._master[each].lastblock*512
-            print(str(sent)+"/"+str(filesize))
+            #print(str(filesize-sent)+" --> "+str(sent)+"/"+str(filesize))
             print tracking._master[each].active
             print tracking._master[each].lastblock
             print tracking._master[each].sessionports
+        #### END CHANGES ####
         # Is this an ack to the one we just sent?
         if self.context.next_block == pkt.blocknumber:
             if self.context.pending_complete:
@@ -1428,10 +1434,12 @@ except NameError:
 
 
 
-# NEXT: write percent calc and get a clean output on a show command
-# NEXT: Set up garbage collection of complete sessions
-# NEXT: Crashing with unknown filename
-
+# NEXT: get a clean output on a show command
+# NEXT: Set up garbage collection of complete master sessions
+# NEXT: Crashing with unknown filename????
+# NEXT: Write in supression
+# NEXT: Clean up output logging
+# NEXT: Recognize client tracking (dhcp, upgrade, initial file, custom file)
 
 class tracking_class:
 	def __init__(self):
@@ -1443,22 +1451,22 @@ class tracking_class:
 		self.thread.daemon = True
 		self.thread.start()
 	def report(self, args):
-		ipaddr = args["ipaddr"]
-		port = args["port"]
-		portpair = ipaddr+":"+str(port)
+		portpair = args["ipaddr"]+":"+str(args["port"])
 		if portpair in self._working:  # If init session exists
 			self._working[portpair].update(args)  # Update the session
 		else:
 			# Create a new session
 			self._working.update({portpair: self.request_class(args, self)})
-	def _calc_percent(self, partial, total):
-		pass
 	def _maintenance(self):
 		while True:
 			time.sleep(1)
 			print("LOOPING")
+			print(self._working)
+			### Update tracking status ###
+			##############################
 			for session in self._master:
 				key = self._master[session].ipaddr+":"+str(self._master[session].filename)
+				self._master[session].update_percent()
 				data = {
 					"ipaddr": self._master[session].ipaddr,
 					"port": self._master[session].port,
@@ -1467,10 +1475,13 @@ class tracking_class:
 					"bytessent": self._master[session].lastblock*512,
 					"sessionports": self._master[session].sessionports,
 					"active": self._master[session].active,
-					"filesize": self._master[session].filesize
+					"filesize": self._master[session].filesize,
+					"percent": self._master[session].percent
 				}
 				self.status.update({key: data})
 			self.store(self.status)
+			##############################
+			##############################
 	class request_class:
 		def __init__(self, args, tracking, redirect=False, master=False):
 			self.ipaddr = None
@@ -1483,10 +1494,11 @@ class tracking_class:
 			self.master = master
 			self.active = True
 			self.filesize = None
+			self.percent = None
 			self.update(args)
 			if self.master:
 				self.init_master()
-		def update(self, args):
+		def update(self, args): # Update this object from a report
 			if type(self.redirect) != type(True):  # If we are redirecting updates
 				target = self.redirect  # Setup to send the updates
 				print("Forwarding Update")
@@ -1502,9 +1514,12 @@ class tracking_class:
 						target.filename = args[arg]
 					elif arg == "block":
 						target.lastblock = args[arg]
-					elif arg == "source":  # If called by end()
-						if args[arg] == "end":
+					elif arg == "source":
+						if args[arg] == "end":  # If called by end()
 							self.active = False  # Unset active for cleanup
+							if target.lastblock*512 >= target.filesize:
+								target.active = False  # Unset active for cleanup
+								target.clean_working()
 			if not self.redirect and self.filename:  # If transferring
 				self.transfer()
 		def transfer(self):
@@ -1526,6 +1541,20 @@ class tracking_class:
 				self.filesize = os.path.getsize(path)
 		def init_master(self):
 			self.check_file()
+		def clean_working(self):
+			print("Cleaning!")
+			for session in self.sessionports:
+				key = self.ipaddr+":"+str(session)
+				print(key)
+				if key in self.parent._working:
+					del self.parent._working[key]
+		def update_percent(self):
+			if self.filesize:
+				percent = round(100.0*self.lastblock*512/self.filesize, 2)
+				if percent > 100:
+					self.percent = 100.00
+				else:
+					self.percent = percent
 
 #t = tracking_class()
 #t.report({"ipaddr": "10.0.0.1", "port": 65000, "filename": None, "block": None})
@@ -1706,7 +1735,11 @@ def interpreter():
 	elif arguments == "show config" or arguments == "show run":
 		config.show_config()
 	elif arguments == "show status":
+		console("\n")
 		os.system('systemctl status ztp')
+		console("\n\n")
+		os.system('systemctl status dhcpd')
+		console("\n")
 	elif arguments == "show version":
 		console("FreeZTP %s" % version)
 	elif arguments[:8] == "show log":
