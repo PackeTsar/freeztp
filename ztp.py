@@ -10,6 +10,10 @@
 ##### Inform FreeZTP version here #####
 version = "v0.8.1"
 
+# NEXT: Set up garbage collection of complete master sessions
+# NEXT: Write in supression
+# NEXT: Clean up output logging
+# NEXT: Recognize client tracking (dhcp, upgrade, initial file, custom file)
 
 ##### Try to import non-native modules, fail gracefully #####
 try:
@@ -1436,28 +1440,15 @@ except NameError:
 	pass
 
 
-
-
-
-
-
-
-# NEXT: get a clean output on a show command
-# NEXT: Set up garbage collection of complete master sessions
-# NEXT: Crashing with unknown filename????
-# NEXT: Write in supression
-# NEXT: Clean up output logging
-# NEXT: Recognize client tracking (dhcp, upgrade, initial file, custom file)
-
 class tracking_class:
 	def __init__(self, readonly=False):
 		self._master = {}
 		self._working = {}
 		self.store = persistent_store("tracking", readonly=readonly)
 		self.status = self.store.recall()
-		self.thread = threading.Thread(target=self._maintenance)
-		self.thread.daemon = True
-		self.thread.start()
+		self.watch = threading.Thread(target=self._watchdog)
+		self.watch.daemon = True
+		self.watch.start()
 	def report(self, args):
 		portpair = args["ipaddr"]+":"+str(args["port"])
 		if portpair in self._working:  # If init session exists
@@ -1465,9 +1456,26 @@ class tracking_class:
 		else:
 			# Create a new session
 			self._working.update({portpair: self.request_class(args, self)})
+	def _watchdog(self):
+		self.mthread = threading.Thread(target=self._maintenance)
+		self.mthread.daemon = True
+		self.mthread.start()
+		while True:
+			time.sleep(1)
+			if not self.mthread.is_alive():
+				self.mthread = threading.Thread(target=self._maintenance)
+				self.mthread.daemon = True
+				self.mthread.start()
 	def _maintenance(self):
 		while True:
-			time.sleep(0.1)
+			print(self._master)
+			for ses in self._master:
+				print(self._master[ses].active)
+			print(self._working)
+			for ses in self._working:
+				print(self._working[ses].active)
+			print("\n")
+			time.sleep(1.1)
 			#print("LOOPING")
 			#print(self._working)
 			### Update tracking status ###
@@ -1529,9 +1537,10 @@ class tracking_class:
 					elif arg == "source":
 						if args[arg] == "end":  # If called by end()
 							self.active = False  # Unset active for cleanup
-							if target.lastblock*512 >= target.filesize:
-								target.active = False  # Unset active for cleanup
-								target.clean_working()
+							if target.lastblock:
+								if target.lastblock*512 >= target.filesize:
+									target.active = False  # Unset active for cleanup
+									target.clean_working()
 			if not self.redirect and self.filename:  # If transferring
 				self.transfer()
 		def transfer(self):
@@ -1557,7 +1566,6 @@ class tracking_class:
 			print("Cleaning!")
 			for session in self.sessionports:
 				key = self.ipaddr+":"+str(session)
-				print(key)
 				if key in self.parent._working:
 					del self.parent._working[key]
 		def update_percent(self):
@@ -1733,7 +1741,7 @@ class persistent_store:
 #####   passed in as the dynamic file function.                           #####
 def start_tftp():
 	log("start_tftp: Starting Up TFTPy")
-	tftpy.setLogLevel(logging.DEBUG)
+	#tftpy.setLogLevel(logging.DEBUG)
 	try:
 		server = tftpy.TftpServer(config.running["tftproot"], dyn_file_func=interceptor)
 	except tftpy.TftpShared.TftpException:
