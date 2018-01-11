@@ -29,6 +29,7 @@ import re
 import sys
 import json
 import time
+import curses
 import logging
 import commands
 import threading
@@ -1073,238 +1074,238 @@ _ztp_complete()
   prev=${COMP_WORDS[COMP_CWORD-1]}
   prev2=${COMP_WORDS[COMP_CWORD-2]}
   if [ $COMP_CWORD -eq 1 ]; then
-    COMPREPLY=( $(compgen -W "run install upgrade show set clear request service version" -- $cur) )
+	COMPREPLY=( $(compgen -W "run install upgrade show set clear request service version" -- $cur) )
   elif [ $COMP_CWORD -eq 2 ]; then
-    case "$prev" in
-      show)
-        COMPREPLY=( $(compgen -W "config run status version log downloads" -- $cur) )
-        ;;
-      "set")
-        COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile template keystore idarray association default-keystore imagefile dhcpd" -- $cur) )
-        ;;
-      "clear")
-        COMPREPLY=( $(compgen -W "keystore idarray template association dhcpd log" -- $cur) )
-        ;;
-      "request")
-        COMPREPLY=( $(compgen -W "merge-test initial-merge default-keystore-test snmp-test dhcp-option-125 dhcpd-commit auto-dhcpd" -- $cur) )
-        ;;
-      "service")
-        COMPREPLY=( $(compgen -W "start stop restart status" -- $cur) )
-        ;;
-      *)
-        ;;
-    esac
+	case "$prev" in
+	  show)
+		COMPREPLY=( $(compgen -W "config run status version log downloads" -- $cur) )
+		;;
+	  "set")
+		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile template keystore idarray association default-keystore imagefile dhcpd" -- $cur) )
+		;;
+	  "clear")
+		COMPREPLY=( $(compgen -W "keystore idarray template association dhcpd log downloads" -- $cur) )
+		;;
+	  "request")
+		COMPREPLY=( $(compgen -W "merge-test initial-merge default-keystore-test snmp-test dhcp-option-125 dhcpd-commit auto-dhcpd" -- $cur) )
+		;;
+	  "service")
+		COMPREPLY=( $(compgen -W "start stop restart status" -- $cur) )
+		;;
+	  *)
+		;;
+	esac
   elif [ $COMP_CWORD -eq 3 ]; then
-    case "$prev" in
-      suffix)
-        if [ "$prev2" == "set" ]; then
-          COMPREPLY=( $(compgen -W "<value> -" -- $cur) )
-        fi
-        ;;
-      log)
-        if [ "$prev2" == "show" ]; then
-          COMPREPLY=( $(compgen -W "tail -" -- $cur) )
-        fi
-        ;;
-      downloads)
-        if [ "$prev2" == "show" ]; then
-          COMPREPLY=( $(compgen -W "live -" -- $cur) )
-        fi
-        ;;
-      initialfilename)
-        if [ "$prev2" == "set" ]; then
-          COMPREPLY=( $(compgen -W "<value> -" -- $cur) )
-        fi
-        ;;
-      community)
-        if [ "$prev2" == "set" ]; then
-          COMPREPLY=( $(compgen -W "<value> -" -- $cur) )
-        fi
-        ;;
-      snmpoid)
-        if [ "$prev2" == "set" ]; then
-          COMPREPLY=( $(compgen -W "<value> -" -- $cur) )
-        fi
-        ;;
-      initial-template)
-        if [ "$prev2" == "set" ]; then
-          COMPREPLY=( $(compgen -W "<deliniation_character> -" -- $cur) )
-        fi
-        ;;
-      tftproot)
-        if [ "$prev2" == "set" ]; then
-          COMPREPLY=( $(compgen -W "<tftp_root_directory> -" -- $cur) )
-        fi
-        ;;
-      imagediscoveryfile)
-        if [ "$prev2" == "set" ]; then
-          COMPREPLY=( $(compgen -W "<filename> -" -- $cur) )
-        fi
-        ;;
-      template)
-        local templates=$(for k in `ztp show templates`; do echo $k ; done)
-        if [ "$prev2" == "set" ]; then
-          COMPREPLY=( $(compgen -W "${templates} <template_name> -" -- $cur) )
-        fi
-        if [ "$prev2" == "clear" ]; then
-          COMPREPLY=( $(compgen -W "${templates}" -- $cur) )
-        fi
-        ;;
-      keystore)
-        local ids=$(for id in `ztp show ids`; do echo $id ; done)
-        if [ "$prev2" == "set" ]; then
-          COMPREPLY=( $(compgen -W "${ids} <new_id_or_arrayname> -" -- $cur) )
-        fi
-        if [ "$prev2" == "clear" ]; then
-          COMPREPLY=( $(compgen -W "${ids}" -- $cur) )
-        fi
-        ;;
-      idarray)
-        local ids=$(for id in `ztp show arrays`; do echo $id ; done)
-        if [ "$prev2" == "set" ]; then
-          COMPREPLY=( $(compgen -W "${ids} <new_array_name> -" -- $cur) )
-        fi
-        if [ "$prev2" == "clear" ]; then
-          COMPREPLY=( $(compgen -W "${ids}" -- $cur) )
-        fi
-        ;;
-      association)
-        if [ "$prev2" == "set" ]; then
-          COMPREPLY=( $(compgen -W "id" -- $cur) )
-        fi
-        if [ "$prev2" == "clear" ]; then
-          local ids=$(for id in `ztp show associations`; do echo $id ; done)
-          COMPREPLY=( $(compgen -W "${ids}" -- $cur) )
-        fi
-        ;;
-      default-keystore)
-        if [ "$prev2" == "set" ]; then
-          local ids=$(for id in `ztp show ids`; do echo $id ; done)
-          COMPREPLY=( $(compgen -W "${ids} <keystore-id> None -" -- $cur) )
-        fi
-        ;;
-      imagefile)
-        if [ "$prev2" == "set" ]; then
-          local ids=$(for id in `ztp show imagefiles`; do echo $id ; done)
-          COMPREPLY=( $(compgen -W "${ids} <binary_image_file_name> -" -- $cur) )
-        fi
-        ;;
-      dhcpd)
-        if [ "$prev2" == "set" ]; then
-          local ids=$(for id in `ztp show dhcpd`; do echo $id ; done)
-          COMPREPLY=( $(compgen -W "${ids} <new_dhcp_scope_name> -" -- $cur) )
-        fi
-        if [ "$prev2" == "clear" ]; then
-          local ids=$(for id in `ztp show dhcpd`; do echo $id ; done)
-          COMPREPLY=( $(compgen -W "${ids}" -- $cur) )
-        fi
-        ;;
-      merge-test)
-        local ids=$(for id in `ztp show ids`; do echo $id ; done)
-        if [ "$prev2" == "request" ]; then
-          COMPREPLY=( $(compgen -W "${ids}" -- $cur) )
-        fi
-        ;;
-      snmp-test)
-        if [ "$prev2" == "request" ]; then
-          COMPREPLY=( $(compgen -W "<ip-address> -" -- $cur) )
-        fi
-        ;;
-      dhcp-option-125)
-        if [ "$prev2" == "request" ]; then
-          COMPREPLY=( $(compgen -W "cisco windows" -- $cur) )
-        fi
-        ;;
-      *)
-        ;;
-    esac
+	case "$prev" in
+	  suffix)
+		if [ "$prev2" == "set" ]; then
+		  COMPREPLY=( $(compgen -W "<value> -" -- $cur) )
+		fi
+		;;
+	  log)
+		if [ "$prev2" == "show" ]; then
+		  COMPREPLY=( $(compgen -W "tail -" -- $cur) )
+		fi
+		;;
+	  downloads)
+		if [ "$prev2" == "show" ]; then
+		  COMPREPLY=( $(compgen -W "live -" -- $cur) )
+		fi
+		;;
+	  initialfilename)
+		if [ "$prev2" == "set" ]; then
+		  COMPREPLY=( $(compgen -W "<value> -" -- $cur) )
+		fi
+		;;
+	  community)
+		if [ "$prev2" == "set" ]; then
+		  COMPREPLY=( $(compgen -W "<value> -" -- $cur) )
+		fi
+		;;
+	  snmpoid)
+		if [ "$prev2" == "set" ]; then
+		  COMPREPLY=( $(compgen -W "<value> -" -- $cur) )
+		fi
+		;;
+	  initial-template)
+		if [ "$prev2" == "set" ]; then
+		  COMPREPLY=( $(compgen -W "<deliniation_character> -" -- $cur) )
+		fi
+		;;
+	  tftproot)
+		if [ "$prev2" == "set" ]; then
+		  COMPREPLY=( $(compgen -W "<tftp_root_directory> -" -- $cur) )
+		fi
+		;;
+	  imagediscoveryfile)
+		if [ "$prev2" == "set" ]; then
+		  COMPREPLY=( $(compgen -W "<filename> -" -- $cur) )
+		fi
+		;;
+	  template)
+		local templates=$(for k in `ztp show templates`; do echo $k ; done)
+		if [ "$prev2" == "set" ]; then
+		  COMPREPLY=( $(compgen -W "${templates} <template_name> -" -- $cur) )
+		fi
+		if [ "$prev2" == "clear" ]; then
+		  COMPREPLY=( $(compgen -W "${templates}" -- $cur) )
+		fi
+		;;
+	  keystore)
+		local ids=$(for id in `ztp show ids`; do echo $id ; done)
+		if [ "$prev2" == "set" ]; then
+		  COMPREPLY=( $(compgen -W "${ids} <new_id_or_arrayname> -" -- $cur) )
+		fi
+		if [ "$prev2" == "clear" ]; then
+		  COMPREPLY=( $(compgen -W "${ids}" -- $cur) )
+		fi
+		;;
+	  idarray)
+		local ids=$(for id in `ztp show arrays`; do echo $id ; done)
+		if [ "$prev2" == "set" ]; then
+		  COMPREPLY=( $(compgen -W "${ids} <new_array_name> -" -- $cur) )
+		fi
+		if [ "$prev2" == "clear" ]; then
+		  COMPREPLY=( $(compgen -W "${ids}" -- $cur) )
+		fi
+		;;
+	  association)
+		if [ "$prev2" == "set" ]; then
+		  COMPREPLY=( $(compgen -W "id" -- $cur) )
+		fi
+		if [ "$prev2" == "clear" ]; then
+		  local ids=$(for id in `ztp show associations`; do echo $id ; done)
+		  COMPREPLY=( $(compgen -W "${ids}" -- $cur) )
+		fi
+		;;
+	  default-keystore)
+		if [ "$prev2" == "set" ]; then
+		  local ids=$(for id in `ztp show ids`; do echo $id ; done)
+		  COMPREPLY=( $(compgen -W "${ids} <keystore-id> None -" -- $cur) )
+		fi
+		;;
+	  imagefile)
+		if [ "$prev2" == "set" ]; then
+		  local ids=$(for id in `ztp show imagefiles`; do echo $id ; done)
+		  COMPREPLY=( $(compgen -W "${ids} <binary_image_file_name> -" -- $cur) )
+		fi
+		;;
+	  dhcpd)
+		if [ "$prev2" == "set" ]; then
+		  local ids=$(for id in `ztp show dhcpd`; do echo $id ; done)
+		  COMPREPLY=( $(compgen -W "${ids} <new_dhcp_scope_name> -" -- $cur) )
+		fi
+		if [ "$prev2" == "clear" ]; then
+		  local ids=$(for id in `ztp show dhcpd`; do echo $id ; done)
+		  COMPREPLY=( $(compgen -W "${ids}" -- $cur) )
+		fi
+		;;
+	  merge-test)
+		local ids=$(for id in `ztp show ids`; do echo $id ; done)
+		if [ "$prev2" == "request" ]; then
+		  COMPREPLY=( $(compgen -W "${ids}" -- $cur) )
+		fi
+		;;
+	  snmp-test)
+		if [ "$prev2" == "request" ]; then
+		  COMPREPLY=( $(compgen -W "<ip-address> -" -- $cur) )
+		fi
+		;;
+	  dhcp-option-125)
+		if [ "$prev2" == "request" ]; then
+		  COMPREPLY=( $(compgen -W "cisco windows" -- $cur) )
+		fi
+		;;
+	  *)
+		;;
+	esac
   elif [ $COMP_CWORD -eq 4 ]; then
-    prev3=${COMP_WORDS[COMP_CWORD-3]}
-    if [ "$prev2" == "keystore" ]; then
-      local idkeys=$(for k in `ztp show keys $prev`; do echo $k ; done)
-      if [ "$prev3" == "set" ]; then
-        COMPREPLY=( $(compgen -W "${idkeys} <new_key> -" -- $cur) )
-      fi
-      if [ "$prev3" == "clear" ]; then
-        COMPREPLY=( $(compgen -W "${idkeys} all" -- $cur) )
-      fi
-    fi
-    if [ "$prev2" == "idarray" ]; then
-      if [ "$prev3" == "set" ]; then
-        COMPREPLY=( $(compgen -W "<num_of_lines> -" -- $cur) )
-      fi
-    fi
-    if [ "$prev2" == "log" ]; then
-      if [ "$prev3" == "show" ]; then
-        COMPREPLY=( $(compgen -W "<id's_seperated_by_spaces> -" -- $cur) )
-      fi
-    fi
-    if [ "$prev2" == "template" ]; then
-      if [ "$prev3" == "set" ]; then
-        COMPREPLY=( $(compgen -W "<end_char> -" -- $cur) )
-      fi
-    fi
-    if [ "$prev2" == "association" ]; then
-      if [ "$prev3" == "set" ]; then
-        local allids=$(for k in `ztp show all_ids`; do echo $k ; done)
-        COMPREPLY=( $(compgen -W "<id/arrayname> ${allids} -" -- $cur) )
-      fi
-    fi
-    if [ "$prev2" == "dhcpd" ]; then
-      if [ "$prev3" == "set" ]; then
-        COMPREPLY=( $(compgen -W "subnet first-address last-address gateway ztp-tftp-address imagediscoveryfile-option dns-servers domain-name" -- $cur) )
-      fi
-    fi
+	prev3=${COMP_WORDS[COMP_CWORD-3]}
+	if [ "$prev2" == "keystore" ]; then
+	  local idkeys=$(for k in `ztp show keys $prev`; do echo $k ; done)
+	  if [ "$prev3" == "set" ]; then
+		COMPREPLY=( $(compgen -W "${idkeys} <new_key> -" -- $cur) )
+	  fi
+	  if [ "$prev3" == "clear" ]; then
+		COMPREPLY=( $(compgen -W "${idkeys} all" -- $cur) )
+	  fi
+	fi
+	if [ "$prev2" == "idarray" ]; then
+	  if [ "$prev3" == "set" ]; then
+		COMPREPLY=( $(compgen -W "<num_of_lines> -" -- $cur) )
+	  fi
+	fi
+	if [ "$prev2" == "log" ]; then
+	  if [ "$prev3" == "show" ]; then
+		COMPREPLY=( $(compgen -W "<id's_seperated_by_spaces> -" -- $cur) )
+	  fi
+	fi
+	if [ "$prev2" == "template" ]; then
+	  if [ "$prev3" == "set" ]; then
+		COMPREPLY=( $(compgen -W "<end_char> -" -- $cur) )
+	  fi
+	fi
+	if [ "$prev2" == "association" ]; then
+	  if [ "$prev3" == "set" ]; then
+		local allids=$(for k in `ztp show all_ids`; do echo $k ; done)
+		COMPREPLY=( $(compgen -W "<id/arrayname> ${allids} -" -- $cur) )
+	  fi
+	fi
+	if [ "$prev2" == "dhcpd" ]; then
+	  if [ "$prev3" == "set" ]; then
+		COMPREPLY=( $(compgen -W "subnet first-address last-address gateway ztp-tftp-address imagediscoveryfile-option dns-servers domain-name" -- $cur) )
+	  fi
+	fi
   elif [ $COMP_CWORD -eq 5 ]; then
-    prev3=${COMP_WORDS[COMP_CWORD-3]}
-    prev4=${COMP_WORDS[COMP_CWORD-4]}
-    if [ "$prev4" == "set" ]; then
-      if [ "$prev3" == "keystore" ]; then
-        COMPREPLY=( $(compgen -W "<value> -" -- $cur) )
-      fi
-    fi
-    if [ "$prev4" == "set" ]; then
-      if [ "$prev3" == "association" ]; then
-        COMPREPLY=( $(compgen -W "template" -- $cur) )
-      fi
-    fi
-    if [ "$prev4" == "set" ]; then
-      if [ "$prev3" == "dhcpd" ]; then
-        if [ "$prev" == "subnet" ]; then
-          COMPREPLY=( $(compgen -W "<ipv4_subnet_value> -" -- $cur) )
-        fi
-        if [ "$prev" == "first-address" ]; then
-          COMPREPLY=( $(compgen -W "<first_address_to_lease> -" -- $cur) )
-        fi
-        if [ "$prev" == "last-address" ]; then
-          COMPREPLY=( $(compgen -W "<last_address_to_lease> -" -- $cur) )
-        fi
-        if [ "$prev" == "gateway" ]; then
-          COMPREPLY=( $(compgen -W "<gateway_ipv4_address> -" -- $cur) )
-        fi
-        if [ "$prev" == "ztp-tftp-address" ]; then
-          COMPREPLY=( $(compgen -W "<ztp_server_ipv4_address> -" -- $cur) )
-        fi
-        if [ "$prev" == "imagediscoveryfile-option" ]; then
-          COMPREPLY=( $(compgen -W "enable disable" -- $cur) )
-        fi
-        if [ "$prev" == "dns-servers" ]; then
-          COMPREPLY=( $(compgen -W "<first_dns_ipv4_address> 8.8.8.8" -- $cur) )
-        fi
-        if [ "$prev" == "domain-name" ]; then
-          COMPREPLY=( $(compgen -W "<dns_search_domain> -" -- $cur) )
-        fi
-      fi
-    fi
+	prev3=${COMP_WORDS[COMP_CWORD-3]}
+	prev4=${COMP_WORDS[COMP_CWORD-4]}
+	if [ "$prev4" == "set" ]; then
+	  if [ "$prev3" == "keystore" ]; then
+		COMPREPLY=( $(compgen -W "<value> -" -- $cur) )
+	  fi
+	fi
+	if [ "$prev4" == "set" ]; then
+	  if [ "$prev3" == "association" ]; then
+		COMPREPLY=( $(compgen -W "template" -- $cur) )
+	  fi
+	fi
+	if [ "$prev4" == "set" ]; then
+	  if [ "$prev3" == "dhcpd" ]; then
+		if [ "$prev" == "subnet" ]; then
+		  COMPREPLY=( $(compgen -W "<ipv4_subnet_value> -" -- $cur) )
+		fi
+		if [ "$prev" == "first-address" ]; then
+		  COMPREPLY=( $(compgen -W "<first_address_to_lease> -" -- $cur) )
+		fi
+		if [ "$prev" == "last-address" ]; then
+		  COMPREPLY=( $(compgen -W "<last_address_to_lease> -" -- $cur) )
+		fi
+		if [ "$prev" == "gateway" ]; then
+		  COMPREPLY=( $(compgen -W "<gateway_ipv4_address> -" -- $cur) )
+		fi
+		if [ "$prev" == "ztp-tftp-address" ]; then
+		  COMPREPLY=( $(compgen -W "<ztp_server_ipv4_address> -" -- $cur) )
+		fi
+		if [ "$prev" == "imagediscoveryfile-option" ]; then
+		  COMPREPLY=( $(compgen -W "enable disable" -- $cur) )
+		fi
+		if [ "$prev" == "dns-servers" ]; then
+		  COMPREPLY=( $(compgen -W "<first_dns_ipv4_address> 8.8.8.8" -- $cur) )
+		fi
+		if [ "$prev" == "domain-name" ]; then
+		  COMPREPLY=( $(compgen -W "<dns_search_domain> -" -- $cur) )
+		fi
+	  fi
+	fi
   elif [ $COMP_CWORD -eq 6 ]; then
-    prev4=${COMP_WORDS[COMP_CWORD-4]}
-    prev5=${COMP_WORDS[COMP_CWORD-5]}
-    if [ "$prev5" == "set" ]; then
-      if [ "$prev4" == "association" ]; then
-        local templates=$(for k in `ztp show templates`; do echo $k ; done)
-        COMPREPLY=( $(compgen -W "<template_name> ${templates} -" -- $cur) )
-      fi
-    fi
+	prev4=${COMP_WORDS[COMP_CWORD-4]}
+	prev5=${COMP_WORDS[COMP_CWORD-5]}
+	if [ "$prev5" == "set" ]; then
+	  if [ "$prev4" == "association" ]; then
+		local templates=$(for k in `ztp show templates`; do echo $k ; done)
+		COMPREPLY=( $(compgen -W "<template_name> ${templates} -" -- $cur) )
+	  fi
+	fi
   fi
   return 0
 } &&
@@ -1327,7 +1328,7 @@ def end(self):
 	self.metrics.end_time = time.time()
 	#### BEGIN CHANGES ####
 	#cfact.file_closed(self.file_to_transfer, self.host)  # Notify
-	print("################### ENDING %s %s %s #############################" % (self.host, str(self.port), self.file_to_transfer) * 10)
+	#print("################### ENDING %s %s %s #############################" % (self.host, str(self.port), self.file_to_transfer) * 10)
 	tracking.report({
 		"ipaddr": self.host,
 		"port": self.port,
@@ -1356,7 +1357,7 @@ def start(self, buffer):
 	# Call handle once with the initial packet. This should put us into
 	# the download or the upload state.
 	#### BEGIN CHANGES ####
-	print("################### STARTING %s %s %s #############################" % (self.host, str(self.port), pkt.filename) * 10)
+	#print("################### STARTING %s %s %s #############################" % (self.host, str(self.port), pkt.filename) * 10)
 	#print(pkt.filename)
 	tracking.report({
 		"ipaddr": self.host,
@@ -1373,58 +1374,58 @@ def start(self, buffer):
 
 
 def handle(self, pkt, raddress, rport):
-    "Handle a packet, hopefully an ACK since we just sent a DAT."
-    if isinstance(pkt, tftpy.TftpPacketACK):
-        tftpy.log.debug("Received ACK for packet %d" % pkt.blocknumber)
-        #### BEGIN CHANGES ####
-        print("################### PACKET %s %s %s #############################" % (pkt.blocknumber, raddress, rport) * 10)
-        tracking.report({
-            "ipaddr": raddress,
-            "port": rport,
-            "block": pkt.blocknumber,
-            "filename": None,
-            "source": "handle"})
-        print(tracking._working)
-        for each in tracking._working:
-            print tracking._working[each].active
-        print(tracking._master)
-        for each in tracking._master:
-            filesize = tracking._master[each].filesize
-            if not tracking._master[each].lastblock:
-                sent = 0
-            else:
-                sent = tracking._master[each].lastblock*512
-            #print(str(filesize-sent)+" --> "+str(sent)+"/"+str(filesize))
-            print tracking._master[each].active
-            print tracking._master[each].lastblock
-            print tracking._master[each].sessionports
-        #### END CHANGES ####
-        # Is this an ack to the one we just sent?
-        if self.context.next_block == pkt.blocknumber:
-            if self.context.pending_complete:
-                tftpy.log.info("Received ACK to final DAT, we're done.")
-                return None
-            else:
-                tftpy.log.debug("Good ACK, sending next DAT")
-                self.context.next_block += 1
-                tftpy.log.debug("Incremented next_block to %d",
-                    self.context.next_block)
-                self.context.pending_complete = self.sendDAT()
-        elif pkt.blocknumber < self.context.next_block:
-            tftpy.log.warn("Received duplicate ACK for block %d"
-                % pkt.blocknumber)
-            self.context.metrics.add_dup(pkt)
-        else:
-            tftpy.log.warn("Oooh, time warp. Received ACK to packet we "
-                     "didn't send yet. Discarding.")
-            self.context.metrics.errors += 1
-        return self
-    elif isinstance(pkt, tftpy.TftpPacketERR):
-        tftpy.log.error("Received ERR packet from peer: %s" % str(pkt))
-        raise tftpy.TftpException("Received ERR packet from peer: %s" % str(pkt))
-    else:
-        tftpy.log.warn("Discarding unsupported packet: %s" % str(pkt))
-        return self
+	"Handle a packet, hopefully an ACK since we just sent a DAT."
+	if isinstance(pkt, tftpy.TftpPacketACK):
+		tftpy.log.debug("Received ACK for packet %d" % pkt.blocknumber)
+		#### BEGIN CHANGES ####
+		#print("################### PACKET %s %s %s #############################" % (pkt.blocknumber, raddress, rport) * 10)
+		tracking.report({
+			"ipaddr": raddress,
+			"port": rport,
+			"block": pkt.blocknumber,
+			"filename": None,
+			"source": "handle"})
+		#print(tracking._working)
+		#for each in tracking._working:
+		#	print tracking._working[each].active
+		#print(tracking._master)
+		#for each in tracking._master:
+		#	filesize = tracking._master[each].filesize
+		#	if not tracking._master[each].lastblock:
+		#		sent = 0
+		#	else:
+		#		sent = tracking._master[each].lastblock*512
+		#	#print(str(filesize-sent)+" --> "+str(sent)+"/"+str(filesize))
+		#	print tracking._master[each].active
+		#	print tracking._master[each].lastblock
+		#	print tracking._master[each].sessionports
+		#### END CHANGES ####
+		# Is this an ack to the one we just sent?
+		if self.context.next_block == pkt.blocknumber:
+			if self.context.pending_complete:
+				tftpy.log.info("Received ACK to final DAT, we're done.")
+				return None
+			else:
+				tftpy.log.debug("Good ACK, sending next DAT")
+				self.context.next_block += 1
+				tftpy.log.debug("Incremented next_block to %d",
+					self.context.next_block)
+				self.context.pending_complete = self.sendDAT()
+		elif pkt.blocknumber < self.context.next_block:
+			tftpy.log.warn("Received duplicate ACK for block %d"
+				% pkt.blocknumber)
+			self.context.metrics.add_dup(pkt)
+		else:
+			tftpy.log.warn("Oooh, time warp. Received ACK to packet we "
+					 "didn't send yet. Discarding.")
+			self.context.metrics.errors += 1
+		return self
+	elif isinstance(pkt, tftpy.TftpPacketERR):
+		tftpy.log.error("Received ERR packet from peer: %s" % str(pkt))
+		raise tftpy.TftpException("Received ERR packet from peer: %s" % str(pkt))
+	else:
+		tftpy.log.warn("Discarding unsupported packet: %s" % str(pkt))
+		return self
 
 
 try:
@@ -1449,11 +1450,11 @@ except NameError:
 # NEXT: Recognize client tracking (dhcp, upgrade, initial file, custom file)
 
 class tracking_class:
-	def __init__(self):
+	def __init__(self, readonly=False):
 		self._master = {}
 		self._working = {}
-		self.status = {}
-		self.store = persistent_store("tracking")
+		self.store = persistent_store("tracking", readonly=readonly)
+		self.status = self.store.recall()
 		self.thread = threading.Thread(target=self._maintenance)
 		self.thread.daemon = True
 		self.thread.start()
@@ -1466,20 +1467,24 @@ class tracking_class:
 			self._working.update({portpair: self.request_class(args, self)})
 	def _maintenance(self):
 		while True:
-			time.sleep(1)
-			print("LOOPING")
-			print(self._working)
+			time.sleep(0.1)
+			#print("LOOPING")
+			#print(self._working)
 			### Update tracking status ###
 			##############################
 			for session in self._master:
 				key = self._master[session].ipaddr+":"+str(self._master[session].filename)
 				self._master[session].update_percent()
+				try:
+					bytessent = self._master[session].lastblock*512
+				except TypeError:
+					bytessent = 0
 				data = {
 					"ipaddr": self._master[session].ipaddr,
 					"port": self._master[session].port,
 					"filename": self._master[session].filename,
 					"lastblock": self._master[session].lastblock,
-					"bytessent": self._master[session].lastblock*512,
+					"bytessent": bytessent,
 					"sessionports": self._master[session].sessionports,
 					"active": self._master[session].active,
 					"filesize": self._master[session].filesize,
@@ -1557,7 +1562,7 @@ class tracking_class:
 					del self.parent._working[key]
 		def update_percent(self):
 			if self.filesize:
-				percent = round(100.0*self.lastblock*512/self.filesize, 2)
+				percent = round(100.0*self.lastblock*512/self.filesize, 4)
 				if percent > 100:
 					self.percent = 100.00
 				else:
@@ -1578,7 +1583,7 @@ class tracking_class:
 		for row in tabledata: # For each row entry in the tabledata list of dicts
 			for item in columnorder: # For column entry in that row
 				if len(re.sub(r'\x1b[^m]*m', "",  str(row[item]))) > datalengthdict[item]: # If the length of this column entry is longer than the current longest entry
-					datalengthdict[item] = len(row[item]) # Then change the value of entry
+					datalengthdict[item] = len(str(row[item])) # Then change the value of entry
 		##### Calculate total table width #####
 		totalwidth = 0 # Initialize at 0
 		for columnwidth in datalengthdict: # For each of the longest column values
@@ -1622,7 +1627,33 @@ class tracking_class:
 		d = self.store.recall()
 		for dload in d:
 			data.append(d[dload])
-		print(self.make_table([u'ipaddr', u'filename', u'filesize', u'bytessent', u'percent', u'active'], data))
+		return self.make_table([u'ipaddr', u'filename', u'filesize', u'bytessent', u'percent', u'active'], data)
+	class screen:
+		def __init__(self):
+			self.win = curses.initscr()
+			curses.noecho()
+			curses.cbreak()
+		def write(self, data):
+			linelist = data.split("\n")
+			index = 0
+			for line in linelist:
+				self.win.addstr(index, 0, line)
+				index += 1
+			self.win.refresh()
+	def show_downloads_live(self, args):
+		s = self.screen()
+		try:
+			index = 0
+			while True:
+				s.write(self.show_downloads(None))
+				time.sleep(0.1)
+		except:
+			curses.echo()
+			curses.nocbreak()
+			curses.endwin()
+			quit()
+	def clear_downloads(self):
+		self.store({})
 
 #t = tracking_class()
 #t.report({"ipaddr": "10.0.0.1", "port": 65000, "filename": None, "block": None})
@@ -1650,9 +1681,10 @@ class tracking_class:
 
 
 class persistent_store:
-	def __init__(self, dbid):
+	def __init__(self, dbid, readonly=False):
 		self._file = "/etc/ztp/pdb"
 		self._dbid = dbid
+		self.readonly = readonly
 		self._running = {}
 		self._read()
 	def __call__(self, data):
@@ -1660,15 +1692,16 @@ class persistent_store:
 		self._running = data
 		self._write()
 	def recall(self):
-		self._read
+		self._read()
 		return self._running
 	def _write(self):
-		fulldb = self._pull_full_db()  # Pull a full copy of the db
-		fulldb.update({self._dbid: self._running})  # Update it
-		rawout = json.dumps(fulldb, indent=4, sort_keys=True)
-		f = open(self._file, "w")
-		f.write(rawout)
-		f.close()
+		if not self.readonly:
+			fulldb = self._pull_full_db()  # Pull a full copy of the db
+			fulldb.update({self._dbid: self._running})  # Update it
+			rawout = json.dumps(fulldb, indent=4, sort_keys=True)
+			f = open(self._file, "w")
+			f.write(rawout)
+			f.close()
 	def _create_blank(self):
 		f = open(self._file, "w")
 		f.write("{}")
@@ -1690,7 +1723,7 @@ class persistent_store:
 		result = json.loads(rawdata)
 		return result
 
-#s = persistent_store("mydb1")
+#s = persistent_store("tracking")
 #s("something here")
 #s.recall()
 
@@ -1813,9 +1846,12 @@ def interpreter():
 		console("FreeZTP %s" % version)
 	elif arguments[:8] == "show log":
 		logger.show(sys.argv)
+	elif arguments[:19] == "show downloads live":
+		tracking = tracking_class(readonly=True)
+		tracking.show_downloads_live(sys.argv)
 	elif arguments[:14] == "show downloads":
-		tracking = tracking_class()
-		tracking.show_downloads(sys.argv)
+		tracking = tracking_class(readonly=True)
+		console(tracking.show_downloads(sys.argv))
 	##### SET #####
 	elif arguments == "set":
 		console("--------------------------------------------------- SETTINGS YOU PROBABLY SHOULDN'T CHANGE ---------------------------------------------------")
@@ -1872,6 +1908,7 @@ def interpreter():
 		console(" - clear association <id/arrayname>               |  Delete an association from the configuration")
 		console(" - clear dhcpd <scope-name>                       |  Delete a DHCP scope")
 		console(" - clear log                                      |  Delete the logging info from the logfile")
+		console(" - clear downloads                                |  Delete the list of TFTP downloads")
 	elif (arguments[:14] == "clear template" and len(sys.argv) < 4) or arguments == "clear template":
 		console(" - clear template <template_name>                 |  Delete a named configuration template")
 	elif (arguments[:14] == "clear keystore" and len(sys.argv) < 5) or arguments == "clear keystore":
@@ -1895,6 +1932,10 @@ def interpreter():
 	elif arguments == "clear log":
 		logger.clear()
 		log("Log file has been cleared")
+	elif arguments == "clear downloads":
+		tracking = tracking_class()
+		tracking.clear_downloads()
+		log("Downloads have been cleared")
 	##### REQUEST #####
 	elif arguments == "request":
 		console(" - request merge-test <id>                        |  Perform a test jinja2 merge of the final template with a keystore ID")
@@ -1998,6 +2039,7 @@ def interpreter():
 		console(" - clear association <id/arrayname>                            |  Delete an association from the configuration")
 		console(" - clear dhcpd <scope-name>                                    |  Delete a DHCP scope")
 		console(" - clear log                                                   |  Delete the logging info from the logfile")
+		console(" - clear downloads                                             |  Delete the list of TFTP downloads")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console(" - request merge-test <id>                                     |  Perform a test jinja2 merge of the final template with a keystore ID")
 		console(" - request initial-merge                                       |  See the result of an auto-merge of the initial-template")
