@@ -904,6 +904,7 @@ class installer:
 			console("\n\nInstalling some new dependencies...\n")
 			os.system("pip install netaddr")
 			os.system("pip install netifaces")
+			os.system("yum -y install telnet")
 			self.dhcp_setup()
 	def copy_binary(self):
 		binpath = "/bin/"
@@ -938,7 +939,7 @@ class installer:
 	def install_dependencies(self):
 		os.system("yum -y install epel-release")
 		os.system("yum -y install python2-pip")
-		os.system("yum -y install gcc gmp python-devel")
+		os.system("yum -y install gcc gmp python-devel telnet")
 		os.system("pip install pysnmp")
 		os.system("pip install jinja2")
 		os.system("pip install netaddr")
