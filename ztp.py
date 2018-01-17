@@ -828,8 +828,10 @@ class config_manager:
 		f.write(strippeddata)
 		f.close()
 		console("\nWrite Complete. Restarting DHCP Service...\n")
-		os.system('systemctl restart dhcpd')
-		os.system('systemctl status dhcpd')
+		#os.system('systemctl restart dhcpd')
+		#os.system('systemctl status dhcpd')
+		osd.service_control("restart", osd.DHCPSVC)
+		osd.service_control("status", osd.DHCPSVC)
 	def get_addresses(self):
 		result = []
 		for iface in netifaces.interfaces():
@@ -1013,7 +1015,7 @@ class installer:
 		#os.system("yum -y install dhcp")
 		osd.install_pkg(osd.DHCPPKG)
 		#os.system('systemctl enable dhcpd')
-		o.service_control("enable", o.DHCPSVC)
+		osd.service_control("enable", osd.DHCPSVC)
 		console("\n\nSucking in config file...\n")
 		global config
 		config = config_manager()
@@ -1125,8 +1127,10 @@ esac'''
 		f.write(installfile)
 		f.close()
 		if systemd:
-			os.system('systemctl enable ztp')
-			os.system('systemctl start ztp')
+			#os.system('systemctl enable ztp')
+			osd.service_control("enable", "ztp")
+			#os.system('systemctl start ztp')
+			osd.service_control("start", "ztp")
 		elif not systemd:
 			os.system('chmod 777 /etc/init.d/radiuid')
 			os.system('chkconfig radiuid on')
@@ -2015,6 +2019,7 @@ def interpreter():
 	global config
 	global cfact
 	global logger
+	global osd
 	osd = os_detect()
 	config = config_manager()
 	logger = log_management()
@@ -2093,9 +2098,11 @@ def interpreter():
 		config.show_config()
 	elif arguments == "show status":
 		console("\n")
-		os.system('systemctl status ztp')
+		#os.system('systemctl status ztp')
+		osd.service_control("status", "ztp")
 		console("\n\n")
-		os.system('systemctl status dhcpd')
+		#os.system('systemctl status dhcpd')
+		osd.service_control("status", osd.DHCPSVC)
 		console("\n")
 	elif arguments == "show version":
 		console("FreeZTP %s" % version)
@@ -2237,23 +2244,31 @@ def interpreter():
 	elif arguments == "service start":
 		log("#########################################################")
 		log("Starting the ZTP Service")
-		os.system('systemctl start ztp')
-		os.system('systemctl status ztp')
+		#os.system('systemctl start ztp')
+		#os.system('systemctl status ztp')
+		osd.service_control("start", "ztp")
+		osd.service_control("status", "ztp")
 		log("#########################################################")
 	elif arguments == "service stop":
 		log("#########################################################")
 		log("Stopping the ZTP Service")
-		os.system('systemctl stop ztp')
-		os.system('systemctl status ztp')
+		#os.system('systemctl stop ztp')
+		#os.system('systemctl status ztp')
+		osd.service_control("stop", "ztp")
+		osd.service_control("status", "ztp")
 		log("#########################################################")
 	elif arguments == "service restart":
 		log("#########################################################")
 		log("Restarting the ZTP Service")
-		os.system('systemctl restart ztp')
-		os.system('systemctl status ztp')
+		#os.system('systemctl restart ztp')
+		#os.system('systemctl status ztp')
+		osd.service_control("restart", "ztp")
+		osd.service_control("status", "ztp")
 		log("#########################################################")
 	elif arguments == "service status":
-		os.system('systemctl status ztp')
+		#os.system('systemctl status ztp')
+		osd.service_control("status", "ztp")
+		osd.service_control("status", osd.DHCPSVC)
 	##### VERSION #####
 	elif arguments == "version":
 		console("FreeZTP %s" % version)
