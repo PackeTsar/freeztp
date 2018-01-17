@@ -34,6 +34,7 @@ import sys
 import json
 import time
 import curses
+import socket
 import logging
 import commands
 import threading
@@ -903,6 +904,7 @@ class installer:
 			console("\n\nInstalling some new dependencies...\n")
 			os.system("pip install netaddr")
 			os.system("pip install netifaces")
+			os.system("yum -y install telnet")
 			self.dhcp_setup()
 	def copy_binary(self):
 		binpath = "/bin/"
@@ -937,7 +939,7 @@ class installer:
 	def install_dependencies(self):
 		os.system("yum -y install epel-release")
 		os.system("yum -y install python2-pip")
-		os.system("yum -y install gcc gmp python-devel")
+		os.system("yum -y install gcc gmp python-devel telnet")
 		os.system("pip install pysnmp")
 		os.system("pip install jinja2")
 		os.system("pip install netaddr")
@@ -989,6 +991,8 @@ DAEMON_PATH="/bin/"
 
 DAEMON=ztp
 DAEMONOPTS="run"
+STDOUTFILE=/etc/ztp/stdout.log
+STDERR=/etc/ztp/stderr.log
 
 NAME=FreeZTP Server
 DESC="ZTP Service"
@@ -999,7 +1003,7 @@ case "$1" in
 start)
 printf "%-50s" "Starting $NAME..."
 cd $DAEMON_PATH
-PID=`$DAEMON $DAEMONOPTS > /dev/null 2>&1 & echo $!`
+PID=`$DAEMON $DAEMONOPTS >> $STDOUTFILE 2>>$STDERR & echo $!`
 #echo "Saving PID" $PID " to " $PIDFILE
 	if [ -z $PID ]; then
 		printf "%s\n" "Fail"
@@ -1091,7 +1095,7 @@ _ztp_complete()
 		COMPREPLY=( $(compgen -W "keystore idarray template association dhcpd log downloads" -- $cur) )
 		;;
 	  "request")
-		COMPREPLY=( $(compgen -W "merge-test initial-merge default-keystore-test snmp-test dhcp-option-125 dhcpd-commit auto-dhcpd" -- $cur) )
+		COMPREPLY=( $(compgen -W "merge-test initial-merge default-keystore-test snmp-test dhcp-option-125 dhcpd-commit auto-dhcpd ipc-console" -- $cur) )
 		;;
 	  "service")
 		COMPREPLY=( $(compgen -W "start stop restart status" -- $cur) )
@@ -1383,6 +1387,7 @@ def handle(self, pkt, raddress, rport):
 		tftpy.log.debug("Received ACK for packet %d" % pkt.blocknumber)
 		#### BEGIN CHANGES ####
 		#print("################### PACKET %s %s %s #############################" % (pkt.blocknumber, raddress, rport) * 10)
+		#print(self.context.fileobj.tell())
 		tracking.report({
 			"ipaddr": raddress,
 			"port": rport,
@@ -1432,149 +1437,254 @@ def handle(self, pkt, raddress, rport):
 		return self
 
 
+def sendDAT(self):
+	"""This method sends the next DAT packet based on the data in the
+	context. It returns a boolean indicating whether the transfer is
+	finished."""
+	finished = False
+	blocknumber = self.context.next_block
+	# Test hook
+	if tftpy.TftpShared.DELAY_BLOCK and tftpy.TftpShared.DELAY_BLOCK == blocknumber:
+		import time
+		log.debug("Deliberately delaying 10 seconds...")
+		time.sleep(10)
+	dat = None
+	blksize = self.context.getBlocksize()
+	buffer = self.context.fileobj.read(blksize)
+	tftpy.log.debug("Read %d bytes into buffer", len(buffer))
+	if len(buffer) < blksize:
+		tftpy.log.info("Reached EOF on file %s"
+			% self.context.file_to_transfer)
+		finished = True
+	dat = tftpy.TftpPacketDAT()
+	dat.data = buffer
+	dat.blocknumber = blocknumber
+	self.context.metrics.bytes += len(dat.data)
+	tftpy.log.debug("Sending DAT packet %d", dat.blocknumber)
+	self.context.sock.sendto(dat.encode().buffer,
+		(self.context.host, self.context.tidport))
+	if self.context.packethook:
+		self.context.packethook(dat)
+	self.context.last_pkt = dat
+	#print(self.context.fileobj.tell())
+	#print(dir(self.context))
+	#print(self.context.address)
+	#print(self.context.port)
+	#print(self.context.file_to_transfer)
+	tracking.report({
+		"ipaddr": self.context.address,
+		"port": self.context.port,
+		"position": self.context.fileobj.tell(),
+		"filename": self.context.file_to_transfer,
+		"source": "sendDAT"})
+	return finished
+
+
 try:
 	tftpy.TftpContextServer.start = start  # Overwrite the function
 	tftpy.TftpContextServer.end = end  # Overwrite the function
-	tftpy.TftpStateExpectACK.handle = handle
+	#tftpy.TftpStateExpectACK.handle = handle
+	tftpy.TftpStateExpectACK.sendDAT = sendDAT
 except NameError:
 	pass
 
 
 class tracking_class:
-	def __init__(self, readonly=False):
+	def __init__(self, client=False):
 		self._master = {}
-		self._working = {}
-		self.store = persistent_store("tracking", readonly=readonly)
-		self.status = self.store.recall()
-		self.watch = threading.Thread(target=self._watchdog)
-		self.watch.daemon = True
-		self.watch.start()
+		self.store = persistent_store("tracking")
+		#self._working = {}
+		if not client:
+			self.status = self.store.recall()
+			self.mthread = threading.Thread(target=self._maintenance)
+			self.mthread.daemon = True
+			self.mthread.start()
+			self.ipc_server()
+	def find_session(self, args):
+		for session in self._master:
+			if args["filename"]:
+				if args["filename"] == self._master[session].filename:
+					if self._master[session].active:
+						return session
+			else:
+				if args["port"] in self._master[session].ports:
+					if self._master[session].active:
+						return session
+		return False
 	def report(self, args):
-		portpair = args["ipaddr"]+":"+str(args["port"])
-		if portpair in self._working:  # If init session exists
-			self._working[portpair].update(args)  # Update the session
-		else:
-			# Create a new session
-			self._working.update({portpair: self.request_class(args, self)})
-	def _watchdog(self):
-		self.mthread = threading.Thread(target=self._maintenance)
-		self.mthread.daemon = True
-		self.mthread.start()
+		session = self.find_session(args)
+		if session:
+			self._master[session].update(args)  # Send update to session
+		if not session:
+			if args["source"] != "end":
+				self._master.update({time.time(): self.request_class(args, self)})
+		#portpair = args["ipaddr"]+":"+str(args["port"])
+		#if portpair in self._working:  # If init session exists
+		#	self._working[portpair].update(args)  # Update the session
+		#else:
+		#	# Create a new session
+		#	self._working.update({portpair: self.request_class(args, self)})
+	def _maintenance(self):
+		self.sthread = threading.Thread(target=self._maintain_store)
+		self.sthread.daemon = True
+		self.sthread.start()
 		while True:
 			time.sleep(1)
-			if not self.mthread.is_alive():
-				self.mthread = threading.Thread(target=self._maintenance)
-				self.mthread.daemon = True
-				self.mthread.start()
-	def _maintenance(self):
+			if not self.sthread.is_alive():
+				self.sthread = threading.Thread(target=self._maintain_store)
+				self.sthread.daemon = True
+				self.sthread.start()
+	def _maintain_store(self):
 		while True:
-			print(self._master)
-			for ses in self._master:
-				print(self._master[ses].active)
-			print(self._working)
-			for ses in self._working:
-				print(self._working[ses].active)
-			print("\n")
-			time.sleep(1.1)
+			time.sleep(1)
 			#print("LOOPING")
 			#print(self._working)
 			### Update tracking status ###
 			##############################
 			for session in self._master:
-				key = self._master[session].ipaddr+":"+str(self._master[session].filename)
+				#key = self._master[session].ipaddr+":"+str(self._master[session].filename)
 				self._master[session].update_percent()
-				try:
-					bytessent = self._master[session].lastblock*512
-				except TypeError:
-					bytessent = 0
+				#try:
+				#	bytessent = self._master[session].lastblock*512
+				#except TypeError:
+				#	bytessent = 0
 				data = {
+					"time": self._master[session].friendlytime,
 					"ipaddr": self._master[session].ipaddr,
-					"port": self._master[session].port,
+					"ports": self._master[session].ports,
 					"filename": self._master[session].filename,
-					"lastblock": self._master[session].lastblock,
-					"bytessent": bytessent,
-					"sessionports": self._master[session].sessionports,
+					"position": self._master[session].position,
+					"bytessent": self._master[session].position,
 					"active": self._master[session].active,
 					"filesize": self._master[session].filesize,
 					"percent": self._master[session].percent
 				}
-				self.status.update({key: data})
+				self.status.update({session: data})
 			self.store(self.status)
 			##############################
 			##############################
 	class request_class:
-		def __init__(self, args, tracking, redirect=False, master=False):
+		def __init__(self, args, parent):
 			self.ipaddr = None
-			self.port = None
+			self.ports = {}
 			self.filename = None
-			self.lastblock = None
-			self.redirect = redirect
-			self.parent = tracking
-			self.sessionports = []
-			self.master = master
+			#self.lastblock = None
+			self.position = 0
+			#self.redirect = redirect
+			self.parent = parent
+			#self.sessionports = []
+			#self.children = {}  # Child sessions created during TFTP start
+			#self.master = master
 			self.active = True
+			self.threads = []
 			self.filesize = None
 			self.percent = None
+			self.creation = time.time()
+			self.friendlytime = time.strftime("%Y-%m-%d %H:%M:%S")
+			self.lastupdate = self.creation
+			self._inactivity_timeout(2)
 			self.update(args)
-			if self.master:
-				self.init_master()
+			#if self.master:
+			#	self.init_master()
 		def update(self, args): # Update this object from a report
-			if type(self.redirect) != type(True):  # If we are redirecting updates
-				target = self.redirect  # Setup to send the updates
-				print("Forwarding Update")
-			else:  # Otherwise
-				target = self  # Update outselves
+			self.lastupdate = time.time()
+			if args["port"]:
+				if args["port"] not in self.ports:
+					self.ports.update({args["port"]: time.time()})
 			for arg in args:  # For each passed attrib
 				if args[arg]:  # If it has a value
 					if arg == "ipaddr":
-						target.ipaddr = args[arg]
-					elif arg == "port":
-						target.port = args[arg]
+						self.ipaddr = args[arg]
 					elif arg == "filename":
-						target.filename = args[arg]
-					elif arg == "block":
-						target.lastblock = args[arg]
-					elif arg == "source":
-						if args[arg] == "end":  # If called by end()
-							self.active = False  # Unset active for cleanup
-							if target.lastblock:
-								if target.lastblock*512 >= target.filesize:
-									target.active = False  # Unset active for cleanup
-									target.clean_working()
-			if not self.redirect and self.filename:  # If transferring
-				self.transfer()
-		def transfer(self):
-			filepair = self.ipaddr+":"+self.filename
-			if filepair in self.parent._master:
-				self.redirect = self.parent._master[filepair]
-				self.redirect.sessionports.append(self.port)
+						if not self.filename:
+							self.filename = args[arg]
+							self.check_file()
+					elif arg == "position":
+						self.position = args[arg]
+			#print(self.ipaddr, self.ports, self.filename, self.active, self.position, self.filesize)
+		def _inactivity_timeout(self, seconds, thread=False):
+			if not thread:  #If not started in a thread, restart in a thread
+				thread = threading.Thread(target=self._inactivity_timeout, 
+					args=(seconds, True))
+				thread.daemon = True
+				thread.start()
+				self.threads.append(thread)  # Add to list of session threads
+				return None
 			else:
-				args = {"ipaddr":self.ipaddr, "port":self.port, "filename": self.filename}
-				newsession = self.parent.request_class(args, self.parent, True, True)
-				newsession.sessionports.append(self.port)
-				#newsession.redirect = newsession
-				#self.redirect = newsession
-				self.parent._master.update({filepair: newsession})
-				self.redirect = newsession
+				while True:
+					if not self.active:  # If this session is no longer inactive
+						return None  # Return and stop the thread
+					else:  # If it is still active
+						if time.time() - self.lastupdate > seconds:
+							# If there has been no activity 
+							# in the timeout period
+							self.active = False  # Mark session as inactive
+					time.sleep(0.1)  # Sleep for .1 seconds
+			#if type(self.redirect) != type(True):  # If we are redirecting updates
+			#	target = self.redirect  # Setup to send the updates
+			#	print("Forwarding Update")
+			#else:  # Otherwise
+			#	target = self  # Update outselves
+			#for arg in args:  # For each passed attrib
+			#	if args[arg]:  # If it has a value
+			#		if arg == "ipaddr":
+			#			target.ipaddr = args[arg]
+			#		elif arg == "port":
+			#			target.port = args[arg]
+			#		elif arg == "filename":
+			#			target.filename = args[arg]
+			#		elif arg == "block":
+			#			target.lastblock = args[arg]
+			#		elif arg == "source":
+			#			if args[arg] == "end":  # If called by end()
+			#				self.active = False  # Unset active for cleanup
+			#				if target.lastblock:
+			#					if target.lastblock*512 >= target.filesize:
+			#						target.active = False  # Unset active for cleanup
+			#						target.clean_working()
+			#if not self.redirect and self.filename:  # If transferring
+			#	self.transfer()
+		#def transfer(self):
+		#	filepair = self.ipaddr+":"+self.filename
+		#	if filepair in self.parent._master:
+		#		self.redirect = self.parent._master[filepair]
+		#		self.redirect.sessionports.append(self.port)
+		#	else:
+		#		args = {"ipaddr":self.ipaddr, "port":self.port, "filename": self.filename}
+		#		newsession = self.parent.request_class(args, self.parent, True, True)
+		#		newsession.sessionports.append(self.port)
+		#		#newsession.redirect = newsession
+		#		#self.redirect = newsession
+		#		self.parent._master.update({filepair: newsession})
+		#		self.redirect = newsession
 		def check_file(self):
 			path = config.running["tftproot"]+self.filename
 			if os.path.isfile(path):
 				self.filesize = os.path.getsize(path)
-		def init_master(self):
-			self.check_file()
-		def clean_working(self):
-			print("Cleaning!")
-			for session in self.sessionports:
-				key = self.ipaddr+":"+str(session)
-				if key in self.parent._working:
-					del self.parent._working[key]
+		#def init_master(self):
+		#	self.check_file()
+		#def clean_working(self):
+		#	print("Cleaning!")
+		#	for session in self.sessionports:
+		#		key = self.ipaddr+":"+str(session)
+		#		if key in self.parent._working:
+		#			del self.parent._working[key]
 		def update_percent(self):
 			if self.filesize:
-				percent = round(100.0*self.lastblock*512/self.filesize, 4)
+				percent = round(100.0*self.position/self.filesize, 4)
 				if percent > 100:
 					self.percent = 100.00
 				else:
 					self.percent = percent
+	########################################################################
+	########################################################################
+	########################################################################
+	########################################################################
+	########################################################################
+	########################################################################
+	########################################################################
+	########################################################################
+	########################################################################
 	def make_table(self, columnorder, tabledata):
 		##### Check and fix input type #####
 		if type(tabledata) != type([]): # If tabledata is not a list
@@ -1633,9 +1743,11 @@ class tracking_class:
 	def show_downloads(self, args):
 		data = []
 		d = self.store.recall()
-		for dload in d:
+		dlist = list(d)
+		dlist.sort()
+		for dload in dlist:
 			data.append(d[dload])
-		return self.make_table([u'ipaddr', u'filename', u'filesize', u'bytessent', u'percent', u'active'], data)
+		return self.make_table([u'time', u'ipaddr', u'filename', u'filesize', u'bytessent', u'percent', u'active'], data)
 	class screen:
 		def __init__(self):
 			self.win = curses.initscr()
@@ -1648,20 +1760,90 @@ class tracking_class:
 				self.win.addstr(index, 0, line)
 				index += 1
 			self.win.refresh()
+	#def show_downloads_live(self, args):
+	#	s = self.screen()
+	#	try:
+	#		index = 0
+	#		while True:
+	#			s.write(self.show_downloads(None))
+	#			time.sleep(0.1)
+	#	except:
+	#		curses.echo()
+	#		curses.nocbreak()
+	#		curses.endwin()
+	#		quit()
+	def clear_downloads(self):
+		self._master = {}
+		self.status = {}
+		client = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+		client.connect(('localhost', 10000))
+		client.send("clear downloads\n")
+		self.store({})
+		client.close()
+	def ipc_server(self):
+		self.ipcthread = threading.Thread(target=self._status_ipc)
+		self.ipcthread.daemon = True
+		self.ipcthread.start()
+	def _status_ipc(self):
+		while True:
+			sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)  # v6 family
+			sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+			sock.bind(("", 10000))
+			sock.listen(1024)
+			client, addr = sock.accept()
+			thread = threading.Thread(target=self._status_ipc_talker, args=(client,))
+			thread.start() # Start talker thread to listen to port
+	def _status_ipc_talker(self, client):
+		while True:
+			recieve = client.recv(1024)
+			if len(recieve) > 0:
+				if "?" in recieve:
+					table = """
+- threads
+- clear downloads
+- get downloads
+- exit
+"""
+					client.send(table)
+				elif "exit" in recieve:
+					client.close()
+					return None
+				elif "threads" in recieve:
+					client.send(str(threading.activeCount()))  # Send the query response
+					client.send(str(threading.enumerate()))
+				elif "clear downloads" in recieve:
+					self.clear_downloads()
+					client.send(json.dumps(self.status, indent=4, sort_keys=True)+"\n")  # Send the query response
+				elif "get downloads" in recieve:
+					client.send(json.dumps(self.status, indent=4, sort_keys=True)+"\n")  # Send the query response
+				else:
+					client.send("ZTP#")  # Send the query response
+	def get_live_status(self, client):
+		data = []
+		#d = self.store.recall()
+		client.send("get downloads\n")
+		time.sleep(0.1)
+		d = client.recv(100000)
+		d = json.loads(d)
+		dlist = list(d)
+		dlist.sort()
+		for dload in dlist:
+			data.append(d[dload])
+		return self.make_table([u'time', u'ipaddr', u'filename', u'filesize', u'bytessent', u'percent', u'active'], data)
 	def show_downloads_live(self, args):
 		s = self.screen()
+		client = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+		client.connect(('localhost', 10000))
 		try:
 			index = 0
 			while True:
-				s.write(self.show_downloads(None))
-				time.sleep(0.1)
+				table = self.get_live_status(client)
+				s.write(table)
 		except:
 			curses.echo()
 			curses.nocbreak()
 			curses.endwin()
 			quit()
-	def clear_downloads(self):
-		self.store({})
 
 #t = tracking_class()
 #t.report({"ipaddr": "10.0.0.1", "port": 65000, "filename": None, "block": None})
@@ -1689,10 +1871,9 @@ class tracking_class:
 
 
 class persistent_store:
-	def __init__(self, dbid, readonly=False):
+	def __init__(self, dbid):
 		self._file = "/etc/ztp/pdb"
 		self._dbid = dbid
-		self.readonly = readonly
 		self._running = {}
 		self._read()
 	def __call__(self, data):
@@ -1703,13 +1884,12 @@ class persistent_store:
 		self._read()
 		return self._running
 	def _write(self):
-		if not self.readonly:
-			fulldb = self._pull_full_db()  # Pull a full copy of the db
-			fulldb.update({self._dbid: self._running})  # Update it
-			rawout = json.dumps(fulldb, indent=4, sort_keys=True)
-			f = open(self._file, "w")
-			f.write(rawout)
-			f.close()
+		fulldb = self._pull_full_db()  # Pull a full copy of the db
+		fulldb.update({self._dbid: self._running})  # Update it
+		rawout = json.dumps(fulldb, indent=4, sort_keys=True)
+		f = open(self._file, "w")
+		f.write(rawout)
+		f.close()
 	def _create_blank(self):
 		f = open(self._file, "w")
 		f.write("{}")
@@ -1812,7 +1992,7 @@ def interpreter():
 			#inst.install_tftpy()
 			#inst.disable_firewall()
 			#inst.install_dependencies()
-			#inst.create_service()
+			inst.create_service()
 			inst.minor_update_script()
 			console("\nInstall complete! Logout and log back into SSH to activate auto-complete")
 			console("\nMake sure to run 'ztp service restart' to restart the service for the new software to take effect")
@@ -1855,10 +2035,10 @@ def interpreter():
 	elif arguments[:8] == "show log":
 		logger.show(sys.argv)
 	elif arguments[:19] == "show downloads live":
-		tracking = tracking_class(readonly=True)
+		tracking = tracking_class(client=True)
 		tracking.show_downloads_live(sys.argv)
 	elif arguments[:14] == "show downloads":
-		tracking = tracking_class(readonly=True)
+		tracking = tracking_class(client=True)
 		console(tracking.show_downloads(sys.argv))
 	##### SET #####
 	elif arguments == "set":
@@ -1941,7 +2121,7 @@ def interpreter():
 		logger.clear()
 		log("Log file has been cleared")
 	elif arguments == "clear downloads":
-		tracking = tracking_class()
+		tracking = tracking_class(client=True)
 		tracking.clear_downloads()
 		log("Downloads have been cleared")
 	##### REQUEST #####
@@ -1953,6 +2133,7 @@ def interpreter():
 		console(" - request dhcp-option-125 (windows|cisco)        |  Show the DHCP Option 125 Hex value to use on the DHCP server for OS upgrades")
 		console(" - request dhcpd-commit                           |  Compile the DHCP config, write to config file, and restart the DHCP service")
 		console(" - request auto-dhcpd                             |  Automatically detect local interfaces and build DHCP scopes accordingly")
+		console(" - request ipc-console                            |  Connect to the IPC console to run commands (be careful)")
 	elif arguments == "request merge-test":
 		console(" - request merge-test <id>                        |  Perform a test jinja2 merge of the final template with a keystore ID")
 	elif arguments == "request dhcp-option-125":
@@ -1981,6 +2162,8 @@ def interpreter():
 		config.dhcpd_commit()
 	elif arguments == "request auto-dhcpd":
 		config.auto_dhcpd()
+	elif arguments == "request ipc-console":
+		os.system('telnet localhost 10000')
 	##### SERVICE #####
 	elif arguments == "service":
 		console(" - service (start|stop|restart|status)            |  Start, Stop, or Restart the installed ZTP service")
@@ -2056,6 +2239,7 @@ def interpreter():
 		console(" - request dhcp-option-125 (windows|cisco)                     |  Show the DHCP Option 125 Hex value to use on the DHCP server for OS upgrades")
 		console(" - request dhcpd-commit                                        |  Compile the DHCP config, write to config file, and restart the DHCP service")
 		console(" - request auto-dhcpd                                          |  Automatically detect local interfaces and build DHCP scopes accordingly")
+		console(" - request ipc-console                                         |  Connect to the IPC console to run commands (be careful)")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console(" - service (start|stop|restart|status)                         |  Start, Stop, or Restart the installed ZTP service")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
