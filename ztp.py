@@ -36,8 +36,68 @@ import time
 import curses
 import socket
 import logging
+import platform
 import commands
 import threading
+
+
+
+
+#import commands
+#import platform
+#import os
+
+
+class os_detect:
+	def __init__(self):
+		self._dist = self._dist_detect()
+		self._systemd = self._systemd_detect()
+		self._pkgmgr = self._pkgmgr_detect()
+		self._make_names()
+	def _systemd_detect(self):
+		checksystemd = commands.getstatusoutput("systemctl")
+		if len(checksystemd[1]) > 50 and "Operation not permitted" not in checksystemd[1]:
+			return True
+		else:
+			return False
+	def _pkgmgr_detect(self):
+		checkpkgmgr = {}
+		checknames = ["yum", "apt", "apt-get"]
+		for mgr in checknames:
+			checkpkgmgr.update({len(commands.getstatusoutput(mgr)[1]): mgr})
+		pkgmgr = checkpkgmgr[sorted(list(checkpkgmgr), key=int)[len(sorted(list(checkpkgmgr), key=int)) - 1]]
+		return pkgmgr
+	def _dist_detect(self):
+		distlist = platform.linux_distribution()
+		if "centos" in distlist[0].lower():
+			return "centos"
+		if "ubuntu" in distlist[0].lower():
+			return "ubuntu"
+		if "debian" in distlist[0].lower():
+			return "debian"
+		else:
+			return "unknown"
+	def _make_names(self):
+		if self._dist == "centos":
+			self.DHCPSVC = "dhcpd"
+			self.DHCPPKG = "dhcp"
+			self.PIPPKG = "python2-pip"
+		elif self._dist == "ubuntu":
+			self.DHCPSVC = "isc-dhcp-server"
+			self.DHCPPKG = "isc-dhcp-server"
+			self.PIPPKG = "python-pip"
+	def service_control(self, cmd, service):
+		if self._systemd:
+			os.system("sudo systemctl %s %s" % (cmd, service))
+		else:
+			os.system("sudo service %s %s" % (service, cmd))
+	def install_pkg(self, pkg):
+		os.system("sudo %s install -y %s" % (self._pkgmgr, pkg))
+
+#osd = os_detect()
+#osd.install_pkg(o.DHCPPKG)
+#osd.service_control("restart", o.DHCPSVC)
+#osd.service_control("status", o.DHCPSVC)
 
 
 def interceptor(afile, raddress, rport):
@@ -904,7 +964,8 @@ class installer:
 			console("\n\nInstalling some new dependencies...\n")
 			os.system("pip install netaddr")
 			os.system("pip install netifaces")
-			os.system("yum -y install telnet")
+			#os.system("yum -y install telnet")
+			osd.install_pkg("telnet")
 			self.dhcp_setup()
 	def copy_binary(self):
 		binpath = "/bin/"
@@ -937,17 +998,22 @@ class installer:
 		os.system("systemctl disable firewalld")
 		console("Firewalld stopped and disabled")
 	def install_dependencies(self):
-		os.system("yum -y install epel-release")
-		os.system("yum -y install python2-pip")
-		os.system("yum -y install gcc gmp python-devel telnet")
+		#os.system("yum -y install epel-release")
+		osd.install_pkg("epel-release")
+		#os.system("yum -y install python2-pip")
+		osd.install_pkg(osd.PIPPKG)
+		#os.system("yum -y install gcc gmp python-devel telnet")
+		osd.install_pkg("gcc gmp python-devel telnet")
 		os.system("pip install pysnmp")
 		os.system("pip install jinja2")
 		os.system("pip install netaddr")
 		os.system("pip install netifaces")
 	def dhcp_setup(self):
 		console("\n\nInstalling DHCPD...\n")
-		os.system("yum -y install dhcp")
-		os.system('systemctl enable dhcpd')
+		#os.system("yum -y install dhcp")
+		osd.install_pkg(osd.DHCPPKG)
+		#os.system('systemctl enable dhcpd')
+		o.service_control("enable", o.DHCPSVC)
 		console("\n\nSucking in config file...\n")
 		global config
 		config = config_manager()
@@ -1949,6 +2015,7 @@ def interpreter():
 	global config
 	global cfact
 	global logger
+	osd = os_detect()
 	config = config_manager()
 	logger = log_management()
 	try:
