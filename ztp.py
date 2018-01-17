@@ -81,6 +81,11 @@ class os_detect:
 			self.DHCPPKG = "isc-dhcp-server"
 			self.PIPPKG = "python-pip"
 			self.PKGDIR = "/usr/local/lib/python2.7/dist-packages/"
+		elif self._dist == "debian":
+			self.DHCPSVC = "isc-dhcp-server"
+			self.DHCPPKG = "isc-dhcp-server"
+			self.PIPPKG = "python-pip"
+			self.PKGDIR = "/usr/local/lib/python2.7/dist-packages/"
 	def service_control(self, cmd, service):
 		if self._systemd:
 			os.system("sudo systemctl %s %s" % (cmd, service))
