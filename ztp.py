@@ -43,9 +43,9 @@ import threading
 
 
 
-#import commands
-#import platform
-#import os
+import commands
+import platform
+import os
 
 
 class os_detect:
@@ -82,16 +82,20 @@ class os_detect:
 			self.DHCPSVC = "dhcpd"
 			self.DHCPPKG = "dhcp"
 			self.PIPPKG = "python2-pip"
+			self.PKGDIR = "/usr/lib/python2.7/site-packages/"
 		elif self._dist == "ubuntu":
 			self.DHCPSVC = "isc-dhcp-server"
 			self.DHCPPKG = "isc-dhcp-server"
 			self.PIPPKG = "python-pip"
+			self.PKGDIR = "/usr/local/lib/python2.7/dist-packages/"
 	def service_control(self, cmd, service):
 		if self._systemd:
 			os.system("sudo systemctl %s %s" % (cmd, service))
 		else:
 			os.system("sudo service %s %s" % (service, cmd))
 	def install_pkg(self, pkg):
+		cmd = "sudo %s install -y %s" % (self._pkgmgr, pkg)
+		console("")
 		os.system("sudo %s install -y %s" % (self._pkgmgr, pkg))
 
 #osd = os_detect()
@@ -991,7 +995,7 @@ class installer:
 		os.system("curl -OL https://github.com/PackeTsar/tftpy/archive/master.tar.gz")
 		console("Installing tftpy library...")
 		os.system("tar -xzf master.tar.gz")
-		os.system("cp -r tftpy-master/tftpy/ /usr/lib/python2.7/site-packages/")
+		os.system("cp -r tftpy-master/tftpy/ " + osd.PKGDIR)
 		os.system("rm -rf tftpy-master")
 		os.system("rm -rf master.tar.gz")
 		console("Tftpy library installed")
