@@ -41,13 +41,6 @@ import commands
 import threading
 
 
-
-
-import commands
-import platform
-import os
-
-
 class os_detect:
 	def __init__(self):
 		self._dist = self._dist_detect()
@@ -97,11 +90,6 @@ class os_detect:
 		cmd = "sudo %s install -y %s" % (self._pkgmgr, pkg)
 		console("")
 		os.system("sudo %s install -y %s" % (self._pkgmgr, pkg))
-
-#osd = os_detect()
-#osd.install_pkg(o.DHCPPKG)
-#osd.service_control("restart", o.DHCPSVC)
-#osd.service_control("status", o.DHCPSVC)
 
 
 def interceptor(afile, raddress, rport):
@@ -870,11 +858,30 @@ class config_manager:
 			except Exception as e:
 				pass
 		return result
+	def _write_interfaces(self, iflist):
+		if os.path.isfile("/etc/default/isc-dhcp-server"):
+			ifstr = " ".join(iflist)
+			newfilelines = []
+			filedatalist = open("/etc/default/isc-dhcp-server").readlines()
+			for line in filedatalist:
+				if "INTERFACESv4=" in line:
+					newfilelines.append('INTERFACESv4="%s"' % ifstr)
+				elif "INTERFACES=" in line:
+					newfilelines.append('INTERFACES="%s"' % ifstr)
+				else:
+					newfilelines.append(line)
+			newfile = ""
+			for line in newfilelines:
+				newfile += line
+			f = open("/etc/default/isc-dhcp-server", "w")
+			f.write(newfile)
+			f.close()
 	def auto_dhcpd(self):
 		console("INFO: Autodetection can often detect an incorrect subnet mask. You may need to correct the subnet on auto built scopes")
 		console("INFO: You will need to set the 'first-address' and 'last-address' settings on any auto-built scope for it to actually serve IP addresses ")
 		console("Detecting interfaces and determining usable IP addresses...")
 		ips = self.filter_ips(self.get_addresses())
+		iflist = []
 		console("  Found: %s\nCreating Scopes..." % ips)
 		for net in ips:
 			scopename = "INTERFACE-" + net[0].encode().upper()
@@ -891,6 +898,8 @@ class config_manager:
 			self.set_dhcpd(api1)
 			console("    Injecting Command: %s" % cmd2)
 			self.set_dhcpd(api2)
+			iflist.append(net[0])
+		self._write_interfaces(iflist)
 		console("\n\nComplete!\n\nRemember to commit the new DHCP config using the command 'ztp request dhcpd-commit'\n")
 
 
@@ -1004,6 +1013,8 @@ class installer:
 		os.system("systemctl disable firewalld")
 		console("Firewalld stopped and disabled")
 	def install_dependencies(self):
+		if osd._pkgmgr == "apt-get":  # If using apt-get, update the repos
+			os.system("sudo apt-get update -y")
 		#os.system("yum -y install epel-release")
 		osd.install_pkg("epel-release")
 		#os.system("yum -y install python2-pip")
