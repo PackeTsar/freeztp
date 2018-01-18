@@ -6,9 +6,8 @@
 #####       http://blog.packetsar.com        #####
 ##### https://github.com/convergeone/freeztp #####
 
-
 ##### Inform FreeZTP version here #####
-version = "v0.8.1"
+version = "v0.8.2"
 
 # NEXT: Set up garbage collection of complete master sessions
 # NEXT: Write in supression
@@ -17,27 +16,29 @@ version = "v0.8.1"
 
 ##### Try to import non-native modules, fail gracefully #####
 try:
-	import jinja2 as j2
-	from jinja2 import Environment, meta
-	import pysnmp.hlapi
-	import tftpy
-	import netaddr
-	import netifaces
+	#import jinja2 as j2
+	#from jinja2 import Environment, meta
+	#import pysnmp.hlapi
+	#import tftpy
+	#import netaddr
+	#import netifaces
+	pass
 except ImportError:
 	print("Had some import errors, may not have dependencies installed yet")
 
 
 ##### Import native modules #####
 import os
-import re
 import sys
 import json
+import platform
+import commands
+
+import re
 import time
 import curses
 import socket
 import logging
-import platform
-import commands
 import threading
 
 
@@ -142,6 +143,13 @@ class ztp_dyn_file:
 #####   based on the ZTP configuration                                    #####
 class config_factory:
 	def __init__(self):
+		global j2
+		global Environment
+		global meta
+		#global tftpy
+		import jinja2 as j2
+		from jinja2 import Environment, meta
+		#import tftpy
 		self.state = {}
 		self.snmprequests = {}
 		try:
@@ -355,6 +363,8 @@ class config_factory:
 #####   keystore ID when the final template is requested                  #####
 class snmp_query:
 	def __init__(self, host, community, oid, timeout=30):
+		global pysnmp
+		import pysnmp.hlapi
 		self.complete = False
 		self.status = "starting"
 		self.response = None
@@ -538,6 +548,8 @@ class config_manager:
 		self.running["associations"].update({iden: template})
 		self.save()
 	def set_dhcpd(self, args):
+		global netaddr
+		import netaddr
 		if len(args) < 6:
 			print("ERROR: Incomplete Command!")
 			quit()
@@ -804,6 +816,8 @@ class config_manager:
 		return result
 		# option ztp-tftp-address code 150 = { ip-address };
 	def dhcpd_commit(self):
+		global netaddr
+		import netaddr
 		dhcpdata = self.dhcpd_compile()
 		filedatalist = open("/etc/dhcp/dhcpd.conf").readlines()
 		index = 1
@@ -830,6 +844,7 @@ class config_manager:
 		osd.service_control("restart", osd.DHCPSVC)
 		osd.service_control("status", osd.DHCPSVC)
 	def get_addresses(self):
+		import netifaces
 		result = []
 		for iface in netifaces.interfaces():
 			addressdict = netifaces.ifaddresses(iface)
@@ -882,6 +897,8 @@ class config_manager:
 			f.write(newfile)
 			f.close()
 	def auto_dhcpd(self):
+		global netaddr
+		import netaddr
 		console("INFO: Autodetection can often detect an incorrect subnet mask. You may need to correct the subnet on auto built scopes")
 		console("INFO: You will need to set the 'first-address' and 'last-address' settings on any auto-built scope for it to actually serve IP addresses ")
 		console("Detecting interfaces and determining usable IP addresses...")
@@ -1570,15 +1587,6 @@ def sendDAT(self):
 	return finished
 
 
-try:
-	tftpy.TftpContextServer.start = start  # Overwrite the function
-	tftpy.TftpContextServer.end = end  # Overwrite the function
-	#tftpy.TftpStateExpectACK.handle = handle
-	tftpy.TftpStateExpectACK.sendDAT = sendDAT
-except NameError:
-	pass
-
-
 class tracking_class:
 	def __init__(self, client=False):
 		self._master = {}
@@ -2010,6 +2018,15 @@ class persistent_store:
 #####   main program loop. It is started with the ztp_dyn_file class      #####
 #####   passed in as the dynamic file function.                           #####
 def start_tftp():
+	global tftpy
+	import tftpy
+	try:
+		tftpy.TftpContextServer.start = start  # Overwrite the function
+		tftpy.TftpContextServer.end = end  # Overwrite the function
+		#tftpy.TftpStateExpectACK.handle = handle
+		tftpy.TftpStateExpectACK.sendDAT = sendDAT
+	except NameError:
+		pass
 	log("start_tftp: Starting Up TFTPy")
 	#tftpy.setLogLevel(logging.DEBUG)
 	try:
@@ -2037,21 +2054,30 @@ def cat_list(listname):
 def interpreter():
 	arguments = cat_list(sys.argv[1:])
 	global config
-	global cfact
+	#global cfact
 	global logger
 	global osd
 	osd = os_detect()
 	config = config_manager()
 	logger = log_management()
-	try:
-		cfact = config_factory()
-	except AttributeError:
-		console("Cannot mount cfact")
+	#try:
+	#	cfact = config_factory()
+	#except AttributeError:
+	#	console("Cannot mount cfact")
 	##### TEST #####
 	if arguments == "test":
 		pass
 	##### RUN #####
 	elif arguments == "run":
+		global cfact
+		cfact = config_factory()
+		#global tftpy
+		#global j2
+		#global Environment
+		#global meta
+		#import tftpy
+		#import jinja2 as j2
+		#from jinja2 import Environment, meta
 		log("interpreter: Command to run received. Calling start_tftp")
 		global tracking
 		tracking = tracking_class()
@@ -2233,14 +2259,17 @@ def interpreter():
 	elif arguments == "request dhcp-option-125":
 		console(" - request dhcp-option-125 (windows|cisco)        |  Show the DHCP Option 125 Hex value to use on the DHCP server for OS upgrades")
 	elif arguments == "request initial-merge":
+		cfact = config_factory()
 		console(cfact.request(config.running["initialfilename"], "10.0.0.1"))
 	elif arguments == "request default-keystore-test":
+		cfact = config_factory()
 		default = cfact._default_lookup()
 		if default:
 			cfact.merge_test(default, "final")
 	elif arguments == "request snmp-test":
 		console(" - request snmp-test <ip-address>                 |  Run a SNMP test using the configured community and OID against an IP")
 	elif arguments[:18] == "request merge-test" and len(sys.argv) >= 4:
+		cfact = config_factory()
 		cfact.merge_test(sys.argv[3], "final")
 	elif arguments[:17] == "request snmp-test" and len(sys.argv) >= 4:
 		community = config.running["community"]
