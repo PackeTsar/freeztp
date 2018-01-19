@@ -1919,6 +1919,16 @@ class tracking_class:
 					client.send(json.dumps(self.status, indent=4, sort_keys=True)+"\n")  # Send the query response
 				else:
 					client.send("ZTP#")  # Send the query response
+	def _gen_animation(self):
+		l = ["\\", "|", "/", "-"]
+		index = 0
+		while True:
+			if index == 3:
+				yield l[index]
+				index = 0
+			else:
+				yield l[index]
+				index += 1
 	def get_live_status(self, client):
 		data = []
 		#d = self.store.recall()
@@ -1933,13 +1943,14 @@ class tracking_class:
 		return self.make_table([u'time', u'ipaddr', u'filename', u'filesize', u'bytessent', u'percent', u'active'], data)
 	def show_downloads_live(self, args):
 		s = self.screen()
+		ani = self._gen_animation()
 		client = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
 		client.connect(('localhost', 10000))
 		try:
 			index = 0
 			while True:
 				table = self.get_live_status(client)
-				s.write(table)
+				s.write(table+next(ani))
 		except:
 			curses.echo()
 			curses.nocbreak()
