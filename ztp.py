@@ -449,11 +449,13 @@ class config_manager:
 		if setting in exceptions:
 			console("Cannot configure this way")
 		elif "template" in setting:
-			console("Enter each line of the template ending with '%s' on a line by itself" % args[4])
-			newtemplate = self.multilineinput(args[4])
 			if setting == "initial-template":
+				console("Enter each line of the template ending with '%s' on a line by itself" % args[3])
+				newtemplate = self.multilineinput(args[3])
 				self.running["starttemplate"] = newtemplate
 			elif setting == "template":
+				console("Enter each line of the template ending with '%s' on a line by itself" % args[4])
+				newtemplate = self.multilineinput(args[4])
 				if "templates" not in list(self.running):
 					self.running.update({"templates": {}})
 				self.running["templates"][value] = newtemplate
@@ -885,9 +887,9 @@ class config_manager:
 			filedatalist = open("/etc/default/isc-dhcp-server").readlines()
 			for line in filedatalist:
 				if "INTERFACESv4=" in line:
-					newfilelines.append('INTERFACESv4="%s"' % ifstr)
+					newfilelines.append('INTERFACESv4="%s"\n' % ifstr)
 				elif "INTERFACES=" in line:
-					newfilelines.append('INTERFACES="%s"' % ifstr)
+					newfilelines.append('INTERFACES="%s"\n' % ifstr)
 				else:
 					newfilelines.append(line)
 			newfile = ""
@@ -1042,7 +1044,8 @@ class installer:
 		#os.system("yum -y install python2-pip")
 		osd.install_pkg(osd.PIPPKG)
 		#os.system("yum -y install gcc gmp python-devel telnet")
-		osd.install_pkg("gcc gmp python-devel telnet")
+		osd.install_pkg("gcc gmp python-devel")
+		osd.install_pkg("telnet")
 		os.system("pip install pysnmp")
 		os.system("pip install jinja2")
 		os.system("pip install netaddr")
