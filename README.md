@@ -40,7 +40,7 @@ Due to the unique nature of how FreeZTP works and performs discovery of switches
 	  - FreeZTP relies on the Jinja2 templating standard to take a common Cisco IOS configuration and templatize it: creating variables (with the `{{ i_am_a_variable }}` syntax) in the template where unique values can be inserted for a specific switch upon a configuration pull.
 	  - FreeZTP uses two different template types: the 'initial-template', and the custom named final templates. The initial-template is used to set the switch up for discovery, the named (final) templates are used to push the final configuration once the discovery is complete and the switch has been identified (this will make more sense in the **ZTP Process** section). You will most likely never need to change the initial-template. It has a default configuration that will most likely work for you. You will definitely be changing the named templates to fit the configurations you want your switches to have.
 	  - **Template Example Config**
-```
+        ```
         ztp set template SHORT_TEMPLATE ^
         hostname {{ hostname }}
         !
@@ -50,7 +50,7 @@ Due to the unique nature of how FreeZTP works and performs discovery of switches
         !
         end
         ^
-```
+        ```
   - **Keystore**
 	  - The counterpart to the template (specifically: named templates) is the keystore. The keystore is the part of the ZTP configuration which holds the unique configuration values for specific switches (or for many switches). The keystore provides those values for the merge of the final-template once the switch has been identified by the discovery process.
 	  - **Keystore ID**
