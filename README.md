@@ -64,25 +64,28 @@ Due to the unique nature of how FreeZTP works and performs discovery of switches
 			  - ie "SOMEDEVICE" in: `ztp set keystore SOMEID hostname SOMEDEVICE`
 	  - **Keystore Hierarchy**
 		  - The hierarchy of the Keystore works as follows: A Keystore ID can contain multiple (unique) keys, each key with a different value. The Keystore can contain multiple IDs, each with its own set of key-value pairs.
-		- **Keystore Example Config**
-```
-ztp set keystore STACK1 vl1_netmask 255.255.255.0
-ztp set keystore STACK1 vl1_ip_address 10.0.0.200
-ztp set keystore STACK1 hostname CORESWITCH
-```
+	  - **Keystore Example Config**
+        ```
+        ztp set keystore STACK1 vl1_netmask 255.255.255.0
+        ztp set keystore STACK1 vl1_ip_address 10.0.0.200
+        ztp set keystore STACK1 hostname CORESWITCH
+        ```
   - **ID Arrays**
 	  - EXAMPLE: `ztp set idarray STACK1 SERIAL1 SERIAL2 SERIAL3`
 	  - An ID Array is a method of mapping one or more real switch IDs (ie: serial numbers) to a specific keystore. Multiple real IDs can be mapped to the same Keystore ID, which comes in handy when building a configuration for a switch stack (which could take on the serial number of any of the member switches when it boots up).
 	  - The ID array has two pieces:
 		  - The **Array Name** is the name of the specific array. The Array Name must match a Keystore ID in order to pull values from that keystore.
 		  - The **Array ID List** is a list of real switch IDs (serial numbers) which, when searched for, will resolve to the Array Name before mapping to a Keystore ID. When configuring an IDArray in the CLI, each ID in the list is separated by a space.
-		- **ID Array Example Config**
-```
-ztp set idarray STACK1 SERIAL1 SERIAL2 SERIAL3
-```
+	  - **ID Array Example Config**
+        ```
+        ztp set idarray STACK1 SERIAL1 SERIAL2 SERIAL3
+        ```
   - **Associations**
     - An association is a configuration element which maps a keystore to a named template. An association is required for each keystore in order to tell FreeZTP which template to use to do the merge when using certain keystore.
-
+    - **Association Example Config**
+        ```
+        ztp set association id STACK1 template LONG_TEMPLATE
+        ```
 
 -----------------------------------------
 ###   ZTP PROCESS   ###
