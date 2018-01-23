@@ -1683,7 +1683,7 @@ class tracking_class:
 			self.creation = time.time()
 			self.friendlytime = time.strftime("%Y-%m-%d %H:%M:%S")
 			self.lastupdate = self.creation
-			self._inactivity_timeout(2)
+			self._inactivity_timeout(30)
 			self.update(args)
 			#if self.master:
 			#	self.init_master()
