@@ -9,10 +9,15 @@
 ##### Inform FreeZTP version here #####
 version = "v0.8.2"
 
-# NEXT: Set up garbage collection of complete master sessions
+
 # NEXT: Write in supression
 # NEXT: Clean up output logging
 # NEXT: Recognize client tracking (dhcp, upgrade, initial file, custom file)
+# NEXT: Add lease time to DHCP scopes
+# NEXT: Adjust timeout to prevent dups
+# NEXT: Add in calc for transfer rate
+# NEXT: 
+# NEXT: 
 
 ##### Try to import non-native modules, fail gracefully #####
 try:
@@ -1645,6 +1650,7 @@ class tracking_class:
 			for session in self._master:
 				#key = self._master[session].ipaddr+":"+str(self._master[session].filename)
 				self._master[session].update_percent()
+				self._master[session].update_rate()
 				#try:
 				#	bytessent = self._master[session].lastblock*512
 				#except TypeError:
@@ -1658,7 +1664,8 @@ class tracking_class:
 					"bytessent": self._master[session].position,
 					"active": self._master[session].active,
 					"filesize": self._master[session].filesize,
-					"percent": self._master[session].percent
+					"percent": self._master[session].percent,
+					"rate": self._master[session].rate
 				}
 				self.status.update({session: data})
 			self.store(self.status)
@@ -1671,6 +1678,7 @@ class tracking_class:
 			self.filename = None
 			#self.lastblock = None
 			self.position = 0
+			self.last_position = 0
 			#self.redirect = redirect
 			self.parent = parent
 			#self.sessionports = []
@@ -1680,6 +1688,7 @@ class tracking_class:
 			self.threads = []
 			self.filesize = None
 			self.percent = None
+			self.rate = 0
 			self.creation = time.time()
 			self.friendlytime = time.strftime("%Y-%m-%d %H:%M:%S")
 			self.lastupdate = self.creation
@@ -1777,6 +1786,16 @@ class tracking_class:
 					self.percent = 100.00
 				else:
 					self.percent = percent
+		def update_rate(self):
+			diff = self.position - self.last_position
+			rate = diff * 8
+			if rate > 1000000:
+				self.rate = str(rate/1000000.0) + " Mbps"
+			elif rate > 1000:
+				self.rate = str(rate/1000.0) + " Kbps"
+			else:
+				self.rate = str(rate) + " bps"
+			self.last_position = self.position
 	########################################################################
 	########################################################################
 	########################################################################
@@ -1848,7 +1867,7 @@ class tracking_class:
 		dlist.sort()
 		for dload in dlist:
 			data.append(d[dload])
-		return self.make_table([u'time', u'ipaddr', u'filename', u'filesize', u'bytessent', u'percent', u'active'], data)
+		return self.make_table([u'time', u'ipaddr', u'filename', u'filesize', u'bytessent', u'percent', u'rate', u'active'], data)
 	class screen:
 		def __init__(self):
 			self.win = curses.initscr()
@@ -1940,7 +1959,7 @@ class tracking_class:
 		dlist.sort()
 		for dload in dlist:
 			data.append(d[dload])
-		return self.make_table([u'time', u'ipaddr', u'filename', u'filesize', u'bytessent', u'percent', u'active'], data)
+		return self.make_table([u'time', u'ipaddr', u'filename', u'filesize', u'bytessent', u'percent', u'rate', u'active'], data)
 	def show_downloads_live(self, args):
 		s = self.screen()
 		ani = self._gen_animation()
