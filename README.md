@@ -4,12 +4,12 @@ A Zero-Touch Provisioning system built for Cisco Catalyst switches.
 
 
 -----------------------------------------
-###   VERSION   ###
+##   VERSION   ##
 The version of FreeZTP documented here is: **v0.8.2 Beta**
 
 
 -----------------------------------------
-###   TABLE OF CONTENTS   ###
+##   TABLE OF CONTENTS   ##
 1. [What is FreeZTP](#what-is-freeztp)
 2. [Requirements](#requirements)
 3. [Terminology](#terminology)
@@ -22,19 +22,19 @@ The version of FreeZTP documented here is: **v0.8.2 Beta**
 
 
 -----------------------------------------
-###   WHAT IS FREEZTP   ###
+##   WHAT IS FREEZTP   ##
 FreeZTP is a dynamic TFTP server built to automatically configure Cisco Catalyst switches upon first boot (Zero-Touch Provisioning). FreeZTP does this using the 'AutoInstall' feature built into Cisco IOS and automatically enabled by default. FreeZTP configures switches with individual, templatized configurations based upon the unique ID of the switch (usually the serial number).
 
 
 -----------------------------------------
-###   REQUIREMENTS   ###
+##   REQUIREMENTS   ##
 OS: Tested on **CentOS 7**, **Ubuntu 16**, and **Raspbian Stretch Lite**
 
 Interpreter: **Python 2.7.5+**
 
 
 -----------------------------------------
-###   TERMINOLOGY   ###
+##   TERMINOLOGY   ##
 Due to the unique nature of how FreeZTP works and performs discovery of switches, there are a few terms you will need to know to understand the application.
   - **Template**
 	  - FreeZTP relies on the Jinja2 templating standard to take a common Cisco IOS configuration and templatize it: creating variables (with the `{{ i_am_a_variable }}` syntax) in the template where unique values can be inserted for a specific switch upon a configuration pull.
@@ -87,7 +87,7 @@ Due to the unique nature of how FreeZTP works and performs discovery of switches
         ```
 
 -----------------------------------------
-###   ZTP PROCESS   ###
+##   ZTP PROCESS   ##
 FreeZTP relies on the 'AutoInstall' function of a Cisco Catalyst switch to configure the switch upon first boot. The process followed to configure the switch is outlined below.
 
 #####  1. STEP 1 - POWER ON: The Catalyst switch is powered on (or rebooted) with no startup-configuration
@@ -143,7 +143,7 @@ FreeZTP relies on the 'AutoInstall' function of a Cisco Catalyst switch to confi
 
 
 -----------------------------------------
-###   INSTALLATION   ###
+##   INSTALLATION   ##
 The installation of FreeZTP is quick and easy using the built-in installer. Make sure you are logged in as root or are able to `sudo su` to install and operate FreeZTP.
 
   1. Install OS with appropriate IP and OS settings and update to latest patches (recommended)
@@ -156,7 +156,7 @@ The installation of FreeZTP is quick and easy using the built-in installer. Make
 
 
 -----------------------------------------
-###   COMMAND INTERFACE   ###
+##   COMMAND INTERFACE   ##
 The FreeZTP service runs in the background as a system service. All commands to the FreeZTP service start with `ztp` at the command line. For example: you can check the status of the background service using the command `ztp show status`, you can check the current configuration of the ZTP server with the command `ztp show config`.
 
 The command interface is fully featured with helpers which can be seen either by hitting ENTER with an incomplete command in the prompt, or by using the TAB key to display available options/autocomplete the command (similar to a Cisco IOS command line, but without the use of the question mark).
@@ -333,7 +333,7 @@ end
 
 
 -----------------------------------------
-###   CONTRIBUTING   ###
+##   CONTRIBUTING   ##
 If you would like to help out by contributing code or reporting issues, please do!
 
 Visit the GitHub page (https://github.com/convergeone/freeztp) and either report an issue or fork the project, commit some changes, and submit a pull request.
