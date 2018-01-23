@@ -90,25 +90,24 @@ Due to the unique nature of how FreeZTP works and performs discovery of switches
 ##   ZTP PROCESS   ##
 FreeZTP relies on the 'AutoInstall' function of a Cisco Catalyst switch to configure the switch upon first boot. The process followed to configure the switch is outlined below.
 
-The new switch should have one of its ports connected to a network (likely an upstream switch) which has the FreeZTP server accessible. The FreeZTP server can be on the same VLAN (so it can serve up DHCP addresses directly) or on a different VLAN which has a gateway and an IP helper pointed at the FreeZTP server so it can serve up DHCP
+The new switch should have one of its ports connected to a network (likely an upstream switch) which has the FreeZTP server accessible. The FreeZTP server can be on the same VLAN as the new switch (so it can serve up DHCP addresses directly) or on a different VLAN which has a gateway and an IP helper pointed at the FreeZTP server so it can serve up DHCP.
 
 ####  1. STEP 1 - POWER ON: The Catalyst switch is powered on (or rebooted) with no startup-configuration
   - NOTE: _Once the operating system is loaded on the switch and it completes the boot-up process, it will start the AutoInstall process_
-  - **Step 1.1:** The switch will enable all of its ports as access ports for interface Vlan1.
+  - **Step 1.1:** The switch will enable all of its ports as access ports for VLAN 1.
   - **Step 1.2:** The switch will enable interface (SVI) Vlan1 and begin sending out DHCP requests from interface Vlan1.
-  - **Step 1.3:** Once the switch receives a DHCP lease with a TFTP server option (option 66), it will send a TFTP request for a file named "**network-confg**".
-  - **Step 1.4:** The switch sends a TFTP request to the TFTP server in the DHCP option 66 for a file named "**network-confg**".
+  - **Step 1.3:** Once the switch receives a DHCP lease from FreeZTP with the TFTP server option (option 66), it will send a TFTP request for a file named "**network-confg**".
 
 ####  2. STEP 2 - INITIAL-CONFIG: An initial config is generated, sent, and loaded for switch (target) discovery
   - **Step 2.1:** When the request for the "network-confg" file is received by the ZTP server, it generates the config by performing an automatic merge with the `initial-template`:
     - **Step 2.1.1:** The `{{ autohostname }}` variable in the initial-template is filled by an automatically generated hexadecimal temporary name (example: ZTP-22F1388804). This temporary name is saved in memory by the ZTP server for future reference because the switch will use this name to request a new TFTP file in a later step
     - **Step 2.1.2:** The `{{ community }}` variable is filled with the value set in the `community` configuration field
-  - **Step 2.2:** This merged configuration is passed to the Cisco switch as the "network-confg" file. The switch will load it into its active running-config and proceed to step **XXXXXXXXX**
+  - **Step 2.2:** This merged configuration is passed to the Cisco switch as the "network-confg" file. The switch loads it into its active running-config and proceed to step **XXXXXXXXX**
     - NOTE: _You can see an example initial configuration from the ZTP server by issuing the command_ `ztp request initial-merge`
 
 ####  3. STEP 3 - SNMP DISCOVERY: The ZTP server discovers the switch's "real ID" (ie: serial number) using SNMP
   - **Step 3.1:** After the initial config file is passed to and loaded by the switch, the ZTP server initiates a SNMP discovery of the switch
-    - **Step 3.1.1:** The SNMP request targets the source IP of the switch which was used to originally request the "network-confg" file in step 1.4
+    - **Step 3.1.1:** The SNMP request targets the source IP of the switch which was used to originally request the "network-confg" file in step 1.3
     - **Step 3.1.2:** The SNMP request uses the value of the `community` configuration field as the authentication community (which the switch should honor once it loads the configuration from the "network-confg" file)
     - **Step 3.1.3:** The SNMP request uses the OID from the `snmpoid` configuration field which, by default, is the OID to obtain the serial number of the switch
     - **Step 3.1.4:** Once the SNMP query succeeds, the ZTP server maps the real ID (ie: serial number) of the discovered switch to its temporary hostname generated in step 2.1.1
@@ -132,7 +131,7 @@ The new switch should have one of its ports connected to a network (likely an up
 
 ####   Ladder Diagram   ####
 
-**SWITCH**  -------> Step 1.4: File "network-confg" requested --------------------------->  **ZTP Server**
+**SWITCH**  -------> Step 1.3: File "network-confg" requested --------------------------->  **ZTP Server**
 
 **SWITCH**  <------- Step 2.2: Auto-generated initial config passed to switch <-----------  **ZTP Server**
 
@@ -147,8 +146,10 @@ The new switch should have one of its ports connected to a network (likely an up
 ##   INSTALLATION   ##
 The installation of FreeZTP is quick and easy using the built-in installer. Make sure you are logged in as root or are able to `sudo su` to install and operate FreeZTP.
 
-  1. Install OS with appropriate IP and OS settings and update to latest patches (recommended)
-  	- Check out the [CentOS Minimal Server - Post-Install Setup][centos-post-install] page for help with some of the post-OS-install configuration steps.
+  1. Install OS with appropriate IP and OS settings and update to latest patches (recommended). Check out the below links for easy Post-Install processes for OS's supported by FreeZTP.
+    - **CentOS 7:** [CentOS Minimal Server - Post-Install Setup][centos-post-install]
+    - **Ubuntu 16:** [Ubuntu Minimal Server - Post-Install Setup][ubuntu-post-install]
+    - **Raspbian:** [Raspbian Minimal Server - Post-Install Setup][raspbian-post-install]
   2. Download the FreeZTP repository (may require access to the GitHub ConvergeOne organization)
   3. Change to the directory where the FreeZTP main code file (ztp.py) is stored: `cd freeztp`
   4. Run the FreeZTP program in install mode to perform the installation: `python ztp.py install`. Make sure the machine has internet access as this process will download and install several packages for this to happen.
@@ -341,4 +342,5 @@ Visit the GitHub page (https://github.com/convergeone/freeztp) and either report
 
 
 [centos-post-install]: https://github.com/PackeTsar/scriptfury/blob/master/CentOS_Post_Install.md
-
+[ubuntu-post-install]: https://github.com/PackeTsar/scriptfury/blob/master/Ubuntu_Post_Install.md
+[raspbian-post-install]: https://github.com/PackeTsar/scriptfury/blob/master/Raspbian_Post_Install.md
