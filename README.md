@@ -1,11 +1,11 @@
 # FreeZTP
 
-A zero-touch provisioning system built for Cisco Catalyst switches.
+A Zero-Touch Provisioning system built for Cisco Catalyst switches.
 
 
 -----------------------------------------
 ###   VERSION   ###
-The version of FreeZTP documented here is: **v0.5.1 Beta**
+The version of FreeZTP documented here is: **v0.8.2 Beta**
 
 
 -----------------------------------------
@@ -28,7 +28,7 @@ FreeZTP is a dynamic TFTP server built to automatically configure Cisco Catalyst
 
 -----------------------------------------
 ###   REQUIREMENTS   ###
-OS: **CentOS7**
+OS: **Linux** (Tested on CentOS 7, Ubuntu 16, and Raspbian Stretch Lite)
 
 Interpreter: **Python 2.7.5+**
 
@@ -37,16 +37,19 @@ Interpreter: **Python 2.7.5+**
 ###   TERMINOLOGY   ###
 Due to the unique nature of how FreeZTP works and performs discovery of switches, there are a few terms you will need to know to understand the application.
   - **Template**
-	  - FreeZTP relies on the Jinja2 templating standard to take a common Cisco IOS configuration and templatize it: creating variables (with the `{{ i_am_a_variable }}` syntax) in the template where unique values can be inserted for a specific switch upon configuration push.
-	  - FreeZTP uses two different template types: the 'initial-template', and the custom named final templates. The initial-template is used to set the switch up for discovery, the final templates are used to push the final configuration once the discovery is complete and the switch has been identified (this will make more sense in the **ZTP Process** section).
+	  - FreeZTP relies on the Jinja2 templating standard to take a common Cisco IOS configuration and templatize it: creating variables (with the `{{ i_am_a_variable }}` syntax) in the template where unique values can be inserted for a specific switch upon a configuration pull.
+	  - FreeZTP uses two different template types: the 'initial-template', and the custom named final templates. The initial-template is used to set the switch up for discovery, the named (final) templates are used to push the final configuration once the discovery is complete and the switch has been identified (this will make more sense in the **ZTP Process** section). You will most likely never need to change the initial-template. It has a default configuration that will most likely work for you. You will definitely be changing the named templates to fit the configurations you want your switches to have.
   - **Keystore**
-	  - The counterpart to the template (specifically: the final templates) is the keystore. The keystore is the part of the ZTP configuration which holds the unique configuration values for specific switches (or for an array of switches). The keystore provides those values for the merge of the final-template once the switch has been identified by the discovery process.
+	  - The counterpart to the template (specifically: named templates) is the keystore. The keystore is the part of the ZTP configuration which holds the unique configuration values for specific switches (or for many switches). The keystore provides those values for the merge of the final-template once the switch has been identified by the discovery process.
 	  - **Keystore ID**
 		  - A Keystore ID is the named identifier for a specific store which holds a set of key-value pairs.
+			  - ie "SOMEID" in: `ztp set keystore SOMEID hostname SOMEDEVICE`
 	  - **Keystore Key**
 		  - A Keystore Key is the key side of a certain key-value pair which resides under a named Keystore ID.
+			  - ie "hostname" in: `ztp set keystore SOMEID hostname SOMEDEVICE`
 	  - **Keystore Value**
 		  - A Keystore Value is the value side of a certain key-value pair which resides under a named Keystore ID.
+			  - ie "SOMEDEVICE" in: `ztp set keystore SOMEID hostname SOMEDEVICE`
 	  - **Keystore Hierarchy**
 		  - The hierarchy of the Keystore works as follows: A Keystore ID can contain multiple (unique) keys, each key with a different value. The Keystore can contain multiple IDs, each with its own set of key-value pairs.
   - **ID Arrays**
