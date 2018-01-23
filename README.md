@@ -90,8 +90,9 @@ Due to the unique nature of how FreeZTP works and performs discovery of switches
 ##   ZTP PROCESS   ##
 FreeZTP relies on the 'AutoInstall' function of a Cisco Catalyst switch to configure the switch upon first boot. The process followed to configure the switch is outlined below.
 
+The new switch should have one of its ports connected to a network (likely an upstream switch) which has the FreeZTP server accessible. The FreeZTP server can be on the same VLAN (so it can serve up DHCP addresses directly) or on a different VLAN which has a gateway and an IP helper pointed at the FreeZTP server so it can serve up DHCP
+
 ####  1. STEP 1 - POWER ON: The Catalyst switch is powered on (or rebooted) with no startup-configuration
-  - REQUIREMENT: _The switch should be connected (via one of its ports) to another switch on a VLAN which is ready to serve DHCP. The DHCP scope should have DHCP OPTION 66 configured with the IP address (string) of the ZTP server._
   - NOTE: _Once the operating system is loaded on the switch and it completes the boot-up process, it will start the AutoInstall process_
   - **Step 1.1:** The switch will enable all of its ports as access ports for interface Vlan1.
   - **Step 1.2:** The switch will enable interface (SVI) Vlan1 and begin sending out DHCP requests from interface Vlan1.
