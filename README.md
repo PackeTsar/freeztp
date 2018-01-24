@@ -85,6 +85,7 @@ Due to the unique nature of how FreeZTP works and performs discovery of switches
         ztp set association id STACK1 template LONG_TEMPLATE
         ```
 
+
 -----------------------------------------
 ##   ZTP PROCESS   ##
 FreeZTP relies on the 'AutoInstall' function of a Cisco Catalyst switch to configure the switch upon first boot. The process followed to configure the switch is outlined below.
@@ -95,7 +96,13 @@ The new switch should have one of its ports connected to a network (likely an up
   - NOTE: _Once the operating system is loaded on the switch and it completes the boot-up process, it will start the AutoInstall process_
   - **Step 1.1:** The switch will enable all of its ports as access ports for VLAN 1.
   - **Step 1.2:** The switch will enable interface (SVI) Vlan1 and begin sending out DHCP requests from interface Vlan1.
-  - **Step 1.3:** Once the switch receives a DHCP lease from FreeZTP with the TFTP server option (option 66), it will send a TFTP request for a file named "**network-confg**".
+  - **Step 1.3:** If DHCP option 125 was configured (`ztp set dhcpd SCOPENAME imagediscoveryfile-option enable`) and that option is handed to the switch in its DHCP lease:
+	  - **Step 1.3.1:** The switch will send a TFTP request to ZTP requesting the filename specified (via Hex) in the DHCP option ("freeztp_ios_upgrade" by default)
+	  - **Step 1.3.2:** FreeZTP will check its "imagefile" (`ztp set someIOSfile.bin`) setting and dynamically generate a freeztp_ios_upgrade file containing the name of that .bin or .tar file. This freeztp_ios_upgrade is then sent to the switch to be downloaded.
+	  - **Step 1.3.3:** The switch reads the file and determines what file is should download as its upgrade image. Once determined, the switch sends a TFTP download request to ZTP for that .bin or .tar filename. 
+	  - **Step 1.3.4:** If the .bin or .tar file does not exist, the switch abandon the upgrade attempt and proceed to step 1.4
+	  - **Step 1.3.5:** If successfully downloaded, the switch will install the image and upgrade itself. Depending on the switch model, it may or may not automatically reboot itself. After the upgrade, the switch will continue through the ZTP process
+  - **Step 1.4:** The switch will send a TFTP request for a file named "**network-confg**" to the IP address specified in the DHCP option 66 (hopefully the ZTP server).
 
 ####  2. STEP 2 - INITIAL-CONFIG: An initial config is generated, sent, and loaded for switch (target) discovery
   - **Step 2.1:** When the request for the "network-confg" file is received by the ZTP server, it generates the config by performing an automatic merge with the `initial-template`:
@@ -106,7 +113,7 @@ The new switch should have one of its ports connected to a network (likely an up
 
 ####  3. STEP 3 - SNMP DISCOVERY: The ZTP server discovers the switch's "real ID" (ie: serial number) using SNMP
   - **Step 3.1:** After the initial config file is passed to and loaded by the switch, the ZTP server initiates a SNMP discovery of the switch
-    - **Step 3.1.1:** The SNMP request targets the source IP of the switch which was used to originally request the "network-confg" file in step 1.3
+    - **Step 3.1.1:** The SNMP request targets the source IP of the switch which was used to originally request the "network-confg" file in step 1.4
     - **Step 3.1.2:** The SNMP request uses the value of the `community` configuration field as the authentication community (which the switch should honor once it loads the configuration from the "network-confg" file)
     - **Step 3.1.3:** The SNMP request uses the OID from the `snmpoid` configuration field which, by default, is the OID to obtain the serial number of the switch
     - **Step 3.1.4:** Once the SNMP query succeeds, the ZTP server maps the real ID (ie: serial number) of the discovered switch to its temporary hostname generated in step 2.1.1
@@ -130,15 +137,23 @@ The new switch should have one of its ports connected to a network (likely an up
 
 ####   Ladder Diagram   ####
 
-**SWITCH**  -------> Step 1.3: File "network-confg" requested --------------------------->  **ZTP Server**
+**SWITCH**  -----> Step 1.3.1: File "freeztp_ios_upgrade" requested ---------------------->  **ZTP Server**
 
-**SWITCH**  <------- Step 2.2: Auto-generated initial config passed to switch <-----------  **ZTP Server**
+**SWITCH**  <----- Step 1.3.2: Auto-generated "freeztp_ios_upgrade" file sent to switch <--  **ZTP Server**
 
-**SWITCH**  <------- Step 3: ZTP server performed discovery of real ID using SNMP <-------  **ZTP Server**
+**SWITCH**  -----> Step 1.3.3: .bin or .tar file requested ------------------------------->  **ZTP Server**
 
-**SWITCH**  -------> Step 4.1: Switch requests new file based on new hostname ----------->  **ZTP Server**
+**SWITCH**  <----- Step 1.3.5: .bin or .tar file sent to switch if it exists <-------------  **ZTP Server**
 
-**SWITCH**  <------- Step 4.4: ZTP responds to TFTP request with final config <-----------  **ZTP Server**
+**SWITCH**  -----> Step 1.4:   File "network-confg" requested ---------------------------->  **ZTP Server**
+
+**SWITCH**  <----- Step 2.2:   Auto-generated initial config passed to switch <------------  **ZTP Server**
+
+**SWITCH**  <----- Step 3:     ZTP server performed discovery of real ID using SNMP <------  **ZTP Server**
+
+**SWITCH**  -----> Step 4.1:   Switch requests new file based on new hostname ------------>  **ZTP Server**
+
+**SWITCH**  <----- Step 4.4:   ZTP responds to TFTP request with final config <------------  **ZTP Server**
 
 
 -----------------------------------------
