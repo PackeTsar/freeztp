@@ -16,9 +16,8 @@ The version of FreeZTP documented here is: **v0.8.2 Beta**
 4. [ZTP Process](#ztp-process)
 5. [Installation](#installation)
 6. [Command Interface](#command-interface)
-7. [0.1.0 TO 0.2.0 Updates](#updates-in-v010----v020)
-8. [0.2.0 TO 0.4.0 Updates](#updates-in-v020----v040)
-9. [Contributing](#contributing)
+7. [DHCP Functionality](#dhcp-functionality)
+8. [Contributing](#contributing)
 
 
 -----------------------------------------
@@ -352,23 +351,21 @@ ztp set imagefile cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin
 ```
 
 
---------------------------------------
-####   UPDATES IN V0.1.0 --> V0.2.0   ####
+-----------------------------------------
+##   DHCP FUNCTIONALITY   ##
+FreeZTP installs a DHCP service during the install. This DHCP service is used to serve IP addresses to switches with the appropriate options included.
 
-**ADDED FEATURES:**
+FreeZTP commands can be used to fully configure the DHCP server. Scopes and options are created using the syntax `ztp set dhcpd SCOPENAME <option> <value>`. 
 
-- Support has been added for using multiple templates in ZTP simultaneously (using custom named templates). The use of multiple templates requires that associations be created between each keystore and a named template using the `set association` command. The new configuration elements are made apparent in the new default configuration.
+FreeZTP automatically configures one or more scopes for you upon installation based on the interfaces detected in Linux and what IP addresses are on them. These scopes are needed to instruct the DHCP service to listen on those interfaces for DHCP requests. If you plan to deploy switches on the same VLAN as the FreeZTP server, then you can just add a few options to the auto-generated scope so it is ready to serve IP addresses. The installation instructions show how to do this.
 
+After any configuration changes to the DHCP scopes, you will need to run the command `ztp request dhcpd-commit` to instruct ZTP to convert the scope settings, write them to the DHCP config file, and restart the DHCP service so the new settings take effect.
 
-####   UPDATES IN V0.2.0 --> V0.4.0   ####
+You can check on the status of the DHCP server using the command `ztp show status`
 
-**ADDED FEATURES:**
+If at any point you have botched up your DHCP scopes and the DHCP service will not start back up, just delete all your scopes (using `ztp clear dhcpd` commands), and run the `ztp request auto-dhcpd` command. This will rerun the DHCP discovery and auto scope creation. Then you will just need to do a `ztp request dhcpd-commit` to commit the changes and restart the service.
 
-- Logging has been added to enable a user to what the background ZTP service is doing or a history of what has been done. 
-  - The command `ztp show log` will show the full logging file contents
-  - The command `ztp show log tail` will show partial contents and will output and new logs to the terminal in real time
-  - The command `ztp clear log` will clear the log file of all contents
-- The `default-keystore` setting has been added which allows a keystore to be used when target discovery fails or when an unknown real ID is found during discovery. The function can also be tested by using the `ztp request default-keystore-test` command
+It is possible to use an external DHCP server instead of the FreeZTP one, but you will have to manually configure option 150 (for TFTP service from FreeZTP's IP), and option 125 (to specify the IOS image discovery file). Option 150 will need to contain the IP address of the ZTP server. You can get some instructions on how to configure option 125 by running the command `ztp request dhcp-option-125 cisco` or `ztp request dhcp-option-125 windows`.
 
 
 -----------------------------------------
