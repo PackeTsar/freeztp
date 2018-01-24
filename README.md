@@ -148,13 +148,31 @@ The installation of FreeZTP is quick and easy using the built-in installer. Make
 
   1. Install OS with appropriate IP and OS settings and update to latest patches (recommended). Check out the below links for easy Post-Install processes for OS's supported by FreeZTP.
     - **CentOS 7:** [CentOS Minimal Server - Post-Install Setup][centos-post-install]
+	    - Make sure to install Git for a CentOS install `sudo yum install git -y`
     - **Ubuntu 16:** [Ubuntu Minimal Server - Post-Install Setup][ubuntu-post-install]
+      - Make sure to install python-pip and git for Ubuntu
+        - `sudo apt install -y python-pip`
+        - `sudo apt-get install -y git`
     - **Raspbian:** [Raspbian Minimal Server - Post-Install Setup][raspbian-post-install]
-  2. Download the FreeZTP repository (may require access to the GitHub ConvergeOne organization)
+      - Make sure to install python-pip and git for Raspbian
+        - `sudo apt install -y python-pip`
+        - `sudo apt-get install -y git`
+  2. Download the FreeZTP repository using Git
+    - `git clone https://github.com/convergeone/freeztp.git`
   3. Change to the directory where the FreeZTP main code file (ztp.py) is stored: `cd freeztp`
   4. Run the FreeZTP program in install mode to perform the installation: `python ztp.py install`. Make sure the machine has internet access as this process will download and install several packages for this to happen.
     - FreeZTP will perform the install of the packages and services for full operation.
     - The installation will also install a CLI helper script. You will need to logout and log back into your SSH session to activate this helper script.
+  5. Configure DHCP using the ZTP commands
+	  - During installation, ZTP will install a DHCP server, detect the network interfaces in Linux, and configure DHCP scopes for each of the interfaces. The created DHCP scopes will be inactive to serve DHCP as they will have no addresses available to lease.
+	  - If you want to use the automatically generated DHCP scope (the new switches will be on the same VLAN as one of FreeZTPs interfaces), you just need to specify a first and last address for the lease range. After configured, you will need to commit the ZTP DHCP configuration. Below is example of how to do this.
+        ```
+        ztp set dhcpd INTERFACE-ETH0 first-address 192.168.1.100
+        ztp set dhcpd INTERFACE-ETH0 last-address 192.168.1.200
+        !
+        ztp request dhcpd-commit 
+        ```
+	  - If the switches will not be on the same VLAN, then create a new scope.
 
 
 -----------------------------------------
@@ -181,6 +199,7 @@ Below is the CLI guide for FreeZTP. You can see this at the command line by ente
  - show status                                                 |  Show the status of the ZTP background service
  - show version                                                |  Show the current version of ZTP
  - show log (tail) (<num_of_lines>)                            |  Show or tail the log file
+ - show downloads (live)                                       |  Show list of TFTP downloads
 ----------------------------------------------------------------------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------------------------------------------------
 --------------------------------------------------- SETTINGS YOU PROBABLY SHOULDN'T CHANGE ---------------------------------------------------
@@ -189,23 +208,34 @@ Below is the CLI guide for FreeZTP. You can see this at the command line by ente
  - set community <value>                                       |  Set the SNMP community you want to use for target ID identification
  - set snmpoid <value>                                         |  Set the SNMP OID to use to pull the target ID during identification
  - set initial-template <end_char>                             |  Set the initial configuration j2 template used for target identification
+ - set tftproot <tftp_root_directory>                          |  Set the root directory for TFTP files
+ - set imagediscoveryfile <filename>                           |  Set the name of the IOS image discovery file used for IOS upgrades
 --------------------------------------------------------- SETTINGS YOU SHOULD CHANGE ---------------------------------------------------------
  - set template <template_name> <end_char>                     |  Create/Modify a named J2 tempate which is used for the final config push
  - set keystore <id/arrayname> <keyword> <value>               |  Create a keystore entry to be used when merging final configurations
  - set idarray <arrayname> <id_#1> <id_#2> ...                 |  Create an ID array to allow multiple real ids to match one keystore id
  - set association id <id/arrayname> template <template_name>  |  Associate a keystore id or an idarray to a specific named template
  - set default-keystore (none|keystore-id)                     |  Set a last-resort keystore and template for when target identification fails
+ - set imagefile <binary_image_file_name>                      |  Set the image file name to be used for upgrades (must be in tftp root dir)
+ - set dhcpd <scope-name> [parameters]                         |  Configure DHCP scope(s) to serve IP addresses to ZTP clients
 ----------------------------------------------------------------------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------------------------------------------------
  - clear template <template_name>                              |  Delete a named configuration template
  - clear keystore <id> (all|<keyword>)                         |  Delete an individual key or a whole keystore ID from the configuration
  - clear idarray <arrayname>                                   |  Delete an ID array from the configuration
  - clear association <id/arrayname>                            |  Delete an association from the configuration
+ - clear dhcpd <scope-name>                                    |  Delete a DHCP scope
  - clear log                                                   |  Delete the logging info from the logfile
+ - clear downloads                                             |  Delete the list of TFTP downloads
 ----------------------------------------------------------------------------------------------------------------------------------------------
  - request merge-test <id>                                     |  Perform a test jinja2 merge of the final template with a keystore ID
  - request initial-merge                                       |  See the result of an auto-merge of the initial-template
  - request default-keystore-test                               |  Check that the default-keystore is fully configured to return a template
+ - request snmp-test <ip-address>                              |  Run a SNMP test using the configured community and OID against an IP
+ - request dhcp-option-125 (windows|cisco)                     |  Show the DHCP Option 125 Hex value to use on the DHCP server for OS upgrades
+ - request dhcpd-commit                                        |  Compile the DHCP config, write to config file, and restart the DHCP service
+ - request auto-dhcpd                                          |  Automatically detect local interfaces and build DHCP scopes accordingly
+ - request ipc-console                                         |  Connect to the IPC console to run commands (be careful)
 ----------------------------------------------------------------------------------------------------------------------------------------------
  - service (start|stop|restart|status)                         |  Start, Stop, or Restart the installed ZTP service
 ----------------------------------------------------------------------------------------------------------------------------------------------
@@ -224,6 +254,8 @@ ztp set suffix -confg
 ztp set initialfilename network-confg
 ztp set community secretcommunity
 ztp set snmpoid 1.3.6.1.2.1.47.1.1.1.1.11.1000
+ztp set tftproot /etc/ztp/tftproot/
+ztp set imagediscoveryfile freeztp_ios_upgrade
 !
 !
 ztp set initial-template ^
@@ -235,6 +267,57 @@ end
 ^
 !
 #######################################################
+#######################################################
+
+!
+!
+!
+#######################################################
+ztp set template SHORT_TEMPLATE ^
+hostname {{ hostname }}
+!
+interface Vlan1
+ ip address {{ vl1_ip_address }} 255.255.255.0
+ no shut
+!
+end
+^
+!
+!
+!
+#######################################################
+ztp set template LONG_TEMPLATE ^
+hostname {{ hostname }}
+!
+interface Vlan1
+ ip address {{ vl1_ip_address }} {{ vl1_netmask }}
+ no shut
+!
+ip domain-name test.com
+!
+username admin privilege 15 secret password123
+!
+aaa new-model
+!
+!
+aaa authentication login CONSOLE local
+aaa authorization console
+aaa authorization exec default local if-authenticated
+!
+crypto key generate rsa modulus 2048
+!
+ip ssh version 2
+!
+line vty 0 15
+login authentication default
+transport input ssh
+line console 0
+login authentication CONSOLE
+end
+^
+!
+!
+!
 #######################################################
 !
 !
@@ -259,59 +342,9 @@ ztp set association id STACK1 template LONG_TEMPLATE
 !
 !
 ztp set default-keystore MY_DEFAULT
+ztp set imagefile cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin
 !
-!
-!
-#######################################################
-ztp set template SHORT_TEMPLATE ^
-hostname {{ hostname }}
-other
-!
-interface Vlan1
- ip address {{ vl1_ip_address }} 255.255.255.0
- no shut
-!
-end
-^
-!
-!
-!
-#######################################################
-ztp set template LONG_TEMPLATE ^
-hostname {{ hostname }}
-!
-interface Vlan1
- ip address {{ vl1_ip_address }} {{ vl1_netmask }}
- no shut
-!
-ip domain-name test.com
-!
-username admin privilege 15 secret Sigma4290!
-!
-aaa new-model
-!
-!
-aaa authentication login CONSOLE local
-aaa authorization console
-aaa authorization exec default local if-authenticated
-!
-crypto key generate rsa modulus 2048
-!
-ip ssh version 2
-!
-line vty 0 15
-login authentication default
-transport input ssh
-line console 0
-login authentication CONSOLE
-end
-^
-!
-!
-!
-#######################################################
-
-[root@ZTP ~]# 
+[root@ZTP ~]#
 ```
 
 
