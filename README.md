@@ -147,17 +147,17 @@ The new switch should have one of its ports connected to a network (likely an up
 The installation of FreeZTP is quick and easy using the built-in installer. Make sure you are logged in as root or are able to `sudo su` to install and operate FreeZTP.
 
   1. Install OS with appropriate IP and OS settings and update to latest patches (recommended). Check out the below links for easy Post-Install processes for OS's supported by FreeZTP.
-    - **CentOS 7:** [CentOS Minimal Server - Post-Install Setup][centos-post-install]
-      - Make sure to install Git for a CentOS instal
-        - `sudo yum install git -y`
-    - **Ubuntu 16:** [Ubuntu Minimal Server - Post-Install Setup][ubuntu-post-install]
-      - Make sure to install python-pip and git for Ubuntu
-        - `sudo apt install -y python-pip`
-        - `sudo apt-get install -y git`
-    - **Raspbian:** [Raspbian Minimal Server - Post-Install Setup][raspbian-post-install]
-      - Make sure to install python-pip and git for Raspbian
-        - `sudo apt install -y python-pip`
-        - `sudo apt-get install -y git`
+	  - **CentOS 7:** [CentOS Minimal Server - Post-Install Setup][centos-post-install]
+	    - Make sure to install Git for a CentOS instal
+	      - `sudo yum install git -y`
+	  - **Ubuntu 16:** [Ubuntu Minimal Server - Post-Install Setup][ubuntu-post-install]
+	    - Make sure to install python-pip and git for Ubuntu
+	      - `sudo apt install -y python-pip`
+	      - `sudo apt-get install -y git`
+	  - **Raspbian:** [Raspbian Minimal Server - Post-Install Setup][raspbian-post-install]
+	    - Make sure to install python-pip and git for Raspbian
+	      - `sudo apt install -y python-pip`
+	      - `sudo apt-get install -y git`
   2. Download the FreeZTP repository using Git
 	  - `git clone https://github.com/convergeone/freeztp.git`
   3. Change to the directory where the FreeZTP main code file (ztp.py) is stored: `cd freeztp`
