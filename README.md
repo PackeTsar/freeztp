@@ -159,11 +159,11 @@ The installation of FreeZTP is quick and easy using the built-in installer. Make
         - `sudo apt install -y python-pip`
         - `sudo apt-get install -y git`
   2. Download the FreeZTP repository using Git
-    - `git clone https://github.com/convergeone/freeztp.git`
+	  - `git clone https://github.com/convergeone/freeztp.git`
   3. Change to the directory where the FreeZTP main code file (ztp.py) is stored: `cd freeztp`
   4. Run the FreeZTP program in install mode to perform the installation: `python ztp.py install`. Make sure the machine has internet access as this process will download and install several packages for this to happen.
-    - FreeZTP will perform the install of the packages and services for full operation.
-    - The installation will also install a CLI helper script. You will need to logout and log back into your SSH session to activate this helper script.
+	  - FreeZTP will perform the install of the packages and services for full operation.
+	  - The installation will also install a CLI helper script. You will need to logout and log back into your SSH session to activate this helper script.
   5. Configure DHCP using the ZTP commands
 	  - During installation, ZTP will install a DHCP server, detect the network interfaces in Linux, and configure DHCP scopes for each of the interfaces. The created DHCP scopes will be inactive to serve DHCP as they will have no addresses available to lease.
 	  - If you want to use the automatically generated DHCP scope (the new switches will be on the same VLAN as one of FreeZTPs interfaces), you just need to specify a first and last address for the lease range. After configured, you will need to commit the ZTP DHCP configuration. Below is example of how to do this.
@@ -175,8 +175,8 @@ The installation of FreeZTP is quick and easy using the built-in installer. Make
         ```
     - If the switches will not be on the same VLAN, then create a new scope.
   6. Start configuring switches!
-    - FreeZTP comes with a default configuration which is ready to configure switches. A default-keystore is configured which will hand out a basic (non-individualized) config to a newly booted switch.
-    - There are a few example templates, keystores, associations, an ID array already in the config. Feel free to modify them to do what you want, or blow them away and customize everything.
+	  - FreeZTP comes with a default configuration which is ready to configure switches. A default-keystore is configured which will hand out a basic (non-individualized) config to a newly booted switch.
+	  - There are a few example templates, keystores, associations, an ID array already in the config. Feel free to modify them to do what you want, or blow them away and customize everything.
 
 
 -----------------------------------------
