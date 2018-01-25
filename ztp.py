@@ -14,7 +14,7 @@ version = "v0.8.3"
 # NEXT: Recognize client tracking (dhcp, upgrade, initial file, custom file)
 # NEXT: Add lease time to DHCP scopes
 # NEXT: Allow SNMP to use multiple OIDs?
-# NEXT: 
+# NEXT: Remove all the commented code
 
 ##### Try to import non-native modules, fail gracefully #####
 try:
