@@ -16,7 +16,7 @@ version = "v0.8.2"
 # NEXT: Add lease time to DHCP scopes
 # NEXT: Adjust timeout to prevent dups
 # NEXT: Add in calc for transfer rate
-# NEXT: 
+# NEXT: Allow SNMP to use multiple OIDs?
 # NEXT: 
 
 ##### Try to import non-native modules, fail gracefully #####

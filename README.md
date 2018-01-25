@@ -12,12 +12,13 @@ The version of FreeZTP documented here is: **v0.8.2 Beta**
 ##   TABLE OF CONTENTS   ##
 1. [What is FreeZTP](#what-is-freeztp)
 2. [Requirements](#requirements)
-3. [Terminology](#terminology)
-4. [ZTP Process](#ztp-process)
-5. [Installation](#installation)
-6. [Command Interface](#command-interface)
-7. [DHCP Functionality](#dhcp-functionality)
-8. [Contributing](#contributing)
+3. [Installation](#installation)
+4. [Getting Started](#getting-started)
+5. [Terminology](#terminology)
+6. [ZTP Process](#ztp-process)
+7. [Command Interface](#command-interface)
+8. [DHCP Functionality](#dhcp-functionality)
+9. [Contributing](#contributing)
 
 
 -----------------------------------------
@@ -30,6 +31,52 @@ FreeZTP is a dynamic TFTP server built to automatically configure Cisco Catalyst
 OS: Tested on **CentOS 7**, **Ubuntu 16**, and **Raspbian Stretch Lite**
 
 Interpreter: **Python 2.7.5+**
+
+
+-----------------------------------------
+##   INSTALLATION   ##
+The installation of FreeZTP is quick and easy using the built-in installer. Make sure you are logged in as root or are able to `sudo su` to install and operate FreeZTP.
+
+  1. Install OS with appropriate IP and OS settings and update to latest patches (recommended). Check out the below links for easy Post-Install processes for OS's supported by FreeZTP.
+	  - **CentOS 7:** [CentOS Minimal Server - Post-Install Setup][centos-post-install]
+	    - Make sure to install Git for a CentOS instal
+	      - `sudo yum install git -y`
+	  - **Ubuntu 16:** [Ubuntu Minimal Server - Post-Install Setup][ubuntu-post-install]
+	    - Make sure to install python-pip and git for Ubuntu
+	      - `sudo apt install -y python-pip`
+	      - `sudo apt-get install -y git`
+	  - **Raspbian:** [Raspbian Minimal Server - Post-Install Setup][raspbian-post-install]
+	    - Make sure to install python-pip and git for Raspbian
+	      - `sudo apt install -y python-pip`
+	      - `sudo apt-get install -y git`
+  2. Download the FreeZTP repository using Git
+	  - `git clone https://github.com/convergeone/freeztp.git`
+  3. Change to the directory where the FreeZTP main code file (ztp.py) is stored: `cd freeztp`
+  4. Run the FreeZTP program in install mode to perform the installation: `python ztp.py install`. Make sure the machine has internet access as this process will download and install several packages for this to happen.
+	  - FreeZTP will perform the install of the packages and services for full operation.
+	  - The installation will also install a CLI helper script. You will need to logout and log back into your SSH session to activate this helper script.
+
+
+-----------------------------------------
+##   GETTING STARTED   ##
+The ZTP server comes with an [almost] fully functional default configuration, ready to serve out a basic config to switches. 
+
+The only part missing on the configuration is an IP lease range for DHCP. You will need to add this IP range in order to enable the DHCP service to hand out IP addresses (see below instructions). After this range is added, you can connect the ZTP server directly to the switch (on any of its ports), power on the switch, and watch it go!
+
+  1. Configure DHCP using the ZTP commands
+	  - During installation, ZTP will install a DHCP server, detect the network interfaces in Linux, and configure DHCP scopes for each of the interfaces. The created DHCP scopes will be inactive to serve DHCP as they will have no addresses available to lease.
+	  - If you want to use the automatically generated DHCP scope (the new switches will be on the same VLAN as one of FreeZTPs interfaces), you just need to specify a first and last address for the lease range. After configured, you will need to commit the ZTP DHCP configuration. Below is example of how to do this.
+        ```
+        ztp set dhcpd INTERFACE-ETH0 first-address 192.168.1.100
+        ztp set dhcpd INTERFACE-ETH0 last-address 192.168.1.200
+        !
+        ztp request dhcpd-commit 
+        ```
+    - If the switches will not be on the same VLAN, then create a new scope.
+    - There are other basic DHCP options included in the scope settings like `dns-servers`, `domain-name`, and `gateway`.
+  2. Start configuring switches!
+	  - FreeZTP comes with a default configuration which is ready to configure switches. A default-keystore is configured which will hand out a basic (non-individualized) config to a newly booted switch.
+	  - There are a few example templates, keystores, associations, an ID array already in the config. Feel free to modify them to do what you want, or blow them away and customize everything.
 
 
 -----------------------------------------
@@ -70,10 +117,10 @@ Due to the unique nature of how FreeZTP works and performs discovery of switches
         ztp set keystore STACK1 hostname CORESWITCH
         ```
   - **ID Arrays**
-	  - An ID Array is a method of mapping one or more real switch IDs (ie: serial numbers) to a specific keystore. Multiple real IDs can be mapped to the same Keystore ID, which comes in handy when building a configuration for a switch stack (which could take on the serial number of any of the member switches when it boots up).
+	  - An ID Array is a method of mapping one or more Real switch IDs (ie: serial numbers) to a specific keystore. Multiple Real IDs can be mapped to the same Keystore ID, which comes in handy when building a configuration for a switch stack (which could take on the serial number of any of the member switches when it boots up).
 	  - The ID array has two pieces:
 		  - The **Array Name** is the name of the specific array. The Array Name must match a Keystore ID in order to pull values from that keystore.
-		  - The **Array ID List** is a list of real switch IDs (serial numbers) which, when searched for, will resolve to the Array Name before mapping to a Keystore ID. When configuring an IDArray in the CLI, each ID in the list is separated by a space.
+		  - The **Array ID List** is a list of Real switch IDs (serial numbers) which, when searched for, will resolve to the Array Name before mapping to a Keystore ID. When configuring an IDArray in the CLI, each ID in the list is separated by a space.
 	  - **ID Array Example Config**
         ```
         ztp set idarray STACK1 SERIAL1 SERIAL2 SERIAL3
@@ -92,105 +139,74 @@ FreeZTP relies on the 'AutoInstall' function of a Cisco Catalyst switch to confi
 
 The new switch should have one of its ports connected to a network (likely an upstream switch) which has the FreeZTP server accessible. The FreeZTP server can be on the same VLAN as the new switch (so it can serve up DHCP addresses directly) or on a different VLAN which has a gateway and an IP helper pointed at the FreeZTP server so it can serve up DHCP.
 
-####  1. STEP 1 - POWER ON: The Catalyst switch is powered on (or rebooted) with no startup-configuration
+####  1. STEP 1 - POWER ON: Initial boot up and DHCP leasing
   - NOTE: _Once the operating system is loaded on the switch and it completes the boot-up process, it will start the AutoInstall process_
   - **Step 1.1:** The switch will enable all of its ports as access ports for VLAN 1.
   - **Step 1.2:** The switch will enable interface (SVI) Vlan1 and begin sending out DHCP requests from interface Vlan1.
-  - **Step 1.3:** If DHCP option 125 was configured (`ztp set dhcpd SCOPENAME imagediscoveryfile-option enable`) and that option is handed to the switch in its DHCP lease:
-	  - **Step 1.3.1:** The switch will send a TFTP request to ZTP requesting the filename specified (via Hex) in the DHCP option ("freeztp_ios_upgrade" by default)
-	  - **Step 1.3.2:** FreeZTP will check its "imagefile" (`ztp set someIOSfile.bin`) setting and dynamically generate a freeztp_ios_upgrade file containing the name of that .bin or .tar file. This freeztp_ios_upgrade is then sent to the switch to be downloaded.
-	  - **Step 1.3.3:** The switch reads the file and determines what file is should download as its upgrade image. Once determined, the switch sends a TFTP download request to ZTP for that .bin or .tar filename. 
-	  - **Step 1.3.4:** If the .bin or .tar file does not exist, the switch abandon the upgrade attempt and proceed to step 1.4
-	  - **Step 1.3.5:** If successfully downloaded, the switch will install the image and upgrade itself. Depending on the switch model, it may or may not automatically reboot itself. After the upgrade, the switch will continue through the ZTP process
-  - **Step 1.4:** The switch will send a TFTP request for a file named "**network-confg**" to the IP address specified in the DHCP option 66 (hopefully the ZTP server).
+  - **Step 1.3:** The switch will get a DHCP lease from the ZTP server or from a different DHCP server. The lease will contain DHCP option 150 (TFTP Server) which points at the IP of the ZTP server.
+  - **Step 1.4:** To upgrade, or not to upgrade:
+	  - IF DHCP option 125 was configured (`ztp set dhcpd SCOPENAME imagediscoveryfile-option enable`) and that option is handed to the switch in its DHCP lease, then the switch will proceed to **Step 2**.
+	  - IF DHCP option 125 was not configured (`ztp set dhcpd SCOPENAME imagediscoveryfile-option disable`), the switch will proceed to **Step 3**.
 
-####  2. STEP 2 - INITIAL-CONFIG: An initial config is generated, sent, and loaded for switch (target) discovery
-  - **Step 2.1:** When the request for the "network-confg" file is received by the ZTP server, it generates the config by performing an automatic merge with the `initial-template`:
-    - **Step 2.1.1:** The `{{ autohostname }}` variable in the initial-template is filled by an automatically generated hexadecimal temporary name (example: ZTP-22F1388804). This temporary name is saved in memory by the ZTP server for future reference because the switch will use this name to request a new TFTP file in a later step
-    - **Step 2.1.2:** The `{{ community }}` variable is filled with the value set in the `community` configuration field
-  - **Step 2.2:** This merged configuration is passed to the Cisco switch as the "network-confg" file. The switch loads it into its active running-config and proceed to step **XXXXXXXXX**
+####  2. STEP 2 - IOS Upgrade: The imagediscoveryfile is used to discover the IOS bin file
+  - NOTE: _DHCP Option 125 will contain (in hex form) the name of the imagediscoveryfile setting ("freeztp_ios_upgrade" by default in the ZTP configuration) which is a fictitious file containing the name of the .bin or .tar file the switch needs to download for the upgrade._
+  - **Step 2.1:** The switch will send a TFTP request to ZTP requesting imagediscoveryfile ("freeztp_ios_upgrade" by default).
+  - **Step 2.2:** FreeZTP will check its "imagefile" (`ztp set imagefile someIOSfile.bin`) setting and dynamically generate a "freeztp_ios_upgrade" file containing the name of that .bin or .tar file. This "freeztp_ios_upgrade" file is then sent to the switch to be downloaded.
+  - **Step 2.3:** The switch reads the file and determines what .bin or .tar file it should download as its upgrade image. Once determined, the switch sends a TFTP download request to ZTP for that .bin or .tar filename .
+  - **Step 2.4:** If the .bin or .tar file does not exist, the switch abandons the upgrade attempt and proceeds to **Step 3**. If the .bin or .tar file does exist, then the ZTP server allows the switch to download it with TFTP.
+  - **Step 2.5:** Once fully downloaded, the switch will install the image and upgrade itself. Depending on the switch model, it may or may not automatically reboot itself. After the upgrade, the switch will continue through the ZTP process.
+
+####  3. STEP 3 - INITIAL-CONFIG: An initial config is generated, sent, and loaded for switch (target) discovery
+  - **Step 3.1:** The switch will send a TFTP request for a file named "**network-confg**" to the IP address specified in the DHCP option 150 (which should be the ZTP server).
+  - **Step 3.2:** When the request for the "network-confg" file is received by the ZTP server, it generates the config by performing an automatic merge with the `initial-template`:
+    - **Step 3.2.1:** The `{{ autohostname }}` variable in the initial-template is filled by an automatically generated hexadecimal temporary name (example: ZTP-22F1388804). This temporary name is saved in memory by the ZTP server for future reference because the switch will use it's temporary hostname to request a new TFTP file in a later step.
+    - **Step 3.2.2:** The SNMP `{{ community }}` variable is filled with the value set in the `community` configuration field
+  - **Step 3.3:** This merged configuration is passed to the Cisco switch as the "network-confg" file. The switch loads it into its active running-config and proceeds to **Step 5**
     - NOTE: _You can see an example initial configuration from the ZTP server by issuing the command_ `ztp request initial-merge`
 
-####  3. STEP 3 - SNMP DISCOVERY: The ZTP server discovers the switch's "real ID" (ie: serial number) using SNMP
-  - **Step 3.1:** After the initial config file is passed to and loaded by the switch, the ZTP server initiates a SNMP discovery of the switch
-    - **Step 3.1.1:** The SNMP request targets the source IP of the switch which was used to originally request the "network-confg" file in step 1.4
-    - **Step 3.1.2:** The SNMP request uses the value of the `community` configuration field as the authentication community (which the switch should honor once it loads the configuration from the "network-confg" file)
-    - **Step 3.1.3:** The SNMP request uses the OID from the `snmpoid` configuration field which, by default, is the OID to obtain the serial number of the switch
-    - **Step 3.1.4:** Once the SNMP query succeeds, the ZTP server maps the real ID (ie: serial number) of the discovered switch to its temporary hostname generated in step 2.1.1
+####  4. STEP 4 - SNMP DISCOVERY: The ZTP server discovers the switch's "Real ID" (ie: serial number) using SNMP
+  - **Step 4.1:** After the initial config file is passed to and loaded by the switch, the ZTP server initiates a SNMP discovery of the switch's serial number, or "Real ID"
+    - **Step 4.1.1:** The SNMP request targets the source IP of the switch which was used to originally request the "network-confg" file in **Step 3.1**
+    - **Step 4.1.2:** The SNMP request uses the value of the `community` configuration field as the authentication community (which the switch should honor once it loads the configuration from the "network-confg" file)
+    - **Step 4.1.3:** The SNMP request uses the OID from the `snmpoid` configuration field which, by default, is the OID to obtain the serial number of the switch
+      - NOTE: _You may need to change the OID based on the switch model you are discovering. You can test the configured OID for its returned value using the command:_ `ztp request snmp-test <ip_address>`
+    - **Step 4.1.4:** Once the SNMP query succeeds, the ZTP server maps the Real ID (ie: serial number) of the discovered switch to its temporary hostname generated in **Step 3.2.1**
 
-####  4. STEP 4 - FINAL CONFIG REQUEST: The switch requests the final configuration file and the ZTP server generates it based on the ZTP configuration
-  - **Step 4.1:** After the switch loads the "network-confg" file into its running-config, it sends out a new TFTP request to the ZTP server for a new filename:
-    - NOTE: _The file name for the new TFTP request is based upon the hostname passed to the switch in the initial ("network-confg") file (example filename: "ZTP-22F1388804-confg")_
-  - **Step 4.2 (FIND A KEYSTORE ID):** ZTP attempts to find a usable Keystore ID to create the final configuration:
-    - **Step 4.2.1 (USING THE REAL ID):** ZTP uses the requested filename (example filename: "ZTP-22F1388804-confg") to look up the real ID (serial number) of the requesting switch (it was saved in step 2.1.1). If the real ID of the requesting switch is known, the ZTP server attempts to use that ID to find a suitable Keystore ID:
-      - **Step 4.2.1.1:** The real ID of the switch is used to search through all of the Keystore IDs to see if one of them matches the real ID. If a Keystore ID matches, then the server proceeds to **XXXXXXX** with that Keystore ID.
-      - **Step 4.2.1.2:** If there is no match between the real ID and a Keystore ID, then the server looks to the ID Arrays for a match. It searches through the ID list in each IDArray, once a match is found, the server resolves the real ID to the IDArray Name and re-searches the Keystore IDs for a match using the resolved IDArray name. Once a match is found, the server continues to step **XXXXXXX** with the matched Keystore ID.
-    - **Step 4.2.2 (USING THE DEFAULT KEYSTORE):** If ZTP was unable to determine the ID of the switch, or the ID of the switch does not match either a Keystore ID or an ID in an ID Array, then ZTP will look to see if a default Keystore ID has been configured using the `default-keystore` setting. If a default Keystore ID is set, and that Keystore ID is actually configured with at least one key/value pair, then ZTP will continue on through the process using that Keystore ID. 
+####  5. STEP 5 - FINAL CONFIG REQUEST: The switch requests the final configuration file and the ZTP server generates it based on the ZTP configuration
+  - **Step 5.1:** After the switch loads the "network-confg" file into its running-config, it sends out a new TFTP request to the ZTP server for a new configuration file. The file name for the new TFTP request is based upon the hostname passed to the switch in the initial ("network-confg") file (example filename: "ZTP-22F1388804-confg") from **Step 3.2.1**.
+  - **Step 5.2 (FIND A KEYSTORE ID):** ZTP attempts to find a usable Keystore ID to create the final configuration:
+    - **Step 5.2.1 (USING THE REAL ID):** ZTP uses the requested filename (example filename: "ZTP-22F1388804-confg") to look up the Real ID (serial number) of the requesting switch (it was saved in **Step 3.2.1**). If the Real ID of the requesting switch is known, the ZTP server attempts to use that ID to find a suitable Keystore ID:
+      - **Step 5.2.1.1:** The Real ID of the switch is used to search through all of the Keystore IDs to see if one of them matches the Real ID. If a Keystore ID matches, then the server proceeds to **Step 5.3** with that Keystore ID.
+      - **Step 5.2.1.2:** If there is no match between the Real ID and a Keystore ID, then the server looks to the ID Arrays for a match. It searches through the ID list in each IDArray, once a match is found, the server resolves the Real ID to the IDArray Name and re-searches the Keystore IDs for a match using the resolved IDArray name. Once a match is found, the server continues to **Step 5.3** with the matched Keystore ID.
+    - **Step 5.2.2 (USING THE DEFAULT KEYSTORE):** If ZTP was unable to determine the ID of the switch, or the ID of the switch does not match either a Keystore ID or an ID Array, then ZTP will look to see if a default Keystore ID has been configured using the `default-keystore` setting. If a default Keystore ID is set, and that Keystore ID is actually configured with at least one key/value pair, then ZTP will continue on through the process using that Keystore ID. 
       - NOTE: _If the `default-keystore` is set to_ `None`_, or the default-keystore name does not actually exist as a configured Keystore ID, then ZTP will send a "no such file" failure message to the switch as a response to the TFTP request_
-    - NOTE: _You can test the default-keystore configuration by issuing the command_ `ztp request default-keystore-test`
-  - **Step 4.3 (FIND THE ASSOCIATED TEMPLATE):** Once a candidate Keystore ID is found, the server checks to see if an `association` exists in the ZTP configuration for the Keystore ID. It will then use the associated template to perform the Jinja2 merge of the final configuration
+      - NOTE: _You can test the default-keystore configuration by issuing the command_ `ztp request default-keystore-test`
+  - **Step 5.3 (FIND THE ASSOCIATED TEMPLATE):** Once a candidate Keystore ID is found, the server checks to see if an `association` exists in the ZTP configuration to associate the Keystore ID with a template. It will then use the associated template to perform the Jinja2 merge of the final configuration.
     - NOTE: _If no association exists for the Keystore ID, or an association exists, but the associated template name doesn't match any configured template, then ZTP will send a "no such file" failure message to the switch as a response to the TFTP request_
-  - **Step 4.4 (COMPLETE THE FINAL CONFIG):** After the matching keystore and an associated template have been found, the ZTP server will perform the Jinja2 merge between the template and the key/value pairs in the Keystore ID. This configuration is then passed to the switch in response to its TFTP request made in step 4.1
+  - **Step 5.4 (COMPLETE THE FINAL CONFIG):** After the matching keystore and an associated template have been found, the ZTP server will perform the Jinja2 merge between the template and the key/value pairs in the Keystore ID. This configuration is then passed to the switch in response to its TFTP request made in **Step 5.1**.
     - NOTE: _You can see this merged configuration by issuing the command_ `ztp request merge-test <keystore-id>`
-    - NOTE: _If you configured static IP addresses in the final-template, then the switch starts using those static IPs and can be remotely accessible via them (assuming you also included config for AAA and SSH)_
+    - NOTE: _If you configured static IP addresses in the final-template, the switch will then start using those static IPs and can be remotely accessible via them (assuming you also included config for AAA and SSH)_
     - NOTE: _The switch does not save the new configurations into its startup-config. That has to be done manually_
 
 ####   Ladder Diagram   ####
 
-**SWITCH**  -----> Step 1.3.1: File "freeztp_ios_upgrade" requested ---------------------->  **ZTP Server**
+**SWITCH**  -----> Step 2.1: File "freeztp_ios_upgrade" requested ---------------------->  **ZTP Server**
 
-**SWITCH**  <----- Step 1.3.2: Auto-generated "freeztp_ios_upgrade" file sent to switch <--  **ZTP Server**
+**SWITCH**  <----- Step 2.2: Auto-generated "freeztp_ios_upgrade" file sent to switch <--  **ZTP Server**
 
-**SWITCH**  -----> Step 1.3.3: .bin or .tar file requested ------------------------------->  **ZTP Server**
+**SWITCH**  -----> Step 2.3: .bin or .tar file requested ------------------------------->  **ZTP Server**
 
-**SWITCH**  <----- Step 1.3.5: .bin or .tar file sent to switch if it exists <-------------  **ZTP Server**
+**SWITCH**  <----- Step 2.4: .bin or .tar file sent to switch if it exists <-------------  **ZTP Server**
 
-**SWITCH**  -----> Step 1.4:   File "network-confg" requested ---------------------------->  **ZTP Server**
+**SWITCH**  -----> Step 3.1: File "network-confg" requested ---------------------------->  **ZTP Server**
 
-**SWITCH**  <----- Step 2.2:   Auto-generated initial config passed to switch <------------  **ZTP Server**
+**SWITCH**  <----- Step 3.3: Auto-generated initial config passed to switch <------------  **ZTP Server**
 
-**SWITCH**  <----- Step 3:     ZTP server performed discovery of real ID using SNMP <------  **ZTP Server**
+**SWITCH**  <----- Step 4:   ZTP server performs discovery of Real ID using SNMP <-------  **ZTP Server**
 
-**SWITCH**  -----> Step 4.1:   Switch requests new file based on new hostname ------------>  **ZTP Server**
+**SWITCH**  -----> Step 5.1: Switch requests new file based on new hostname ------------>  **ZTP Server**
 
-**SWITCH**  <----- Step 4.4:   ZTP responds to TFTP request with final config <------------  **ZTP Server**
-
-
------------------------------------------
-##   INSTALLATION   ##
-The installation of FreeZTP is quick and easy using the built-in installer. Make sure you are logged in as root or are able to `sudo su` to install and operate FreeZTP.
-
-  1. Install OS with appropriate IP and OS settings and update to latest patches (recommended). Check out the below links for easy Post-Install processes for OS's supported by FreeZTP.
-	  - **CentOS 7:** [CentOS Minimal Server - Post-Install Setup][centos-post-install]
-	    - Make sure to install Git for a CentOS instal
-	      - `sudo yum install git -y`
-	  - **Ubuntu 16:** [Ubuntu Minimal Server - Post-Install Setup][ubuntu-post-install]
-	    - Make sure to install python-pip and git for Ubuntu
-	      - `sudo apt install -y python-pip`
-	      - `sudo apt-get install -y git`
-	  - **Raspbian:** [Raspbian Minimal Server - Post-Install Setup][raspbian-post-install]
-	    - Make sure to install python-pip and git for Raspbian
-	      - `sudo apt install -y python-pip`
-	      - `sudo apt-get install -y git`
-  2. Download the FreeZTP repository using Git
-	  - `git clone https://github.com/convergeone/freeztp.git`
-  3. Change to the directory where the FreeZTP main code file (ztp.py) is stored: `cd freeztp`
-  4. Run the FreeZTP program in install mode to perform the installation: `python ztp.py install`. Make sure the machine has internet access as this process will download and install several packages for this to happen.
-	  - FreeZTP will perform the install of the packages and services for full operation.
-	  - The installation will also install a CLI helper script. You will need to logout and log back into your SSH session to activate this helper script.
-  5. Configure DHCP using the ZTP commands
-	  - During installation, ZTP will install a DHCP server, detect the network interfaces in Linux, and configure DHCP scopes for each of the interfaces. The created DHCP scopes will be inactive to serve DHCP as they will have no addresses available to lease.
-	  - If you want to use the automatically generated DHCP scope (the new switches will be on the same VLAN as one of FreeZTPs interfaces), you just need to specify a first and last address for the lease range. After configured, you will need to commit the ZTP DHCP configuration. Below is example of how to do this.
-        ```
-        ztp set dhcpd INTERFACE-ETH0 first-address 192.168.1.100
-        ztp set dhcpd INTERFACE-ETH0 last-address 192.168.1.200
-        !
-        ztp request dhcpd-commit 
-        ```
-    - If the switches will not be on the same VLAN, then create a new scope.
-  6. Start configuring switches!
-	  - FreeZTP comes with a default configuration which is ready to configure switches. A default-keystore is configured which will hand out a basic (non-individualized) config to a newly booted switch.
-	  - There are a few example templates, keystores, associations, an ID array already in the config. Feel free to modify them to do what you want, or blow them away and customize everything.
+**SWITCH**  <----- Step 5.4: ZTP responds to TFTP request with final config <------------  **ZTP Server**
 
 
 -----------------------------------------
