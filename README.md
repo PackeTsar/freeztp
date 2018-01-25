@@ -151,6 +151,7 @@ The new switch should have one of its ports connected to a network (likely an up
 ####  2. STEP 2 - IOS Upgrade: The imagediscoveryfile is used to discover the IOS bin file
   - NOTE: _DHCP Option 125 will contain (in hex form) the name of the imagediscoveryfile setting ("freeztp_ios_upgrade" by default in the ZTP configuration) which is a fictitious file containing the name of the .bin or .tar file the switch needs to download for the upgrade._
   - **Step 2.1:** The switch will send a TFTP request to ZTP requesting imagediscoveryfile ("freeztp_ios_upgrade" by default).
+    - **Step 2.1.1:** FreeZTP will check the file download log (seen by using `ztp show downloads`) to see if the "freeztp_ios_upgrade" file has been downloaded by that IP address within the image-supression timeframe (set with `set image-supression <seconds-to-supress>`). This time-saving feature prevents some switch models from upgrading their IOS, automatically rebooting, then attempting the upgrade again after a reboot (which results in the switch downloading the IOS image a second time, just to abort the upgrade since the software is the same version).
   - **Step 2.2:** FreeZTP will check its "imagefile" (`ztp set imagefile someIOSfile.bin`) setting and dynamically generate a "freeztp_ios_upgrade" file containing the name of that .bin or .tar file. This "freeztp_ios_upgrade" file is then sent to the switch to be downloaded.
   - **Step 2.3:** The switch reads the file and determines what .bin or .tar file it should download as its upgrade image. Once determined, the switch sends a TFTP download request to ZTP for that .bin or .tar filename .
   - **Step 2.4:** If the .bin or .tar file does not exist, the switch abandons the upgrade attempt and proceeds to **Step 3**. If the .bin or .tar file does exist, then the ZTP server allows the switch to download it with TFTP.
@@ -251,6 +252,7 @@ Below is the CLI guide for FreeZTP. You can see this at the command line by ente
  - set association id <id/arrayname> template <template_name>  |  Associate a keystore id or an idarray to a specific named template
  - set default-keystore (none|keystore-id)                     |  Set a last-resort keystore and template for when target identification fails
  - set imagefile <binary_image_file_name>                      |  Set the image file name to be used for upgrades (must be in tftp root dir)
+ - set image-supression <seconds-to-supress>                   |  Set the seconds to supress a second image download preventing double-upgrades
  - set dhcpd <scope-name> [parameters]                         |  Configure DHCP scope(s) to serve IP addresses to ZTP clients
 ----------------------------------------------------------------------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------------------------------------------------
@@ -377,7 +379,9 @@ ztp set association id STACK1 template LONG_TEMPLATE
 !
 ztp set default-keystore MY_DEFAULT
 ztp set imagefile cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin
+ztp set image-supression 3600
 !
+
 [root@ZTP ~]#
 ```
 
