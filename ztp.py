@@ -7,15 +7,12 @@
 ##### https://github.com/convergeone/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "v0.8.2"
+version = "v0.8.3"
 
 
-# NEXT: Write in supression
 # NEXT: Clean up output logging
 # NEXT: Recognize client tracking (dhcp, upgrade, initial file, custom file)
 # NEXT: Add lease time to DHCP scopes
-# NEXT: Adjust timeout to prevent dups
-# NEXT: Add in calc for transfer rate
 # NEXT: Allow SNMP to use multiple OIDs?
 # NEXT: 
 
@@ -169,6 +166,21 @@ class config_factory:
 			self.associations = config.running["associations"]
 		except:
 			console("cfact.__init__: Error pulling settings from config file")
+	def _check_supression(self, ipaddr):
+		log("cfact._check_supression: Called. Checking for image download supression for IP (%s)" % ipaddr)
+		timeout = config.running["image-supression"]
+		for session in tracking.status:
+			timestamp = session
+			filename = tracking.status[session]["filename"]
+			sesip = tracking.status[session]["ipaddr"]
+			if filename == config.running["imagediscoveryfile"]:
+				if sesip == ipaddr:
+					if time.time()-float(timestamp) < timeout:
+						log("cfact._check_supression: Previous session detected %s seconds ago (within %s seconds). Supressing upgrade." % (time.time()-float(timestamp), timeout))
+						return True
+		log("cfact._check_supression: Previous session not detected within %s seconds." % timeout)
+		return False
+		print(dir(tracking))
 	def lookup(self, filename, ipaddr):
 		log("cfact.lookup: Called. Checking filename (%s) and IP (%s)" % (filename, ipaddr))
 		tempid = filename.replace(self.uniquesuffix, "")
@@ -178,7 +190,9 @@ class config_factory:
 			log("cfact.lookup: TempID matches the initialfilename. Returning True")
 			return True
 		if filename == self.imagediscoveryfile:
-			log("cfact.lookup: TempID matches the imagediscoveryfile. Returning True")
+			log("cfact.lookup: TempID matches the imagediscoveryfile")
+			if self._check_supression(ipaddr):
+				return False
 			log("cfact.lookup: #############IOS UPGRADE ABOUT TO BEGIN!!!#############")
 			return True
 		elif self.uniquesuffix in filename and tempid in list(self.snmprequests):  # If the filname contains the suffix and it has an entry in the snmp request list
@@ -478,6 +492,12 @@ class config_manager:
 				value = None
 			self.running[setting] = value
 			self.save()
+		elif setting == "image-supression":
+			try:
+				self.running[setting] = int(value)
+				self.save()
+			except ValueError:
+				console("Must be an integer!")
 		elif setting == "dhcpd":
 			self.set_dhcpd(args)
 		else:
@@ -632,6 +652,7 @@ class config_manager:
 		############
 		dkeystore = "ztp set default-keystore %s"  % str(self.running["default-keystore"])
 		imagefile = "ztp set imagefile %s"  % str(self.running["imagefile"])
+		imagesup = "ztp set image-supression %s"  % str(self.running["image-supression"])
 		############
 		scopelist = []
 		for scope in self.running["dhcpd"]:
@@ -668,6 +689,8 @@ class config_manager:
 		configtext += dkeystore
 		configtext += "\n"
 		configtext += imagefile
+		configtext += "\n"
+		configtext += imagesup
 		###########
 		configtext += "\n!\n"
 		for cmd in scopelist:
@@ -988,7 +1011,7 @@ class log_management:
 ##### Installer class: A simple holder class which contains all of the    #####
 #####   installation scripts used to install/upgrade the ZTP server       #####
 class installer:
-	defaultconfig = '''{\n    "associations": {\n        "MY_DEFAULT": "LONG_TEMPLATE", \n        "SERIAL100": "SHORT_TEMPLATE", \n        "STACK1": "LONG_TEMPLATE"\n    }, \n    "community": "secretcommunity", \n    "default-keystore": "MY_DEFAULT", \n    "idarrays": {\n        "STACK1": [\n            "SERIAL1", \n            "SERIAL2", \n            "SERIAL3"\n        ]\n    }, \n    "imagediscoveryfile": "freeztp_ios_upgrade", \n    "imagefile": "cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin", \n    "initialfilename": "network-confg", \n    "keyvalstore": {\n        "MY_DEFAULT": {\n            "hostname": "UNKNOWN_HOST", \n            "vl1_ip_address": "dhcp"\n        }, \n        "SERIAL100": {\n            "hostname": "SOMEDEVICE", \n            "vl1_ip_address": "10.0.0.201"\n        }, \n        "STACK1": {\n            "hostname": "CORESWITCH", \n            "vl1_ip_address": "10.0.0.200", \n            "vl1_netmask": "255.255.255.0"\n        }\n    }, \n    "snmpoid": "1.3.6.1.2.1.47.1.1.1.1.11.1000", \n    "starttemplate": "hostname {{ autohostname }}\\n!\\nsnmp-server community {{ community }} RO\\n!\\nend", \n    "suffix": "-confg", \n    "templates": {\n        "LONG_TEMPLATE": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} {{ vl1_netmask }}\\n no shut\\n!\\nip domain-name test.com\\n!\\nusername admin privilege 15 secret password123\\n!\\naaa new-model\\n!\\n!\\naaa authentication login CONSOLE local\\naaa authorization console\\naaa authorization exec default local if-authenticated\\n!\\ncrypto key generate rsa modulus 2048\\n!\\nip ssh version 2\\n!\\nline vty 0 15\\nlogin authentication default\\ntransport input ssh\\nline console 0\\nlogin authentication CONSOLE\\nend", \n        "SHORT_TEMPLATE": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} 255.255.255.0\\n no shut\\n!\\nend"\n    }, \n    "tftproot": "/etc/ztp/tftproot/"\n}'''
+	defaultconfig = '''{\n    "associations": {\n        "MY_DEFAULT": "LONG_TEMPLATE", \n        "SERIAL100": "SHORT_TEMPLATE", \n        "STACK1": "LONG_TEMPLATE"\n    }, \n    "community": "secretcommunity", \n    "default-keystore": "MY_DEFAULT", \n    "dhcpd": {}, \n    "idarrays": {\n        "STACK1": [\n            "SERIAL1", \n            "SERIAL2", \n            "SERIAL3"\n        ]\n    }, \n    "image-supression": 3600, \n    "imagediscoveryfile": "freeztp_ios_upgrade", \n    "imagefile": "cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin", \n    "initialfilename": "network-confg", \n    "keyvalstore": {\n        "MY_DEFAULT": {\n            "hostname": "UNKNOWN_HOST", \n            "vl1_ip_address": "dhcp"\n        }, \n        "SERIAL100": {\n            "hostname": "SOMEDEVICE", \n            "vl1_ip_address": "10.0.0.201"\n        }, \n        "STACK1": {\n            "hostname": "CORESWITCH", \n            "vl1_ip_address": "10.0.0.200", \n            "vl1_netmask": "255.255.255.0"\n        }\n    }, \n    "snmpoid": "1.3.6.1.2.1.47.1.1.1.1.11.1000", \n    "starttemplate": "hostname {{ autohostname }}\\n!\\nsnmp-server community {{ community }} RO\\n!\\nend", \n    "suffix": "-confg", \n    "templates": {\n        "LONG_TEMPLATE": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} {{ vl1_netmask }}\\n no shut\\n!\\nip domain-name test.com\\n!\\nusername admin privilege 15 secret password123\\n!\\naaa new-model\\n!\\n!\\naaa authentication login CONSOLE local\\naaa authorization console\\naaa authorization exec default local if-authenticated\\n!\\ncrypto key generate rsa modulus 2048\\n!\\nip ssh version 2\\n!\\nline vty 0 15\\nlogin authentication default\\ntransport input ssh\\nline console 0\\nlogin authentication CONSOLE\\nend", \n        "SHORT_TEMPLATE": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} 255.255.255.0\\n no shut\\n!\\nend"\n    }, \n    "tftproot": "/etc/ztp/tftproot/"\n}'''
 	def minor_update_script(self):
 		os.system('mkdir -p ' + "/etc/ztp/tftproot/")  # Create new tftproot dir
 		newconfigkeys = {
@@ -1204,7 +1227,7 @@ _ztp_complete()
 		COMPREPLY=( $(compgen -W "config run status version log downloads" -- $cur) )
 		;;
 	  "set")
-		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile template keystore idarray association default-keystore imagefile dhcpd" -- $cur) )
+		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile template keystore idarray association default-keystore imagefile image-supression dhcpd" -- $cur) )
 		;;
 	  "clear")
 		COMPREPLY=( $(compgen -W "keystore idarray template association dhcpd log downloads" -- $cur) )
@@ -1311,6 +1334,11 @@ _ztp_complete()
 		if [ "$prev2" == "set" ]; then
 		  local ids=$(for id in `ztp show imagefiles`; do echo $id ; done)
 		  COMPREPLY=( $(compgen -W "${ids} <binary_image_file_name> -" -- $cur) )
+		fi
+		;;
+	  image-supression)
+		if [ "$prev2" == "set" ]; then
+		  COMPREPLY=( $(compgen -W "<seconds-to-supress> -" -- $cur) )
 		fi
 		;;
 	  dhcpd)
@@ -1895,11 +1923,15 @@ class tracking_class:
 	def clear_downloads(self):
 		self._master = {}
 		self.status = {}
-		client = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-		client.connect(('localhost', 10000))
-		client.send("clear downloads\n")
+		try:
+			client = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+			client.connect(('localhost', 10000))
+			client.send("clear downloads\n")
+			client.close()
+		except socket.error:
+			print("Service not running. Clearing store.")
 		self.store({})
-		client.close()
+
 	def ipc_server(self):
 		self.ipcthread = threading.Thread(target=self._status_ipc)
 		self.ipcthread.daemon = True
@@ -2210,6 +2242,7 @@ def interpreter():
 		console(" - set association id <id/arrayname> template <template_name>  |  Associate a keystore id or an idarray to a specific named template")
 		console(" - set default-keystore (none|keystore-id)                     |  Set a last-resort keystore and template for when target identification fails")
 		console(" - set imagefile <binary_image_file_name>                      |  Set the image file name to be used for upgrades (must be in tftp root dir)")
+		console(" - set image-supression <seconds-to-supress>                   |  Set the seconds to supress a second image download preventing double-upgrades")
 		console(" - set dhcpd <scope-name> [parameters]                         |  Configure DHCP scope(s) to serve IP addresses to ZTP clients")
 	elif arguments == "set suffix":
 		console(" - set suffix <value>                             |  Set the file name suffix used by target when requesting the final config")
@@ -2237,6 +2270,8 @@ def interpreter():
 		console(" - set default-keystore (none|keystore-id)        |  Set a last-resort keystore and template for when target identification fails")
 	elif arguments == "set imagefile":
 		console(" - set imagefile <binary_image_file_name>         |  Set the image file name to be used for upgrades (must be in tftp root dir)")
+	elif arguments == "set image-supression":
+		console(" - set image-supression <seconds-to-supress>      |  Set the seconds to supress a second image download preventing double-upgrades")
 	elif arguments == "set dhcpd":
 		console(" - set dhcpd <scope-name> [parameters]            |  Configure DHCP scope(s) to serve IP addresses to ZTP clients")
 	elif arguments[:3] == "set" and len(sys.argv) >= 4:
@@ -2385,6 +2420,7 @@ def interpreter():
 		console(" - set association id <id/arrayname> template <template_name>  |  Associate a keystore id or an idarray to a specific named template")
 		console(" - set default-keystore (none|keystore-id)                     |  Set a last-resort keystore and template for when target identification fails")
 		console(" - set imagefile <binary_image_file_name>                      |  Set the image file name to be used for upgrades (must be in tftp root dir)")
+		console(" - set image-supression <seconds-to-supress>                   |  Set the seconds to supress a second image download preventing double-upgrades")
 		console(" - set dhcpd <scope-name> [parameters]                         |  Configure DHCP scope(s) to serve IP addresses to ZTP clients")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
