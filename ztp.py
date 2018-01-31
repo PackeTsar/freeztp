@@ -7,40 +7,26 @@
 ##### https://github.com/convergeone/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "v0.8.3"
+version = "v1.0.0"
 
 
 # NEXT: Clean up output logging
 # NEXT: Recognize client tracking (dhcp, upgrade, initial file, custom file)
-# NEXT: Add lease time to DHCP scopes
 # NEXT: Allow SNMP to use multiple OIDs?
-# NEXT: Remove all the commented code
-
-##### Try to import non-native modules, fail gracefully #####
-try:
-	#import jinja2 as j2
-	#from jinja2 import Environment, meta
-	#import pysnmp.hlapi
-	#import tftpy
-	#import netaddr
-	#import netifaces
-	pass
-except ImportError:
-	print("Had some import errors, may not have dependencies installed yet")
+# NEXT: store template delineator
 
 
 ##### Import native modules #####
 import os
-import sys
-import json
-import platform
-import commands
-
 import re
+import sys
 import time
+import json
 import curses
 import socket
 import logging
+import platform
+import commands
 import threading
 
 
@@ -148,10 +134,8 @@ class config_factory:
 		global j2
 		global Environment
 		global meta
-		#global tftpy
 		import jinja2 as j2
 		from jinja2 import Environment, meta
-		#import tftpy
 		self.state = {}
 		self.snmprequests = {}
 		try:
@@ -180,7 +164,6 @@ class config_factory:
 						return True
 		log("cfact._check_supression: Previous session not detected within %s seconds." % timeout)
 		return False
-		print(dir(tracking))
 	def lookup(self, filename, ipaddr):
 		log("cfact.lookup: Called. Checking filename (%s) and IP (%s)" % (filename, ipaddr))
 		tempid = filename.replace(self.uniquesuffix, "")
@@ -249,16 +232,17 @@ class config_factory:
 				return True
 			else:
 				return False
-	def request(self, filename, ipaddr):
+	def request(self, filename, ipaddr, test=False):
 		log("cfact.request: Called with filename (%s) and IP (%s)" % (filename, ipaddr))
 		if filename == self.basefilename:
 			log("cfact.request: Filename (%s) matches the configured initialfilename" % self.basefilename)
 			tempid = self._generate_name()
 			log("cfact.request: Generated a TempID with cfact._generate_name: (%s)" % tempid)
-			self.create_snmp_request(tempid, ipaddr)
+			if not test:
+				self.create_snmp_request(tempid, ipaddr)
 			log("cfact.request: Generated a SNMP Request with TempID (%s) and IP (%s)" % (tempid, ipaddr))
 			result = self.merge_base_config(tempid)
-			log("cfact.request: Returning below config to TFTPy:\n%s" % result)
+			log("cfact.request: Returning below config to TFTPy:\n\n%s\n" % result)
 			return result
 		elif filename == self.imagediscoveryfile:
 			log("cfact.request: Filename (%s) matches the configured imagediscoveryfile" % filename)
@@ -297,12 +281,6 @@ class config_factory:
 						result = self.merge_final_config(default)
 						log("cfact.request: Returning the below config to TFTPy:\n%s" % result)
 						return result
-			#else:
-			#	log("cfact.request: SNMP request is not complete, checking for default-keystore" % self.snmprequests[tempid].host)
-			#	default = self._default_lookup()
-			#	if default:
-			#		log("cfact.request: default-keystore is configured. Returning default")
-			#		return self.merge_final_config(default)
 		log("cfact.request: Nothing else caught. Returning None")
 		return None
 	def create_snmp_request(self, tempid, ipaddr):
@@ -454,8 +432,7 @@ class config_manager:
 			self.starttemplate = self.running["starttemplate"]
 			self.associations = self.running["associations"]
 		else:
-			print("No Config File Found! Please install app!")
-			#quit()
+			console("No Config File Found! Please install app!")
 	def save(self):
 		self.rawconfig = self.json = json.dumps(self.running, indent=4, sort_keys=True)
 		f = open(self.configfile, "w")
@@ -578,29 +555,29 @@ class config_manager:
 		global netaddr
 		import netaddr
 		if len(args) < 6:
-			print("ERROR: Incomplete Command!")
+			console("ERROR: Incomplete Command!")
 			quit()
 		scope = args[3]
 		setting = args[4]
 		value = args[5]
-		checks = {"subnet": self.is_net, "first-address": self.is_ip, "last-address": self.is_ip, "gateway": self.is_ip, "ztp-tftp-address": self.is_ip, "imagediscoveryfile-option": self.make_true, "domain-name": self.make_true}
+		checks = {"subnet": self.is_net, "first-address": self.is_ip, "last-address": self.is_ip, "gateway": self.is_ip, "ztp-tftp-address": self.is_ip, "imagediscoveryfile-option": self.make_true, "domain-name": self.make_true, "lease-time": self.is_num}
 		#### Build Path
 		if "dhcpd" not in list(self.running):
 			self.running.update({"dhcpd": {}})
 		if scope not in self.running["dhcpd"]:
-			self.running["dhcpd"].update({scope: {"imagediscoveryfile-option": "enable"}})
+			self.running["dhcpd"].update({scope: {"imagediscoveryfile-option": "enable", "lease-time": 3600}})
 		###############
 		if setting in checks:
 			check = checks[setting](value)
 			if check == True:
 				self.running["dhcpd"][scope].update({setting: value})
 			else:
-				print(check)
+				console(check)
 		elif setting == "dns-servers":
 			value = ", ".join(args[5:])
 			self.running["dhcpd"][scope].update({setting: value})
 		else:
-			print("BAD COMMAND!")
+			console("BAD COMMAND!")
 		self.save()
 	def is_ip(self, data):
 		try:
@@ -617,6 +594,12 @@ class config_manager:
 				return "Please provide a CIDR address (ie: 10.0.0.0/24)"
 		except ValueError as err:
 			return err
+	def is_num(self, data):
+		try:
+			int(data)
+			return True
+		except Exception as err:
+			return "Must be a number!"
 	def make_true(self, data):
 		return True
 	def show_config(self):
@@ -787,7 +770,7 @@ class config_manager:
 			console(each)
 	def hidden_list_image_files(self):
 		for each in os.listdir(self.running["tftproot"]):
-			print(each)
+			console(each)
 	def hidden_list_dhcpd_scopes(self):
 		for scope in self.running["dhcpd"]:
 			console(scope)
@@ -802,7 +785,8 @@ class config_manager:
 		"gateway": " option routers <value>;",
 		"dns-servers": " option domain-name-servers <value>;",
 		"domain-name": ' option domain-name "<value>";',
-		"ztp-tftp-address": " option ztp-tftp-address <value>;"
+		"ztp-tftp-address": " option ztp-tftp-address <value>;",
+		"lease-time": " max-lease-time <value>;"
 		}
 		for scope in self.running["dhcpd"]:
 			### Run Basic Checks
@@ -828,7 +812,7 @@ class config_manager:
 				##
 				for option in self.running["dhcpd"][scope]:
 					if option in mappings:
-						value = self.running["dhcpd"][scope][option]
+						value = str(self.running["dhcpd"][scope][option])
 						txt = mappings[option].replace("<value>", value)
 						scopetext += txt + "\n"
 					elif option == "first-address":
@@ -869,8 +853,6 @@ class config_manager:
 		f.write(strippeddata)
 		f.close()
 		console("\nWrite Complete. Restarting DHCP Service...\n")
-		#os.system('systemctl restart dhcpd')
-		#os.system('systemctl status dhcpd')
 		osd.service_control("restart", osd.DHCPSVC)
 		osd.service_control("status", osd.DHCPSVC)
 	def get_addresses(self):
@@ -1031,7 +1013,6 @@ class installer:
 			console("\n\nInstalling some new dependencies...\n")
 			os.system("pip install netaddr")
 			os.system("pip install netifaces")
-			#os.system("yum -y install telnet")
 			osd.install_pkg("telnet")
 			self.dhcp_setup()
 	def copy_binary(self):
@@ -1067,11 +1048,8 @@ class installer:
 	def install_dependencies(self):
 		if osd._pkgmgr == "apt-get":  # If using apt-get, update the repos
 			os.system("sudo apt-get update -y")
-		#os.system("yum -y install epel-release")
 		osd.install_pkg("epel-release")
-		#os.system("yum -y install python2-pip")
 		osd.install_pkg(osd.PIPPKG)
-		#os.system("yum -y install gcc gmp python-devel telnet")
 		osd.install_pkg("gcc gmp python-devel")
 		osd.install_pkg("telnet")
 		os.system("pip install pysnmp")
@@ -1080,9 +1058,7 @@ class installer:
 		os.system("pip install netifaces")
 	def dhcp_setup(self):
 		console("\n\nInstalling DHCPD...\n")
-		#os.system("yum -y install dhcp")
 		osd.install_pkg(osd.DHCPPKG)
-		#os.system('systemctl enable dhcpd')
 		osd.service_control("enable", osd.DHCPSVC)
 		console("\n\nSucking in config file...\n")
 		global config
@@ -1195,9 +1171,7 @@ esac'''
 		f.write(installfile)
 		f.close()
 		if systemd:
-			#os.system('systemctl enable ztp')
 			osd.service_control("enable", "ztp")
-			#os.system('systemctl start ztp')
 			osd.service_control("start", "ztp")
 		elif not systemd:
 			os.system('chmod 777 /etc/init.d/radiuid')
@@ -1224,7 +1198,7 @@ _ztp_complete()
   elif [ $COMP_CWORD -eq 2 ]; then
 	case "$prev" in
 	  show)
-		COMPREPLY=( $(compgen -W "config run status version log downloads" -- $cur) )
+		COMPREPLY=( $(compgen -W "config run status version log downloads dhcpd" -- $cur) )
 		;;
 	  "set")
 		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile template keystore idarray association default-keystore imagefile image-supression dhcpd" -- $cur) )
@@ -1243,6 +1217,16 @@ _ztp_complete()
 	esac
   elif [ $COMP_CWORD -eq 3 ]; then
 	case "$prev" in
+	  config)
+		if [ "$prev2" == "show" ]; then
+		  COMPREPLY=( $(compgen -W "raw -" -- $cur) )
+		fi
+		;;
+	  run)
+		if [ "$prev2" == "show" ]; then
+		  COMPREPLY=( $(compgen -W "raw -" -- $cur) )
+		fi
+		;;
 	  suffix)
 		if [ "$prev2" == "set" ]; then
 		  COMPREPLY=( $(compgen -W "<value> -" -- $cur) )
@@ -1342,12 +1326,15 @@ _ztp_complete()
 		fi
 		;;
 	  dhcpd)
+		if [ "$prev2" == "show" ]; then
+		  COMPREPLY=( $(compgen -W "leases" -- $cur) )
+		fi
 		if [ "$prev2" == "set" ]; then
-		  local ids=$(for id in `ztp show dhcpd`; do echo $id ; done)
+		  local ids=$(for id in `ztp show dhcpd-scopes`; do echo $id ; done)
 		  COMPREPLY=( $(compgen -W "${ids} <new_dhcp_scope_name> -" -- $cur) )
 		fi
 		if [ "$prev2" == "clear" ]; then
-		  local ids=$(for id in `ztp show dhcpd`; do echo $id ; done)
+		  local ids=$(for id in `ztp show dhcpd-scopes`; do echo $id ; done)
 		  COMPREPLY=( $(compgen -W "${ids}" -- $cur) )
 		fi
 		;;
@@ -1383,12 +1370,12 @@ _ztp_complete()
 	fi
 	if [ "$prev2" == "idarray" ]; then
 	  if [ "$prev3" == "set" ]; then
-		COMPREPLY=( $(compgen -W "<num_of_lines> -" -- $cur) )
+		COMPREPLY=( $(compgen -W "<real_id> -" -- $cur) )
 	  fi
 	fi
 	if [ "$prev2" == "log" ]; then
 	  if [ "$prev3" == "show" ]; then
-		COMPREPLY=( $(compgen -W "<id's_seperated_by_spaces> -" -- $cur) )
+		COMPREPLY=( $(compgen -W "<num_of_lines> -" -- $cur) )
 	  fi
 	fi
 	if [ "$prev2" == "template" ]; then
@@ -1404,7 +1391,7 @@ _ztp_complete()
 	fi
 	if [ "$prev2" == "dhcpd" ]; then
 	  if [ "$prev3" == "set" ]; then
-		COMPREPLY=( $(compgen -W "subnet first-address last-address gateway ztp-tftp-address imagediscoveryfile-option dns-servers domain-name" -- $cur) )
+		COMPREPLY=( $(compgen -W "subnet first-address last-address gateway ztp-tftp-address imagediscoveryfile-option dns-servers domain-name lease-time" -- $cur) )
 	  fi
 	fi
   elif [ $COMP_CWORD -eq 5 ]; then
@@ -1446,6 +1433,9 @@ _ztp_complete()
 		if [ "$prev" == "domain-name" ]; then
 		  COMPREPLY=( $(compgen -W "<dns_search_domain> -" -- $cur) )
 		fi
+		if [ "$prev" == "lease-time" ]; then
+		  COMPREPLY=( $(compgen -W "<lease_time_in_seconds> -" -- $cur) )
+		fi
 	  fi
 	fi
   elif [ $COMP_CWORD -eq 6 ]; then
@@ -1478,15 +1468,12 @@ def end(self):
 	tftpy.TftpContext.end(self)
 	self.metrics.end_time = time.time()
 	#### BEGIN CHANGES ####
-	#cfact.file_closed(self.file_to_transfer, self.host)  # Notify
-	#print("################### ENDING %s %s %s #############################" % (self.host, str(self.port), self.file_to_transfer) * 10)
 	tracking.report({
 		"ipaddr": self.host,
 		"port": self.port,
 		"block": None,
 		"filename": self.file_to_transfer,
 		"source": "end"})
-	#print(" ENDING %s %s %s" % (self.host, str(self.port), self.file_to_transfer))
 	#### END CHANGES ####
 	tftpy.log.debug("Set metrics.end_time to %s", self.metrics.end_time)
 	self.metrics.compute()
@@ -1508,15 +1495,12 @@ def start(self, buffer):
 	# Call handle once with the initial packet. This should put us into
 	# the download or the upload state.
 	#### BEGIN CHANGES ####
-	#print("################### STARTING %s %s %s #############################" % (self.host, str(self.port), pkt.filename) * 10)
-	#print(pkt.filename)
 	tracking.report({
 		"ipaddr": self.host,
 		"port": self.port,
 		"block": None,
 		"filename": pkt.filename,
 		"source": "start"})
-	#print(" STARTING %s %s %s" % (self.host, str(self.port), self.file_to_transfer))
 	#### END CHANGES ####
 	self.state = self.state.handle(pkt,
 									self.host,
@@ -1529,28 +1513,12 @@ def handle(self, pkt, raddress, rport):
 	if isinstance(pkt, tftpy.TftpPacketACK):
 		tftpy.log.debug("Received ACK for packet %d" % pkt.blocknumber)
 		#### BEGIN CHANGES ####
-		#print("################### PACKET %s %s %s #############################" % (pkt.blocknumber, raddress, rport) * 10)
-		#print(self.context.fileobj.tell())
 		tracking.report({
 			"ipaddr": raddress,
 			"port": rport,
 			"block": pkt.blocknumber,
 			"filename": None,
 			"source": "handle"})
-		#print(tracking._working)
-		#for each in tracking._working:
-		#	print tracking._working[each].active
-		#print(tracking._master)
-		#for each in tracking._master:
-		#	filesize = tracking._master[each].filesize
-		#	if not tracking._master[each].lastblock:
-		#		sent = 0
-		#	else:
-		#		sent = tracking._master[each].lastblock*512
-		#	#print(str(filesize-sent)+" --> "+str(sent)+"/"+str(filesize))
-		#	print tracking._master[each].active
-		#	print tracking._master[each].lastblock
-		#	print tracking._master[each].sessionports
 		#### END CHANGES ####
 		# Is this an ack to the one we just sent?
 		if self.context.next_block == pkt.blocknumber:
@@ -1609,11 +1577,6 @@ def sendDAT(self):
 	if self.context.packethook:
 		self.context.packethook(dat)
 	self.context.last_pkt = dat
-	#print(self.context.fileobj.tell())
-	#print(dir(self.context))
-	#print(self.context.address)
-	#print(self.context.port)
-	#print(self.context.file_to_transfer)
 	tracking.report({
 		"ipaddr": self.context.address,
 		"port": self.context.port,
@@ -1627,7 +1590,6 @@ class tracking_class:
 	def __init__(self, client=False):
 		self._master = {}
 		self.store = persistent_store("tracking")
-		#self._working = {}
 		if not client:
 			self.status = self.store.recall()
 			self.mthread = threading.Thread(target=self._maintenance)
@@ -1652,12 +1614,6 @@ class tracking_class:
 		if not session:
 			if args["source"] != "end":
 				self._master.update({time.time(): self.request_class(args, self)})
-		#portpair = args["ipaddr"]+":"+str(args["port"])
-		#if portpair in self._working:  # If init session exists
-		#	self._working[portpair].update(args)  # Update the session
-		#else:
-		#	# Create a new session
-		#	self._working.update({portpair: self.request_class(args, self)})
 	def _maintenance(self):
 		self.sthread = threading.Thread(target=self._maintain_store)
 		self.sthread.daemon = True
@@ -1671,18 +1627,11 @@ class tracking_class:
 	def _maintain_store(self):
 		while True:
 			time.sleep(1)
-			#print("LOOPING")
-			#print(self._working)
 			### Update tracking status ###
 			##############################
 			for session in self._master:
-				#key = self._master[session].ipaddr+":"+str(self._master[session].filename)
 				self._master[session].update_percent()
 				self._master[session].update_rate()
-				#try:
-				#	bytessent = self._master[session].lastblock*512
-				#except TypeError:
-				#	bytessent = 0
 				data = {
 					"time": self._master[session].friendlytime,
 					"ipaddr": self._master[session].ipaddr,
@@ -1704,14 +1653,9 @@ class tracking_class:
 			self.ipaddr = None
 			self.ports = {}
 			self.filename = None
-			#self.lastblock = None
 			self.position = 0
 			self.last_position = 0
-			#self.redirect = redirect
 			self.parent = parent
-			#self.sessionports = []
-			#self.children = {}  # Child sessions created during TFTP start
-			#self.master = master
 			self.active = True
 			self.threads = []
 			self.filesize = None
@@ -1722,8 +1666,6 @@ class tracking_class:
 			self.lastupdate = self.creation
 			self._inactivity_timeout(30)
 			self.update(args)
-			#if self.master:
-			#	self.init_master()
 		def update(self, args): # Update this object from a report
 			self.lastupdate = time.time()
 			if args["port"]:
@@ -1739,7 +1681,6 @@ class tracking_class:
 							self.check_file()
 					elif arg == "position":
 						self.position = args[arg]
-			#print(self.ipaddr, self.ports, self.filename, self.active, self.position, self.filesize)
 		def _inactivity_timeout(self, seconds, thread=False):
 			if not thread:  #If not started in a thread, restart in a thread
 				thread = threading.Thread(target=self._inactivity_timeout, 
@@ -1758,55 +1699,10 @@ class tracking_class:
 							# in the timeout period
 							self.active = False  # Mark session as inactive
 					time.sleep(0.1)  # Sleep for .1 seconds
-			#if type(self.redirect) != type(True):  # If we are redirecting updates
-			#	target = self.redirect  # Setup to send the updates
-			#	print("Forwarding Update")
-			#else:  # Otherwise
-			#	target = self  # Update outselves
-			#for arg in args:  # For each passed attrib
-			#	if args[arg]:  # If it has a value
-			#		if arg == "ipaddr":
-			#			target.ipaddr = args[arg]
-			#		elif arg == "port":
-			#			target.port = args[arg]
-			#		elif arg == "filename":
-			#			target.filename = args[arg]
-			#		elif arg == "block":
-			#			target.lastblock = args[arg]
-			#		elif arg == "source":
-			#			if args[arg] == "end":  # If called by end()
-			#				self.active = False  # Unset active for cleanup
-			#				if target.lastblock:
-			#					if target.lastblock*512 >= target.filesize:
-			#						target.active = False  # Unset active for cleanup
-			#						target.clean_working()
-			#if not self.redirect and self.filename:  # If transferring
-			#	self.transfer()
-		#def transfer(self):
-		#	filepair = self.ipaddr+":"+self.filename
-		#	if filepair in self.parent._master:
-		#		self.redirect = self.parent._master[filepair]
-		#		self.redirect.sessionports.append(self.port)
-		#	else:
-		#		args = {"ipaddr":self.ipaddr, "port":self.port, "filename": self.filename}
-		#		newsession = self.parent.request_class(args, self.parent, True, True)
-		#		newsession.sessionports.append(self.port)
-		#		#newsession.redirect = newsession
-		#		#self.redirect = newsession
-		#		self.parent._master.update({filepair: newsession})
-		#		self.redirect = newsession
 		def check_file(self):
 			path = config.running["tftproot"]+self.filename
 			if os.path.isfile(path):
 				self.filesize = os.path.getsize(path)
-		#def init_master(self):
-		#	self.check_file()
-		#def clean_working(self):
-		#	print("Cleaning!")
-		#	for session in self.sessionports:
-		#		key = self.ipaddr+":"+str(session)
-		#		if key in self.parent._working:
-		#			del self.parent._working[key]
 		def update_percent(self):
 			if self.filesize:
 				percent = round(100.0*self.position/self.filesize, 4)
@@ -1904,22 +1800,11 @@ class tracking_class:
 		def write(self, data):
 			linelist = data.split("\n")
 			index = 0
+			self.win.clear()
 			for line in linelist:
 				self.win.addstr(index, 0, line)
 				index += 1
 			self.win.refresh()
-	#def show_downloads_live(self, args):
-	#	s = self.screen()
-	#	try:
-	#		index = 0
-	#		while True:
-	#			s.write(self.show_downloads(None))
-	#			time.sleep(0.1)
-	#	except:
-	#		curses.echo()
-	#		curses.nocbreak()
-	#		curses.endwin()
-	#		quit()
 	def clear_downloads(self):
 		self._master = {}
 		self.status = {}
@@ -1929,7 +1814,7 @@ class tracking_class:
 			client.send("clear downloads\n")
 			client.close()
 		except socket.error:
-			print("Service not running. Clearing store.")
+			console("Service not running. Clearing store.")
 		self.store({})
 
 	def ipc_server(self):
@@ -2008,30 +1893,6 @@ class tracking_class:
 			curses.endwin()
 			quit()
 
-#t = tracking_class()
-#t.report({"ipaddr": "10.0.0.1", "port": 65000, "filename": None, "block": None})
-#t._working
-#t._master
-#
-#t.report({"ipaddr": "10.0.0.1", "port": 65000, "filename": "test", "block": None})
-#t._working
-#t._master
-#t._working[list(t._working)[0]].lastblock
-#t._master[list(t._master)[0]].lastblock
-#
-#t.report({"ipaddr": "10.0.0.1", "port": 65000, "filename": "test", "block": 100})
-#t._master[list(t._master)[0]].lastblock
-#t._working[list(t._working)[0]].lastblock
-#
-#t.report({"ipaddr": "10.0.0.1", "port": 65000, "filename": "test", "block": 200})
-#t._master[list(t._master)[0]].lastblock
-#t._working[list(t._working)[0]].lastblock
-#
-#t.report({"ipaddr": "10.0.0.1", "port": 65100, "filename": None, "block": None})
-#t._working
-#t._master
-#t.report({"ipaddr": "10.0.0.1", "port": 65100, "filename": "test", "block": 5000})
-
 
 class persistent_store:
 	def __init__(self, dbid):
@@ -2088,7 +1949,6 @@ def start_tftp():
 	try:
 		tftpy.TftpContextServer.start = start  # Overwrite the function
 		tftpy.TftpContextServer.end = end  # Overwrite the function
-		#tftpy.TftpStateExpectACK.handle = handle
 		tftpy.TftpStateExpectACK.sendDAT = sendDAT
 	except NameError:
 		pass
@@ -2125,10 +1985,6 @@ def interpreter():
 	osd = os_detect()
 	config = config_manager()
 	logger = log_management()
-	#try:
-	#	cfact = config_factory()
-	#except AttributeError:
-	#	console("Cannot mount cfact")
 	##### TEST #####
 	if arguments == "test":
 		pass
@@ -2136,13 +1992,6 @@ def interpreter():
 	elif arguments == "run":
 		global cfact
 		cfact = config_factory()
-		#global tftpy
-		#global j2
-		#global Environment
-		#global meta
-		#import tftpy
-		#import jinja2 as j2
-		#from jinja2 import Environment, meta
 		log("interpreter: Command to run received. Calling start_tftp")
 		global tracking
 		tracking = tracking_class()
@@ -2170,11 +2019,7 @@ def interpreter():
 		if answer.lower() == "confirm":
 			inst = installer()
 			inst.copy_binary()
-			#inst.create_configfile()
 			inst.install_completion()
-			#inst.install_tftpy()
-			#inst.disable_firewall()
-			#inst.install_dependencies()
 			inst.create_service()
 			inst.minor_update_script()
 			console("\nInstall complete! Logout and log back into SSH to activate auto-complete")
@@ -2196,23 +2041,24 @@ def interpreter():
 		config.hidden_list_all_ids()
 	elif arguments == "show imagefiles":
 		config.hidden_list_image_files()
-	elif arguments == "show dhcpd":
+	elif arguments == "show dhcpd-scopes":
 		config.hidden_list_dhcpd_scopes()
 	##### SHOW #####
 	elif arguments == "show":
-		console(" - show (config|run)                              |  Show the current ZTP configuration")
+		console(" - show (config|run) (raw)                        |  Show the current ZTP configuration")
 		console(" - show status                                    |  Show the status of the ZTP background service")
 		console(" - show version                                   |  Show the current version of ZTP")
 		console(" - show log (tail) (<num_of_lines>)               |  Show or tail the log file")
 		console(" - show downloads (live)                          |  Show list of TFTP downloads")
+		console(" - show dhcpd leases                              |  Show current DHCPD leases")
+	elif arguments == "show config raw" or arguments == "show run raw":
+		os.system("more /etc/ztp/ztp.cfg")
 	elif arguments == "show config" or arguments == "show run":
 		config.show_config()
 	elif arguments == "show status":
 		console("\n")
-		#os.system('systemctl status ztp')
 		osd.service_control("status", "ztp")
 		console("\n\n")
-		#os.system('systemctl status dhcpd')
 		osd.service_control("status", osd.DHCPSVC)
 		console("\n")
 	elif arguments == "show version":
@@ -2225,6 +2071,10 @@ def interpreter():
 	elif arguments[:14] == "show downloads":
 		tracking = tracking_class(client=True)
 		console(tracking.show_downloads(sys.argv))
+	elif arguments == "show dhcpd":
+		console(" - show dhcpd leases                              |  Show current DHCPD leases")
+	elif arguments[:17] == "show dhcpd leases":
+		os.system("more /var/lib/dhcp/dhcpd.leases")
 	##### SET #####
 	elif arguments == "set":
 		console("--------------------------------------------------- SETTINGS YOU PROBABLY SHOULDN'T CHANGE ---------------------------------------------------")
@@ -2328,7 +2178,7 @@ def interpreter():
 		console(" - request dhcp-option-125 (windows|cisco)        |  Show the DHCP Option 125 Hex value to use on the DHCP server for OS upgrades")
 	elif arguments == "request initial-merge":
 		cfact = config_factory()
-		console(cfact.request(config.running["initialfilename"], "10.0.0.1"))
+		cfact.request(config.running["initialfilename"], "10.0.0.1", test=True)
 	elif arguments == "request default-keystore-test":
 		cfact = config_factory()
 		default = cfact._default_lookup()
@@ -2342,7 +2192,7 @@ def interpreter():
 	elif arguments[:17] == "request snmp-test" and len(sys.argv) >= 4:
 		community = config.running["community"]
 		oid = config.running["snmpoid"]
-		console("\n\nHit CTRL+C to kill the SNMP query test")
+		console("\nHit CTRL+C to kill the SNMP query test")
 		console("\nQuerying %s using community (%s) and OID (%s)\n" % (sys.argv[3], community, oid))
 		query = snmp_query(sys.argv[3], community, oid)
 		while query.thread.isAlive():
@@ -2361,29 +2211,22 @@ def interpreter():
 	elif arguments == "service start":
 		log("#########################################################")
 		log("Starting the ZTP Service")
-		#os.system('systemctl start ztp')
-		#os.system('systemctl status ztp')
 		osd.service_control("start", "ztp")
 		osd.service_control("status", "ztp")
 		log("#########################################################")
 	elif arguments == "service stop":
 		log("#########################################################")
 		log("Stopping the ZTP Service")
-		#os.system('systemctl stop ztp')
-		#os.system('systemctl status ztp')
 		osd.service_control("stop", "ztp")
 		osd.service_control("status", "ztp")
 		log("#########################################################")
 	elif arguments == "service restart":
 		log("#########################################################")
 		log("Restarting the ZTP Service")
-		#os.system('systemctl restart ztp')
-		#os.system('systemctl status ztp')
 		osd.service_control("restart", "ztp")
 		osd.service_control("status", "ztp")
 		log("#########################################################")
 	elif arguments == "service status":
-		#os.system('systemctl status ztp')
 		osd.service_control("status", "ztp")
 		osd.service_control("status", osd.DHCPSVC)
 	##### VERSION #####
@@ -2398,11 +2241,12 @@ def interpreter():
 		console(" - install                                                     |  Run the ZTP installer")
 		console(" - upgrade                                                     |  Run the ZTP upgrade process to update the software")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
-		console(" - show (config|run)                                           |  Show the current ZTP configuration")
+		console(" - show (config|run) (raw)                                     |  Show the current ZTP configuration")
 		console(" - show status                                                 |  Show the status of the ZTP background service")
 		console(" - show version                                                |  Show the current version of ZTP")
 		console(" - show log (tail) (<num_of_lines>)                            |  Show or tail the log file")
 		console(" - show downloads (live)                                       |  Show list of TFTP downloads")
+		console(" - show dhcpd leases                                           |  Show current DHCPD leases")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console("--------------------------------------------------- SETTINGS YOU PROBABLY SHOULDN'T CHANGE ---------------------------------------------------")
