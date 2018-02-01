@@ -13,7 +13,6 @@ version = "v1.0.0"
 # NEXT: Clean up output logging
 # NEXT: Recognize client tracking (dhcp, upgrade, initial file, custom file)
 # NEXT: Allow SNMP to use multiple OIDs?
-# NEXT: store template delineator
 
 
 ##### Import native modules #####
@@ -87,15 +86,74 @@ class os_detect:
 
 
 def interceptor(afile, raddress, rport):
-	log("interceptor: Called. Running cfact.lookup procedure")
-	lookup = cfact.lookup(afile, raddress)
-	log("interceptor: cfact.lookup returned (%s)" % lookup)
-	if lookup:
-		log("interceptor: Returning ztp_dyn_file instantiated object")
-		return ztp_dyn_file(afile, raddress, rport)
+	log("interceptor: Called. Checking the cache")
+	cached = cache.get(afile, raddress)
+	if cached:
+		return cached
 	else:
-		log("interceptor: Returning None")
+		log("interceptor: Cache returned None. Running cfact.lookup procedure")
+		lookup = cfact.lookup(afile, raddress)
+		log("interceptor: cfact.lookup returned (%s)" % lookup)
+		if lookup:
+			log("interceptor: Returning ztp_dyn_file instantiated object")
+			zfile = ztp_dyn_file(afile, raddress, rport)
+			cache.store(afile, raddress, zfile)
+			return zfile
+		else:
+			log("interceptor: Returning None")
+			return None
+
+
+##### Class to cache generated file objects to prevent multiple rapid     #####
+#####   hits to the ZTP process: reducing logging                         #####
+class file_cache:
+	def __init__(self):
+		self.timeout = config.running["file-cache-timeout"]
+		self._cache_list = []
+		self._cache = {}
+		self.mthread = threading.Thread(target=self._maintenance)
+		self.mthread.daemon = True
+		self.mthread.start()
+	def store(self, filename, ipaddr, fileobj):
+		if self.timeout == 0:
+			log("file_cache.store: Caching set to 0. Declining caching of %s" % str(data))
+		else:
+			data = {time.time(): {"filename": filename, "ipaddr": ipaddr, "file": fileobj}}
+			log("file_cache.store: Storing %s" % str(data))
+			self._cache.update(data)
+	def get(self, filename, ipaddr):
+		currenttime = time.time()
+		for entry in self._cache:
+			if filename == self._cache[entry]["filename"] and ipaddr == self._cache[entry]["ipaddr"]:
+				log("file_cache.get: File found in cache. Checking timeout")
+				if currenttime - entry < self.timeout:
+					log("file_cache.get: Cached file is still within timeout period. Returning")
+					return self._cache[entry]["file"]
+				else:
+					log("file_cache.get: Cached file is outside of timeout period. Deleting from cache. Returning None")
+					del self._cache[entry]
+					return None
+		log("file_cache.get: File not in cache")
 		return None
+	def _maintenance(self):
+		self.sthread = threading.Thread(target=self._maintain_cache)
+		self.sthread.daemon = True
+		self.sthread.start()
+		while True:
+			time.sleep(1)
+			if not self.sthread.is_alive():
+				self.sthread = threading.Thread(target=self._maintain_cache)
+				self.sthread.daemon = True
+				self.sthread.start()
+	def _maintain_cache(self):
+		while True:
+			time.sleep(1)
+			print(self._cache)
+			currenttime = time.time()
+			for entry in list(self._cache):
+				if currenttime - entry > self.timeout:
+					log("file_cache._maintain_cache: Timing out and deleting %s:%s" % (entry, self._cache[entry]))
+					del self._cache[entry]
 
 
 ##### Dynamic file object: instantiated by the tftpy server to generate   #####
@@ -114,16 +172,22 @@ class ztp_dyn_file:
 	def read(self, size):
 		start = self.position
 		end = self.position + size
-		log("ztp_dyn_file.read: Called with size (%s)" % str(size))
+		if not self.closed:
+			log("ztp_dyn_file.read: Called with size (%s)" % str(size))
 		result = str(self.data[start:end])
-		log("ztp_dyn_file.read: Returning position %s to %s:\n%s" % (str(start), str(end), result))
+		if not self.closed:
+			log("ztp_dyn_file.read: Returning position %s to %s" % (str(start), str(end)))
 		self.position = end
 		return result
 	def seek(self, arg1, arg2):
 		log("ztp_dyn_file.seek: Called with args (%s) and (%s)" % (str(arg1), str(arg1)))
 		pass
 	def close(self):
-		log("ztp_dyn_file.close: Called")
+		if not self.closed:
+			log("ztp_dyn_file.close: Called. Resetting position to 0")
+		else:
+			log("ztp_dyn_file.close: Called again from cache.")
+		self.position = 0
 		self.closed = True
 
 
@@ -143,7 +207,7 @@ class config_factory:
 			self.imagediscoveryfile = config.running["imagediscoveryfile"]
 			self.basesnmpcom = config.running["community"]
 			self.snmpoid = config.running["snmpoid"]
-			self.baseconfig = config.running["starttemplate"]
+			self.baseconfig = config.running["starttemplate"]["value"]
 			self.uniquesuffix = config.running["suffix"]
 			self.templates = config.running["templates"]
 			self.keyvalstore = config.running["keyvalstore"]
@@ -316,7 +380,7 @@ class config_factory:
 			if identity == association:
 				templatename = self.associations[association]
 				if templatename in self.templates:
-					response = self.templates[templatename]
+					response = self.templates[templatename]["value"]
 		return response
 	def merge_test(self, iden, template):
 		identity = self.get_keystore_id(iden)
@@ -448,13 +512,15 @@ class config_manager:
 			if setting == "initial-template":
 				console("Enter each line of the template ending with '%s' on a line by itself" % args[3])
 				newtemplate = self.multilineinput(args[3])
-				self.running["starttemplate"] = newtemplate
+				self.running["starttemplate"] = {"delineator":args[3], "value": newtemplate}
 			elif setting == "template":
 				console("Enter each line of the template ending with '%s' on a line by itself" % args[4])
 				newtemplate = self.multilineinput(args[4])
 				if "templates" not in list(self.running):
 					self.running.update({"templates": {}})
-				self.running["templates"][value] = newtemplate
+				self.running["templates"].update({value:{}})
+				self.running["templates"][value]["value"] = newtemplate
+				self.running["templates"][value]["delineator"] = args[4]
 			self.save()
 		elif setting == "keystore":
 			self.set_keystore(args[3], args[4], args[5] )
@@ -469,7 +535,7 @@ class config_manager:
 				value = None
 			self.running[setting] = value
 			self.save()
-		elif setting == "image-supression":
+		elif setting == "image-supression" or setting == "file-cache-timeout":
 			try:
 				self.running[setting] = int(value)
 				self.save()
@@ -604,14 +670,18 @@ class config_manager:
 		return True
 	def show_config(self):
 		cmdlist = []
-		simplevals = ["suffix", "initialfilename", "community", "snmpoid", "tftproot", "imagediscoveryfile"]
+		simplevals = ["suffix", "initialfilename", "community", "snmpoid", "tftproot", "imagediscoveryfile", "file-cache-timeout"]
 		for each in simplevals:
 			cmdlist.append("ztp set %s %s" % (each, self.running[each]))
-		itemp = "ztp set initial-template ^\n%s\n^" % self.running["starttemplate"]
+		itempval = self.running["starttemplate"]["value"]
+		itempdel = self.running["starttemplate"]["delineator"]
+		itemp = "ztp set initial-template %s\n%s\n%s" % (itempdel, itempval, itempdel)
 		###########
 		templatetext = ""
 		for template in self.running["templates"]:
-			templatetext += "ztp set template %s ^\n%s\n^" % (template, self.running["templates"][template])
+			tempval = self.running["templates"][template]["value"]
+			tempdel = self.running["templates"][template]["delineator"]
+			templatetext += "ztp set template %s %s\n%s\n%s" % (template, tempdel, tempval, tempdel)
 			templatetext += "\n!\n!\n!\n#######################################################\n"
 		###########
 		idarraylist = []
@@ -993,7 +1063,7 @@ class log_management:
 ##### Installer class: A simple holder class which contains all of the    #####
 #####   installation scripts used to install/upgrade the ZTP server       #####
 class installer:
-	defaultconfig = '''{\n    "associations": {\n        "MY_DEFAULT": "LONG_TEMPLATE", \n        "SERIAL100": "SHORT_TEMPLATE", \n        "STACK1": "LONG_TEMPLATE"\n    }, \n    "community": "secretcommunity", \n    "default-keystore": "MY_DEFAULT", \n    "dhcpd": {}, \n    "idarrays": {\n        "STACK1": [\n            "SERIAL1", \n            "SERIAL2", \n            "SERIAL3"\n        ]\n    }, \n    "image-supression": 3600, \n    "imagediscoveryfile": "freeztp_ios_upgrade", \n    "imagefile": "cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin", \n    "initialfilename": "network-confg", \n    "keyvalstore": {\n        "MY_DEFAULT": {\n            "hostname": "UNKNOWN_HOST", \n            "vl1_ip_address": "dhcp"\n        }, \n        "SERIAL100": {\n            "hostname": "SOMEDEVICE", \n            "vl1_ip_address": "10.0.0.201"\n        }, \n        "STACK1": {\n            "hostname": "CORESWITCH", \n            "vl1_ip_address": "10.0.0.200", \n            "vl1_netmask": "255.255.255.0"\n        }\n    }, \n    "snmpoid": "1.3.6.1.2.1.47.1.1.1.1.11.1000", \n    "starttemplate": "hostname {{ autohostname }}\\n!\\nsnmp-server community {{ community }} RO\\n!\\nend", \n    "suffix": "-confg", \n    "templates": {\n        "LONG_TEMPLATE": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} {{ vl1_netmask }}\\n no shut\\n!\\nip domain-name test.com\\n!\\nusername admin privilege 15 secret password123\\n!\\naaa new-model\\n!\\n!\\naaa authentication login CONSOLE local\\naaa authorization console\\naaa authorization exec default local if-authenticated\\n!\\ncrypto key generate rsa modulus 2048\\n!\\nip ssh version 2\\n!\\nline vty 0 15\\nlogin authentication default\\ntransport input ssh\\nline console 0\\nlogin authentication CONSOLE\\nend", \n        "SHORT_TEMPLATE": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} 255.255.255.0\\n no shut\\n!\\nend"\n    }, \n    "tftproot": "/etc/ztp/tftproot/"\n}'''
+	defaultconfig = '''{\n    "associations": {\n        "MY_DEFAULT": "LONG_TEMPLATE", \n        "SERIAL100": "SHORT_TEMPLATE", \n        "STACK1": "LONG_TEMPLATE"\n    }, \n    "community": "secretcommunity", \n    "default-keystore": "MY_DEFAULT", \n    "dhcpd": {}, \n    "file-cache-timeout": 10, \n    "idarrays": {\n        "STACK1": [\n            "SERIAL1", \n            "SERIAL2", \n            "SERIAL3"\n        ]\n    }, \n    "image-supression": 3600, \n    "imagediscoveryfile": "freeztp_ios_upgrade", \n    "imagefile": "cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin", \n    "initialfilename": "network-confg", \n    "keyvalstore": {\n        "MY_DEFAULT": {\n            "hostname": "UNKNOWN_HOST", \n            "vl1_ip_address": "dhcp"\n        }, \n        "SERIAL100": {\n            "hostname": "SOMEDEVICE", \n            "vl1_ip_address": "10.0.0.201"\n        }, \n        "STACK1": {\n            "hostname": "CORESWITCH", \n            "vl1_ip_address": "10.0.0.200", \n            "vl1_netmask": "255.255.255.0"\n        }\n    }, \n    "snmpoid": "1.3.6.1.2.1.47.1.1.1.1.11.1000", \n    "starttemplate": {\n        "delineator": "^", \n        "value": "hostname {{ autohostname }}\\n!\\nsnmp-server community {{ community }} RO\\n!\\nend"\n    }, \n    "suffix": "-confg", \n    "templates": {\n        "LONG_TEMPLATE": {\n            "delineator": "^", \n            "value": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} {{ vl1_netmask }}\\n no shut\\n!\\nip domain-name test.com\\n!\\nusername admin privilege 15 secret password123\\n!\\naaa new-model\\n!\\n!\\naaa authentication login CONSOLE local\\naaa authorization console\\naaa authorization exec default local if-authenticated\\n!\\ncrypto key generate rsa modulus 2048\\n!\\nip ssh version 2\\n!\\nline vty 0 15\\nlogin authentication default\\ntransport input ssh\\nline console 0\\nlogin authentication CONSOLE\\nend"\n        }, \n        "SHORT_TEMPLATE": {\n            "delineator": "^", \n            "value": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} 255.255.255.0\\n no shut\\n!\\nend"\n        }\n    }, \n    "tftproot": "/etc/ztp/tftproot/"\n}'''
 	def minor_update_script(self):
 		os.system('mkdir -p ' + "/etc/ztp/tftproot/")  # Create new tftproot dir
 		newconfigkeys = {
@@ -1201,7 +1271,7 @@ _ztp_complete()
 		COMPREPLY=( $(compgen -W "config run status version log downloads dhcpd" -- $cur) )
 		;;
 	  "set")
-		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile template keystore idarray association default-keystore imagefile image-supression dhcpd" -- $cur) )
+		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile file-cache-timeout template keystore idarray association default-keystore imagefile image-supression dhcpd" -- $cur) )
 		;;
 	  "clear")
 		COMPREPLY=( $(compgen -W "keystore idarray template association dhcpd log downloads" -- $cur) )
@@ -1245,6 +1315,11 @@ _ztp_complete()
 	  initialfilename)
 		if [ "$prev2" == "set" ]; then
 		  COMPREPLY=( $(compgen -W "<value> -" -- $cur) )
+		fi
+		;;
+	  file-cache-timeout)
+		if [ "$prev2" == "set" ]; then
+		  COMPREPLY=( $(compgen -W "<timeout_in_seconds> -" -- $cur) )
 		fi
 		;;
 	  community)
@@ -1991,7 +2066,9 @@ def interpreter():
 	##### RUN #####
 	elif arguments == "run":
 		global cfact
+		global cache
 		cfact = config_factory()
+		cache = file_cache()
 		log("interpreter: Command to run received. Calling start_tftp")
 		global tracking
 		tracking = tracking_class()
@@ -2085,6 +2162,7 @@ def interpreter():
 		console(" - set initial-template <end_char>                             |  Set the initial configuration j2 template used for target identification")
 		console(" - set tftproot <tftp_root_directory>                          |  Set the root directory for TFTP files")
 		console(" - set imagediscoveryfile <filename>                           |  Set the name of the IOS image discovery file used for IOS upgrades")
+		console(" - set file-cache-timeout <timeout>                            |  Set the timeout for cacheing of files. '0' disables caching.")
 		console("--------------------------------------------------------- SETTINGS YOU SHOULD CHANGE ---------------------------------------------------------")
 		console(" - set template <template_name> <end_char>                     |  Create/Modify a named J2 tempate which is used for the final config push")
 		console(" - set keystore <id/arrayname> <keyword> <value>               |  Create a keystore entry to be used when merging final configurations")
@@ -2108,6 +2186,8 @@ def interpreter():
 		console(" - set tftproot <tftp_root_directory>             |  Set the root directory for TFTP files")
 	elif arguments == "set imagediscoveryfile":
 		console(" - set imagediscoveryfile <filename>              |  Set the name of the IOS image discovery file used for IOS upgrades")
+	elif arguments == "set file-cache-timeout":
+		console(" - set file-cache-timeout <timeout>               |  Set the timeout for cacheing of files. '0' disables caching.")
 	elif (arguments[:12] == "set template" and len(sys.argv) < 5) or arguments == "set template":
 		console(" - set template <template_name> <end_char>        |  Set the final configuration j2 template pushed to host after discovery/identification")
 	elif (arguments[:12] == "set keystore" and len(sys.argv) < 6) or arguments == "set keystore":
@@ -2257,6 +2337,7 @@ def interpreter():
 		console(" - set initial-template <end_char>                             |  Set the initial configuration j2 template used for target identification")
 		console(" - set tftproot <tftp_root_directory>                          |  Set the root directory for TFTP files")
 		console(" - set imagediscoveryfile <filename>                           |  Set the name of the IOS image discovery file used for IOS upgrades")
+		console(" - set file-cache-timeout <timeout>                            |  Set the timeout for cacheing of files. '0' disables caching.")
 		console("--------------------------------------------------------- SETTINGS YOU SHOULD CHANGE ---------------------------------------------------------")
 		console(" - set template <template_name> <end_char>                     |  Create/Modify a named J2 tempate which is used for the final config push")
 		console(" - set keystore <id/arrayname> <keyword> <value>               |  Create a keystore entry to be used when merging final configurations")
