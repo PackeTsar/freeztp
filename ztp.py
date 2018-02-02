@@ -10,9 +10,10 @@
 version = "v1.0.0"
 
 
-# NEXT: Clean up output logging
 # NEXT: Recognize client tracking (dhcp, upgrade, initial file, custom file)
 # NEXT: Allow SNMP to use multiple OIDs?
+# NEXT: Finish SNMP queries, SNMP needs better way to state complete. cfact needs to search results
+# NEXT: Downloads not timing out. Staying active
 
 
 ##### Import native modules #####
@@ -116,7 +117,7 @@ class file_cache:
 		self.mthread.start()
 	def store(self, filename, ipaddr, fileobj):
 		if self.timeout == 0:
-			log("file_cache.store: Caching set to 0. Declining caching of %s" % str(data))
+			log("file_cache.store: Caching set to 0. Declining caching.")
 		else:
 			data = {time.time(): {"filename": filename, "ipaddr": ipaddr, "file": fileobj}}
 			log("file_cache.store: Storing %s" % str(data))
@@ -148,7 +149,6 @@ class file_cache:
 	def _maintain_cache(self):
 		while True:
 			time.sleep(1)
-			print(self._cache)
 			currenttime = time.time()
 			for entry in list(self._cache):
 				if currenttime - entry > self.timeout:
@@ -423,30 +423,47 @@ class config_factory:
 #####   retains the real ID of the switch which is mapped to a            #####
 #####   keystore ID when the final template is requested                  #####
 class snmp_query:
-	def __init__(self, host, community, oid, timeout=30):
+	def __init__(self, host, community, oids, timeout=30):
 		global pysnmp
 		import pysnmp.hlapi
 		self.complete = False
 		self.status = "starting"
-		self.response = None
+		self.responses = {}
 		self.host = host
 		self.community = community
-		self.oid = oid
+		self.oids = oids
 		self.timeout = timeout
-		self.thread = threading.Thread(target=self._query_worker)
+		self.threads = []
+		#self._start()
+		self.thread = threading.Thread(target=self._start)
 		self.thread.daemon = True
 		self.thread.start()
-	def _query_worker(self):
+	def _start(self):
+		for oid in self.oids:
+			thread = threading.Thread(target=self._query_worker, args=(oid, self.oids[oid]))
+			thread.daemon = True
+			thread.start()
+			self.threads.append(thread)
+	def _watch_threads(self):
+		loop = True
+		while loop:
+			alldead = True
+			for thread in self.threads:
+				if thread.isAlive():
+					alldead = False
+			if alldead:
+				loop = False
+	def _query_worker(self, oidname, oid):
 		starttime = time.time()
 		self.status = "running"
 		while not self.complete:
 			try:
 				log("snmp_query._query_worker: Attempting SNMP Query")
-				response = self._get_oid()
-				self.response = response
+				response = self._get_oid(oid)
+				self.responses.update({oidname: response})
 				self.status = "success"
 				self.complete = True
-				log("snmp_query._query_worker: SNMP Query Successful. Host (%s) responded with (%s)" % (self.host, str(self.response)))
+				log("snmp_query._query_worker: SNMP Query Successful (OID: %s). Host (%s) responded with (%s)" % (oidname, self.host, str(response)))
 			except IndexError:
 				self.status = "retrying"
 				log("snmp_query._query_worker: SNMP Query Timed Out")
@@ -456,13 +473,13 @@ class snmp_query:
 				break
 			else:
 				time.sleep(3)
-	def _get_oid(self):
+	def _get_oid(self, oid):
 		errorIndication, errorStatus, errorIndex, varBinds = next(
 			pysnmp.hlapi.getCmd(pysnmp.hlapi.SnmpEngine(),
 				   pysnmp.hlapi.CommunityData(self.community, mpModel=0),
 				   pysnmp.hlapi.UdpTransportTarget((self.host, 161)),
 				   pysnmp.hlapi.ContextData(),
-				   pysnmp.hlapi.ObjectType(pysnmp.hlapi.ObjectIdentity(self.oid)))
+				   pysnmp.hlapi.ObjectType(pysnmp.hlapi.ObjectIdentity(oid)))
 		)
 		return str(varBinds[0][1])
 
@@ -508,6 +525,9 @@ class config_manager:
 		exceptions = ["keyvalstore", "starttemplate"]
 		if setting in exceptions:
 			console("Cannot configure this way")
+		elif setting == "snmpoid":
+			self.running[setting].update({value: args[4]})
+			self.save()
 		elif "template" in setting:
 			if setting == "initial-template":
 				console("Enter each line of the template ending with '%s' on a line by itself" % args[3])
@@ -571,6 +591,13 @@ class config_manager:
 				console("ID does not exist in the idarrays: %s" % iden)
 			else:
 				del self.running["idarrays"][iden]
+		elif setting == "snmpoid":
+			if self.running["snmpoid"] == {}:
+				console("No SNMP OID's are currently configured")
+			elif iden not in list(self.running["snmpoid"]):
+				console("snmpoid '%s' is not currently configured" % iden)
+			else:
+				del self.running["snmpoid"][iden]
 		elif setting == "template":
 			if "templates" not in list(self.running):
 				console("No templates are currently configured")
@@ -670,9 +697,13 @@ class config_manager:
 		return True
 	def show_config(self):
 		cmdlist = []
-		simplevals = ["suffix", "initialfilename", "community", "snmpoid", "tftproot", "imagediscoveryfile", "file-cache-timeout"]
+		simplevals = ["suffix", "initialfilename", "community", "tftproot", "imagediscoveryfile", "file-cache-timeout"]
 		for each in simplevals:
 			cmdlist.append("ztp set %s %s" % (each, self.running[each]))
+		####
+		for oid in self.running["snmpoid"]:
+			cmdlist.append("ztp set snmpoid %s %s" % (oid, self.running["snmpoid"][oid]))
+		####
 		itempval = self.running["starttemplate"]["value"]
 		itempdel = self.running["starttemplate"]["delineator"]
 		itemp = "ztp set initial-template %s\n%s\n%s" % (itempdel, itempval, itempdel)
@@ -822,6 +853,9 @@ class config_manager:
 	def hidden_list_arrays(self):
 		for arrayname in list(self.running["idarrays"]):
 			console(arrayname)
+	def hidden_list_snmpoid(self):
+		for oid in self.running["snmpoid"]:
+			console(oid)
 	def hidden_list_templates(self):
 		for template in self.running["templates"]:
 			console(template)
@@ -1274,7 +1308,7 @@ _ztp_complete()
 		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile file-cache-timeout template keystore idarray association default-keystore imagefile image-supression dhcpd" -- $cur) )
 		;;
 	  "clear")
-		COMPREPLY=( $(compgen -W "keystore idarray template association dhcpd log downloads" -- $cur) )
+		COMPREPLY=( $(compgen -W "keystore idarray snmpoid template association dhcpd log downloads" -- $cur) )
 		;;
 	  "request")
 		COMPREPLY=( $(compgen -W "merge-test initial-merge default-keystore-test snmp-test dhcp-option-125 dhcpd-commit auto-dhcpd ipc-console" -- $cur) )
@@ -1320,6 +1354,15 @@ _ztp_complete()
 	  file-cache-timeout)
 		if [ "$prev2" == "set" ]; then
 		  COMPREPLY=( $(compgen -W "<timeout_in_seconds> -" -- $cur) )
+		fi
+		;;
+	  snmpoid)
+		local oids=$(for k in `ztp show snmpoid`; do echo $k ; done)
+		if [ "$prev2" == "set" ]; then
+		  COMPREPLY=( $(compgen -W "${oids} <name> -" -- $cur) )
+		fi
+		if [ "$prev2" == "clear" ]; then
+		  COMPREPLY=( $(compgen -W "${oids}" -- $cur) )
 		fi
 		;;
 	  community)
@@ -1451,6 +1494,11 @@ _ztp_complete()
 	if [ "$prev2" == "log" ]; then
 	  if [ "$prev3" == "show" ]; then
 		COMPREPLY=( $(compgen -W "<num_of_lines> -" -- $cur) )
+	  fi
+	fi
+	if [ "$prev2" == "snmpoid" ]; then
+	  if [ "$prev3" == "set" ]; then
+		COMPREPLY=( $(compgen -W "<value> -" -- $cur) )
 	  fi
 	fi
 	if [ "$prev2" == "template" ]; then
@@ -2110,6 +2158,8 @@ def interpreter():
 		config.hidden_list_keys(sys.argv[3])
 	elif arguments == "show arrays":
 		config.hidden_list_arrays()
+	elif arguments == "show snmpoid":
+		config.hidden_list_snmpoid()
 	elif arguments == "show templates":
 		config.hidden_list_templates()
 	elif arguments == "show associations":
@@ -2158,7 +2208,7 @@ def interpreter():
 		console(" - set suffix <value>                                          |  Set the file name suffix used by target when requesting the final config")
 		console(" - set initialfilename <value>                                 |  Set the file name used by the target during the initial config request")
 		console(" - set community <value>                                       |  Set the SNMP community you want to use for target ID identification")
-		console(" - set snmpoid <value>                                         |  Set the SNMP OID to use to pull the target ID during identification")
+		console(" - set snmpoid <name> <value>                                  |  Set named SNMP OIDs to use to pull the target ID during identification")
 		console(" - set initial-template <end_char>                             |  Set the initial configuration j2 template used for target identification")
 		console(" - set tftproot <tftp_root_directory>                          |  Set the root directory for TFTP files")
 		console(" - set imagediscoveryfile <filename>                           |  Set the name of the IOS image discovery file used for IOS upgrades")
@@ -2178,8 +2228,8 @@ def interpreter():
 		console(" - set initialfilename <value>                    |  Set the file name used by the target during the initial config request")
 	elif arguments == "set community":
 		console(" - set community <value>                          |  Set the SNMP community you want to use for target ID identification")
-	elif arguments == "set snmpoid":
-		console(" - set snmpoid <value>                            |  Set the SNMP OID to use to pull the target ID during identification")
+	elif (arguments[:11] == "set snmpoid" and len(sys.argv) < 5) or arguments == "set snmpoid":
+		console(" - set snmpoid <name> <value>                     |  Set named SNMP OIDs to use to pull the target ID during identification")
 	elif arguments == "set initial-template":
 		console(" - set initial-template <end_char>                |  Set the initial configuration j2 template used for target identification")
 	elif arguments == "set tftproot":
@@ -2208,6 +2258,7 @@ def interpreter():
 		config.set(sys.argv)
 	##### CLEAR #####
 	elif arguments == "clear":
+		console(" - clear snmpoid <name>                           |  Delete an SNMP OID from the configuration")
 		console(" - clear template <template_name>                 |  Delete a named configuration template")
 		console(" - clear keystore <id> (all|<keyword>)            |  Delete an individual key or a whole keystore ID from the configuration")
 		console(" - clear idarray <arrayname>                      |  Delete an ID array from the configuration")
@@ -2215,6 +2266,8 @@ def interpreter():
 		console(" - clear dhcpd <scope-name>                       |  Delete a DHCP scope")
 		console(" - clear log                                      |  Delete the logging info from the logfile")
 		console(" - clear downloads                                |  Delete the list of TFTP downloads")
+	elif (arguments[:13] == "clear snmpoid" and len(sys.argv) < 4) or arguments == "clear snmpoid":
+		console(" - clear snmpoid <name>                           |  Delete an SNMP OID from the configuration")
 	elif (arguments[:14] == "clear template" and len(sys.argv) < 4) or arguments == "clear template":
 		console(" - clear template <template_name>                 |  Delete a named configuration template")
 	elif (arguments[:14] == "clear keystore" and len(sys.argv) < 5) or arguments == "clear keystore":
@@ -2225,6 +2278,8 @@ def interpreter():
 		console(" - clear association <id/arrayname>               |  Delete an association from the configuration")
 	elif (arguments[:11] == "clear dhcpd" and len(sys.argv) < 4) or arguments == "clear dhcpd":
 		console(" - clear dhcpd <scope-name>                       |  Delete a DHCP scope")
+	elif arguments[:13] == "clear snmpoid" and len(sys.argv) >= 4:
+		config.clear(sys.argv)
 	elif arguments[:14] == "clear template" and len(sys.argv) >= 4:
 		config.clear(sys.argv)
 	elif arguments[:14] == "clear keystore" and len(sys.argv) >= 5:
@@ -2333,7 +2388,7 @@ def interpreter():
 		console(" - set suffix <value>                                          |  Set the file name suffix used by target when requesting the final config")
 		console(" - set initialfilename <value>                                 |  Set the file name used by the target during the initial config request")
 		console(" - set community <value>                                       |  Set the SNMP community you want to use for target ID identification")
-		console(" - set snmpoid <value>                                         |  Set the SNMP OID to use to pull the target ID during identification")
+		console(" - set snmpoid <name> <value>                                  |  Set named SNMP OIDs to use to pull the target ID during identification")
 		console(" - set initial-template <end_char>                             |  Set the initial configuration j2 template used for target identification")
 		console(" - set tftproot <tftp_root_directory>                          |  Set the root directory for TFTP files")
 		console(" - set imagediscoveryfile <filename>                           |  Set the name of the IOS image discovery file used for IOS upgrades")
@@ -2349,6 +2404,7 @@ def interpreter():
 		console(" - set dhcpd <scope-name> [parameters]                         |  Configure DHCP scope(s) to serve IP addresses to ZTP clients")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
+		console(" - clear snmpoid <name>                                        |  Delete an SNMP OID from the configuration")
 		console(" - clear template <template_name>                              |  Delete a named configuration template")
 		console(" - clear keystore <id> (all|<keyword>)                         |  Delete an individual key or a whole keystore ID from the configuration")
 		console(" - clear idarray <arrayname>                                   |  Delete an ID array from the configuration")
