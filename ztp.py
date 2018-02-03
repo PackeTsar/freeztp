@@ -2006,7 +2006,7 @@ class tracking_class:
 		def write(self, data):
 			linelist = data.split("\n")
 			index = 0
-			self.win.clear()
+			#self.win.clear()
 			for line in linelist:
 				self.win.addstr(index, 0, line)
 				index += 1
@@ -2196,8 +2196,8 @@ def interpreter():
 	global logger
 	global osd
 	osd = os_detect()
-	config = config_manager()
 	logger = log_management()
+	config = config_manager()
 	##### TEST #####
 	if arguments == "test":
 		pass
