@@ -230,21 +230,23 @@ Below is the CLI guide for FreeZTP. You can see this at the command line by ente
  - install                                                     |  Run the ZTP installer
  - upgrade                                                     |  Run the ZTP upgrade process to update the software
 ----------------------------------------------------------------------------------------------------------------------------------------------
- - show (config|run)                                           |  Show the current ZTP configuration
+ - show (config|run) (raw)                                     |  Show the current ZTP configuration
  - show status                                                 |  Show the status of the ZTP background service
  - show version                                                |  Show the current version of ZTP
  - show log (tail) (<num_of_lines>)                            |  Show or tail the log file
  - show downloads (live)                                       |  Show list of TFTP downloads
+ - show dhcpd leases (current|all|raw)                         |  Show DHCPD leases
 ----------------------------------------------------------------------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------------------------------------------------
 --------------------------------------------------- SETTINGS YOU PROBABLY SHOULDN'T CHANGE ---------------------------------------------------
  - set suffix <value>                                          |  Set the file name suffix used by target when requesting the final config
  - set initialfilename <value>                                 |  Set the file name used by the target during the initial config request
  - set community <value>                                       |  Set the SNMP community you want to use for target ID identification
- - set snmpoid <value>                                         |  Set the SNMP OID to use to pull the target ID during identification
+ - set snmpoid <name> <value>                                  |  Set named SNMP OIDs to use to pull the target ID during identification
  - set initial-template <end_char>                             |  Set the initial configuration j2 template used for target identification
  - set tftproot <tftp_root_directory>                          |  Set the root directory for TFTP files
  - set imagediscoveryfile <filename>                           |  Set the name of the IOS image discovery file used for IOS upgrades
+ - set file-cache-timeout <timeout>                            |  Set the timeout for cacheing of files. '0' disables caching.
 --------------------------------------------------------- SETTINGS YOU SHOULD CHANGE ---------------------------------------------------------
  - set template <template_name> <end_char>                     |  Create/Modify a named J2 tempate which is used for the final config push
  - set keystore <id/arrayname> <keyword> <value>               |  Create a keystore entry to be used when merging final configurations
@@ -256,6 +258,7 @@ Below is the CLI guide for FreeZTP. You can see this at the command line by ente
  - set dhcpd <scope-name> [parameters]                         |  Configure DHCP scope(s) to serve IP addresses to ZTP clients
 ----------------------------------------------------------------------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------------------------------------------------
+ - clear snmpoid <name>                                        |  Delete an SNMP OID from the configuration
  - clear template <template_name>                              |  Delete a named configuration template
  - clear keystore <id> (all|<keyword>)                         |  Delete an individual key or a whole keystore ID from the configuration
  - clear idarray <arrayname>                                   |  Delete an ID array from the configuration
@@ -282,18 +285,20 @@ Below is the CLI guide for FreeZTP. You can see this at the command line by ente
 The following is the default configuration seen on the ZTP server after installation when doing a `ztp show config`.
 
 ```
-[root@ZTP ~]# ztp show config 
-!
-!
-!
+#######################################################
+#
+#
+#
 ztp set suffix -confg
 ztp set initialfilename network-confg
 ztp set community secretcommunity
-ztp set snmpoid 1.3.6.1.2.1.47.1.1.1.1.11.1000
 ztp set tftproot /etc/ztp/tftproot/
 ztp set imagediscoveryfile freeztp_ios_upgrade
-!
-!
+ztp set file-cache-timeout 10
+ztp set snmpoid WS-C2960_SERIAL_NUMBER 1.3.6.1.2.1.47.1.1.1.1.11.1001
+ztp set snmpoid WS-C3850_SERIAL_NUMBER 1.3.6.1.2.1.47.1.1.1.1.11.1000
+#
+#
 ztp set initial-template ^
 hostname {{ autohostname }}
 !
@@ -301,14 +306,20 @@ snmp-server community {{ community }} RO
 !
 end
 ^
-!
+#
+#
+#
 #######################################################
+#
+#
+#
+#
+#
+#
 #######################################################
-
-!
-!
-!
-#######################################################
+#
+#
+#
 ztp set template SHORT_TEMPLATE ^
 hostname {{ hostname }}
 !
@@ -318,10 +329,13 @@ interface Vlan1
 !
 end
 ^
-!
-!
-!
+#
+#
+#
 #######################################################
+#
+#
+#
 ztp set template LONG_TEMPLATE ^
 hostname {{ hostname }}
 !
@@ -351,38 +365,42 @@ line console 0
 login authentication CONSOLE
 end
 ^
-!
-!
-!
+#
+#
+#
 #######################################################
-!
-!
-!
+#
+#
+#
 ztp set keystore MY_DEFAULT vl1_ip_address dhcp
 ztp set keystore MY_DEFAULT hostname UNKNOWN_HOST
-!
+#
 ztp set keystore SERIAL100 vl1_ip_address 10.0.0.201
 ztp set keystore SERIAL100 hostname SOMEDEVICE
-!
+#
 ztp set keystore STACK1 vl1_netmask 255.255.255.0
 ztp set keystore STACK1 vl1_ip_address 10.0.0.200
 ztp set keystore STACK1 hostname CORESWITCH
-!
-!
+#
+#
+#
 ztp set idarray STACK1 SERIAL1 SERIAL2 SERIAL3
-!
-!
+#
+#
+#
 ztp set association id MY_DEFAULT template LONG_TEMPLATE
 ztp set association id SERIAL100 template SHORT_TEMPLATE
 ztp set association id STACK1 template LONG_TEMPLATE
-!
-!
+#
+#
+#
 ztp set default-keystore MY_DEFAULT
 ztp set imagefile cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin
 ztp set image-supression 3600
-!
-
-[root@ZTP ~]#
+#
+#
+#
+#######################################################
 ```
 
 
