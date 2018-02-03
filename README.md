@@ -167,10 +167,10 @@ The new switch should have one of its ports connected to a network (likely an up
 
 ####  4. STEP 4 - SNMP DISCOVERY: The ZTP server discovers the switch's "Real ID" (ie: serial number) using SNMP
   - **Step 4.1:** After the initial config file is passed to and loaded by the switch, the ZTP server initiates a SNMP discovery of the switch's serial number, or "Real ID"
-    - **Step 4.1.1:** The SNMP request targets the source IP of the switch which was used to originally request the "network-confg" file in **Step 3.1**
-    - **Step 4.1.2:** The SNMP request uses the value of the `community` configuration field as the authentication community (which the switch should honor once it loads the configuration from the "network-confg" file)
-    - **Step 4.1.3:** The SNMP request uses the OID from the `snmpoid` configuration field which, by default, is the OID to obtain the serial number of the switch
-      - NOTE: _You may need to change the OID based on the switch model you are discovering. You can test the configured OID for its returned value using the command:_ `ztp request snmp-test <ip_address>`
+    - **Step 4.1.1:** The SNMP requests target the source IP of the switch which was used to originally request the "network-confg" file in **Step 3.1**
+    - **Step 4.1.2:** The SNMP requests use the value of the `community` configuration field as the authentication community (which the switch should honor once it loads the configuration from the "network-confg" file)
+    - **Step 4.1.3:** The SNMP requests use the OIDs from the `snmpoid` configuration field. The FreeZTP default configuration comes with a few different OIDs pre-configured for some popular switch models.
+      - NOTE: _You may need to add an OID based on the switch model you are discovering. You can test the configured OIDs for returned values using the following command. Your switch will need to be accessible and ready to accept the ZTP configured community_ `ztp request snmp-test <ip_address>`
     - **Step 4.1.4:** Once the SNMP query succeeds, the ZTP server maps the Real ID (ie: serial number) of the discovered switch to its temporary hostname generated in **Step 3.2.1**
 
 ####  5. STEP 5 - FINAL CONFIG REQUEST: The switch requests the final configuration file and the ZTP server generates it based on the ZTP configuration
