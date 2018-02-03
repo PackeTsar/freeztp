@@ -11,9 +11,9 @@ version = "v1.0.0"
 
 
 # NEXT: Recognize client tracking (dhcp, upgrade, initial file, custom file)
-# NEXT: Allow SNMP to use multiple OIDs?
-# NEXT: Finish SNMP queries, SNMP needs better way to state complete. cfact needs to search results
 # NEXT: Downloads not timing out. Staying active
+# Clean up show config output
+# Supress IOS upgrade with fictional file name
 
 
 ##### Import native modules #####
@@ -126,15 +126,16 @@ class file_cache:
 		currenttime = time.time()
 		for entry in self._cache:
 			if filename == self._cache[entry]["filename"] and ipaddr == self._cache[entry]["ipaddr"]:
-				log("file_cache.get: File found in cache. Checking timeout")
+				log("file_cache.get: File (%s) requested by (%s) found in cache. Checking timeout." % (filename, ipaddr))
 				if currenttime - entry < self.timeout:
-					log("file_cache.get: Cached file is still within timeout period. Returning")
+					log("file_cache.get: Cached file is still within timeout period. Resetting to 0 and returning")
+					self._cache[entry]["file"].position = 0
 					return self._cache[entry]["file"]
 				else:
 					log("file_cache.get: Cached file is outside of timeout period. Deleting from cache. Returning None")
 					del self._cache[entry]
 					return None
-		log("file_cache.get: File not in cache")
+		log("file_cache.get: File (%s) requested by (%s) not in cache" % (filename, ipaddr))
 		return None
 	def _maintenance(self):
 		self.sthread = threading.Thread(target=self._maintain_cache)
@@ -184,10 +185,9 @@ class ztp_dyn_file:
 		pass
 	def close(self):
 		if not self.closed:
-			log("ztp_dyn_file.close: Called. Resetting position to 0")
+			log("ztp_dyn_file.close: Called. File closing.")
 		else:
 			log("ztp_dyn_file.close: Called again from cache.")
-		self.position = 0
 		self.closed = True
 
 
@@ -231,25 +231,27 @@ class config_factory:
 	def lookup(self, filename, ipaddr):
 		log("cfact.lookup: Called. Checking filename (%s) and IP (%s)" % (filename, ipaddr))
 		tempid = filename.replace(self.uniquesuffix, "")
-		log("cfact.lookup: TempID is (%s)" % tempid)
-		log("cfact.lookup: Current SNMP Requests: %s" % list(self.snmprequests))
+		if (self.uniquesuffix in filename) and (filename != self.basefilename):
+			log("cfact.lookup: TempID is (%s)" % tempid)
+			log("cfact.lookup: Current SNMP Requests: %s" % list(self.snmprequests))
 		if filename == self.basefilename:
-			log("cfact.lookup: TempID matches the initialfilename. Returning True")
+			log("cfact.lookup: Requested filename matches the initialfilename. Returning True")
 			return True
-		if filename == self.imagediscoveryfile:
-			log("cfact.lookup: TempID matches the imagediscoveryfile")
-			if self._check_supression(ipaddr):
-				return False
+		elif filename == self.imagediscoveryfile:
+			log("cfact.lookup: Requested filename matches the imagediscoveryfile")
+			#if self._check_supression(ipaddr):
+			#	return False
 			log("cfact.lookup: #############IOS UPGRADE ABOUT TO BEGIN!!!#############")
 			return True
 		elif self.uniquesuffix in filename and tempid in list(self.snmprequests):  # If the filname contains the suffix and it has an entry in the snmp request list
 			log("cfact.lookup: Seeing the suffix in the filename and the TempID in the SNMPRequests")
 			if self.snmprequests[tempid].complete:  # If the snmprequest has completed
-				log("cfact.lookup: The SNMP is showing as completed")
-				if self.id_configured(self.snmprequests[tempid].response):  # If the snmp id response is a configured IDArray or keystore
-					log("cfact.lookup: The target ID is in the Keystore or in an IDArray")
-					return True
-				elif self._default_lookup():  # If there is a default keystore configured
+				log("cfact.lookup: The SNMP request is showing as completed")
+				for response in self.snmprequests[tempid].responses:
+					if self.id_configured(response):  # If the snmp id response is a configured IDArray or keystore
+						log("cfact.lookup: The target ID is in the Keystore or in an IDArray")
+						return True
+				if self._default_lookup():  # If there is a default keystore configured
 					log("cfact.lookup: The target ID is NOT in the Keystore or in an IDArray, but a default is configured")
 					return True
 			elif self._default_lookup():  # If there is a default keystore configured
@@ -259,7 +261,7 @@ class config_factory:
 			log("cfact.lookup: Creating new SNMP request for %s: %s" % (str(tempid), str(ipaddr)))
 			self.create_snmp_request(tempid, ipaddr)
 		return False
-	def _default_lookup(self):
+	def _default_lookup(self, ):
 		log("cfact._default_lookup: Checking if a default-keystore is configured and ready...")
 		if config.running["default-keystore"]:  # If a default keystore ID is set
 			kid = config.running["default-keystore"]
@@ -310,20 +312,23 @@ class config_factory:
 			return result
 		elif filename == self.imagediscoveryfile:
 			log("cfact.request: Filename (%s) matches the configured imagediscoveryfile" % filename)
-			result = config.running["imagefile"]
-			log("cfact.request: Returning the value of the imagefile setting (%s)" % result)
-			return result
+			if self._check_supression(ipaddr):
+				return "Image_Download_Supressed"
+			else:
+				result = config.running["imagefile"]
+				log("cfact.request: Returning the value of the imagefile setting (%s)" % result)
+				return result
 		else:
-			log("cfact.request: Filename (%s) does NOT the configured initialfilename" % self.basefilename)
+			log("cfact.request: Filename (%s) does NOT match the configured initialfilename" % filename)
 			tempid = filename.replace(self.uniquesuffix, "")
 			log("cfact.request: Stripped filename to TempID (%s)" % tempid)
 			if self.uniquesuffix in filename and tempid in list(self.snmprequests):
 				log("cfact.request: Seeing the suffix in the filename and the TempID in the SNMP Requests")
 				if self.snmprequests[tempid].complete:
 					log("cfact.request: SNMP Request says it has completed")
-					identifier = self.snmprequests[tempid].response
-					log("cfact.request: SNMP request returned target ID (%s)" % identifier)
-					keystoreid = self.get_keystore_id(identifier)
+					identifiers = self.snmprequests[tempid].responses
+					log("cfact.request: SNMP request returned target ID (%s)" % identifiers)
+					keystoreid = self.get_keystore_id(identifiers)
 					log("cfact.request: Keystore ID Lookup returned (%s)" % keystoreid)
 					if keystoreid:
 						result = self.merge_final_config(keystoreid)
@@ -363,17 +368,19 @@ class config_factory:
 		template = j2.Template(templatedata)
 		vals = config.running["keyvalstore"][keystoreid]
 		return template.render(vals)
-	def get_keystore_id(self, iden):
-		if iden in list(config.running["keyvalstore"]):
-			return iden
-		else:
-			identity = False
-			for arrayname in list(config.running["idarrays"]):
-				if iden in config.running["idarrays"][arrayname]:
-					identity = arrayname
-					log("ID '%s' resolved to arrayname '%s'" % (iden, identity))
-					break
-			return identity
+	def get_keystore_id(self, idens):
+		for identifier in idens:
+			identifier = idens[identifier]
+			log("cfact.get_keystore_id: Checking Keystores and IDArrays for (%s)" % identifier)
+			if identifier in list(config.running["keyvalstore"]):
+				log("cfact.get_keystore_id: ID (%s) resolved directly to a keystore" % identifier)
+				return identifier
+			else:
+				identity = False
+				for arrayname in list(config.running["idarrays"]):
+					if identifier in config.running["idarrays"][arrayname]:
+						log("cfact.get_keystore_id: ID '%s' resolved to arrayname '%s'" % (identifier, arrayname))
+						return arrayname
 	def get_template(self, identity):
 		response = False
 		for association in self.associations:
@@ -383,7 +390,7 @@ class config_factory:
 					response = self.templates[templatename]["value"]
 		return response
 	def merge_test(self, iden, template):
-		identity = self.get_keystore_id(iden)
+		identity = self.get_keystore_id({"Merge Test":iden})
 		if not identity:
 			log("ID '%s' does not exist in keystore!" % iden)
 		else:
@@ -853,6 +860,10 @@ class config_manager:
 	def hidden_list_arrays(self):
 		for arrayname in list(self.running["idarrays"]):
 			console(arrayname)
+	def hidden_list_array_members(self):
+		for arrayname in list(self.running["idarrays"]):
+			for member in self.running["idarrays"][arrayname]:
+				console(member)
 	def hidden_list_snmpoid(self):
 		for oid in self.running["snmpoid"]:
 			console(oid)
@@ -1097,7 +1108,7 @@ class log_management:
 ##### Installer class: A simple holder class which contains all of the    #####
 #####   installation scripts used to install/upgrade the ZTP server       #####
 class installer:
-	defaultconfig = '''{\n    "associations": {\n        "MY_DEFAULT": "LONG_TEMPLATE", \n        "SERIAL100": "SHORT_TEMPLATE", \n        "STACK1": "LONG_TEMPLATE"\n    }, \n    "community": "secretcommunity", \n    "default-keystore": "MY_DEFAULT", \n    "dhcpd": {}, \n    "file-cache-timeout": 10, \n    "idarrays": {\n        "STACK1": [\n            "SERIAL1", \n            "SERIAL2", \n            "SERIAL3"\n        ]\n    }, \n    "image-supression": 3600, \n    "imagediscoveryfile": "freeztp_ios_upgrade", \n    "imagefile": "cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin", \n    "initialfilename": "network-confg", \n    "keyvalstore": {\n        "MY_DEFAULT": {\n            "hostname": "UNKNOWN_HOST", \n            "vl1_ip_address": "dhcp"\n        }, \n        "SERIAL100": {\n            "hostname": "SOMEDEVICE", \n            "vl1_ip_address": "10.0.0.201"\n        }, \n        "STACK1": {\n            "hostname": "CORESWITCH", \n            "vl1_ip_address": "10.0.0.200", \n            "vl1_netmask": "255.255.255.0"\n        }\n    }, \n    "snmpoid": "1.3.6.1.2.1.47.1.1.1.1.11.1000", \n    "starttemplate": {\n        "delineator": "^", \n        "value": "hostname {{ autohostname }}\\n!\\nsnmp-server community {{ community }} RO\\n!\\nend"\n    }, \n    "suffix": "-confg", \n    "templates": {\n        "LONG_TEMPLATE": {\n            "delineator": "^", \n            "value": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} {{ vl1_netmask }}\\n no shut\\n!\\nip domain-name test.com\\n!\\nusername admin privilege 15 secret password123\\n!\\naaa new-model\\n!\\n!\\naaa authentication login CONSOLE local\\naaa authorization console\\naaa authorization exec default local if-authenticated\\n!\\ncrypto key generate rsa modulus 2048\\n!\\nip ssh version 2\\n!\\nline vty 0 15\\nlogin authentication default\\ntransport input ssh\\nline console 0\\nlogin authentication CONSOLE\\nend"\n        }, \n        "SHORT_TEMPLATE": {\n            "delineator": "^", \n            "value": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} 255.255.255.0\\n no shut\\n!\\nend"\n        }\n    }, \n    "tftproot": "/etc/ztp/tftproot/"\n}'''
+	defaultconfig = '''{\n    "associations": {\n        "MY_DEFAULT": "LONG_TEMPLATE", \n        "SERIAL100": "SHORT_TEMPLATE", \n        "STACK1": "LONG_TEMPLATE"\n    }, \n    "community": "secretcommunity", \n    "default-keystore": "MY_DEFAULT", \n    "dhcpd": {}, \n    "file-cache-timeout": 10, \n    "idarrays": {\n        "STACK1": [\n            "SERIAL1", \n            "SERIAL2", \n            "SERIAL3"\n        ]\n    }, \n    "image-supression": 3600, \n    "imagediscoveryfile": "freeztp_ios_upgrade", \n    "imagefile": "cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin", \n    "initialfilename": "network-confg", \n    "keyvalstore": {\n        "MY_DEFAULT": {\n            "hostname": "UNKNOWN_HOST", \n            "vl1_ip_address": "dhcp"\n        }, \n        "SERIAL100": {\n            "hostname": "SOMEDEVICE", \n            "vl1_ip_address": "10.0.0.201"\n        }, \n        "STACK1": {\n            "hostname": "CORESWITCH", \n            "vl1_ip_address": "10.0.0.200", \n            "vl1_netmask": "255.255.255.0"\n        }\n    }, \n    "snmpoid": {\n        "WS-C2960_SERIAL_NUMBER": "1.3.6.1.2.1.47.1.1.1.1.11.1001", \n        "WS-C3850_SERIAL_NUMBER": "1.3.6.1.2.1.47.1.1.1.1.11.1000"\n    }, \n    "starttemplate": {\n        "delineator": "^", \n        "value": "hostname {{ autohostname }}\\n!\\nsnmp-server community {{ community }} RO\\n!\\nend"\n    }, \n    "suffix": "-confg", \n    "templates": {\n        "LONG_TEMPLATE": {\n            "delineator": "^", \n            "value": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} {{ vl1_netmask }}\\n no shut\\n!\\nip domain-name test.com\\n!\\nusername admin privilege 15 secret password123\\n!\\naaa new-model\\n!\\n!\\naaa authentication login CONSOLE local\\naaa authorization console\\naaa authorization exec default local if-authenticated\\n!\\ncrypto key generate rsa modulus 2048\\n!\\nip ssh version 2\\n!\\nline vty 0 15\\nlogin authentication default\\ntransport input ssh\\nline console 0\\nlogin authentication CONSOLE\\nend"\n        }, \n        "SHORT_TEMPLATE": {\n            "delineator": "^", \n            "value": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} 255.255.255.0\\n no shut\\n!\\nend"\n        }\n    }, \n    "tftproot": "/etc/ztp/tftproot/"\n}'''
 	def minor_update_script(self):
 		os.system('mkdir -p ' + "/etc/ztp/tftproot/")  # Create new tftproot dir
 		newconfigkeys = {
@@ -1458,8 +1469,9 @@ _ztp_complete()
 		;;
 	  merge-test)
 		local ids=$(for id in `ztp show ids`; do echo $id ; done)
+		local mems=$(for id in `ztp show array members`; do echo $id ; done)
 		if [ "$prev2" == "request" ]; then
-		  COMPREPLY=( $(compgen -W "${ids}" -- $cur) )
+		  COMPREPLY=( $(compgen -W "${ids} ${mems}" -- $cur) )
 		fi
 		;;
 	  snmp-test)
@@ -1736,6 +1748,9 @@ class tracking_class:
 			self._master[session].update(args)  # Send update to session
 		if not session:
 			if args["source"] != "end":
+				filename = args["filename"]
+				ip = args["ipaddr"]
+				log("tracking_class.report: New download of (%s) from (%s) detected" % (filename, ip))
 				self._master.update({time.time(): self.request_class(args, self)})
 	def _maintenance(self):
 		self.sthread = threading.Thread(target=self._maintain_store)
@@ -2147,8 +2162,10 @@ def interpreter():
 			inst.install_completion()
 			inst.create_service()
 			inst.minor_update_script()
-			console("\nInstall complete! Logout and log back into SSH to activate auto-complete")
-			console("\nMake sure to run 'ztp service restart' to restart the service for the new software to take effect")
+			console("\n")
+			osd.service_control("status", "ztp")
+			console("\n")
+			console("\nInstall complete! Logout and log back into SSH to activate auto-complete\n")
 		else:
 			console("Install/upgrade cancelled")
 	##### HIDDEN SHOW #####
@@ -2158,6 +2175,8 @@ def interpreter():
 		config.hidden_list_keys(sys.argv[3])
 	elif arguments == "show arrays":
 		config.hidden_list_arrays()
+	elif arguments == "show array members":
+		config.hidden_list_array_members()
 	elif arguments == "show snmpoid":
 		config.hidden_list_snmpoid()
 	elif arguments == "show templates":
