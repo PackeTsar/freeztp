@@ -11,9 +11,6 @@ version = "v1.0.0"
 
 
 # NEXT: Recognize client tracking (dhcp, upgrade, initial file, custom file)
-# NEXT: Downloads not timing out. Staying active
-# Clean up show config output
-# Supress IOS upgrade with fictional file name
 
 
 ##### Import native modules #####
@@ -163,13 +160,16 @@ class ztp_dyn_file:
 	closed = False
 	position = 0
 	def __init__(self, afile, raddress, rport):
+		self.filename = afile
+		self.ipaddr = raddress
+		self.port = rport
 		log("ztp_dyn_file: Instantiated as (%s)" % str(self))
 		self.data = cfact.request(afile, raddress)
 		log("ztp_dyn_file: File size is %s bytes" % len(self.data))
 		pass
 	def tell(self):
-		log("ztp_dyn_file.tell: Called")
-		return len(self.data)
+		log("ztp_dyn_file.tell: Called. Returning (%s)" % str(self.position))
+		return self.position
 	def read(self, size):
 		start = self.position
 		end = self.position + size
@@ -179,6 +179,12 @@ class ztp_dyn_file:
 		if not self.closed:
 			log("ztp_dyn_file.read: Returning position %s to %s" % (str(start), str(end)))
 		self.position = end
+		tracking.report({
+			"ipaddr": self.ipaddr,
+			"filename": self.filename,
+			"port": self.port,
+			"position": self.position,
+			"source": "ztp_dyn_file"})
 		return result
 	def seek(self, arg1, arg2):
 		log("ztp_dyn_file.seek: Called with args (%s) and (%s)" % (str(arg1), str(arg1)))
@@ -308,15 +314,19 @@ class config_factory:
 				self.create_snmp_request(tempid, ipaddr)
 			log("cfact.request: Generated a SNMP Request with TempID (%s) and IP (%s)" % (tempid, ipaddr))
 			result = self.merge_base_config(tempid)
-			log("cfact.request: Returning below config to TFTPy:\n\n%s\n" % result)
+			log("cfact.request: Returning the below config to TFTPy:\n%s\n%s\n%s" % ("#"*25, result, "#"*25))
+			self.send_tracking_update(ipaddr, filename, len(result))
 			return result
 		elif filename == self.imagediscoveryfile:
 			log("cfact.request: Filename (%s) matches the configured imagediscoveryfile" % filename)
 			if self._check_supression(ipaddr):
-				return "Image_Download_Supressed"
+				result = "Image_Download_Supressed"
+				self.send_tracking_update(ipaddr, filename, len(result))
+				return result
 			else:
 				result = config.running["imagefile"]
 				log("cfact.request: Returning the value of the imagefile setting (%s)" % result)
+				self.send_tracking_update(ipaddr, filename, len(result))
 				return result
 		else:
 			log("cfact.request: Filename (%s) does NOT match the configured initialfilename" % filename)
@@ -332,7 +342,8 @@ class config_factory:
 					log("cfact.request: Keystore ID Lookup returned (%s)" % keystoreid)
 					if keystoreid:
 						result = self.merge_final_config(keystoreid)
-						log("cfact.request: Returning the below config to TFTPy:\n%s" % result)
+						log("cfact.request: Returning the below config to TFTPy:\n%s\n%s\n%s" % ("#"*25, result, "#"*25))
+						self.send_tracking_update(ipaddr, filename, len(result))
 						return result
 					else:
 						log("cfact.request: SNMP request for (%s) returned an unknown ID, checking for default-keystore" % self.snmprequests[tempid].host)
@@ -340,7 +351,8 @@ class config_factory:
 						if default:
 							log("cfact.request: default-keystore is configured. Returning default")
 							result = self.merge_final_config(default)
-							log("cfact.request: Returning the below config to TFTPy:\n%s" % result)
+							log("cfact.request: Returning the below config to TFTPy:\n%s\n%s\n%s" % ("#"*25, result, "#"*25))
+							self.send_tracking_update(ipaddr, filename, len(result))
 							return result
 				else:
 					log("cfact.request: SNMP request is not complete on host (%s), checking for default-keystore" % self.snmprequests[tempid].host)
@@ -349,9 +361,18 @@ class config_factory:
 						log("cfact.request: default-keystore is configured. Returning default")
 						result = self.merge_final_config(default)
 						log("cfact.request: Returning the below config to TFTPy:\n%s" % result)
+						self.send_tracking_update(ipaddr, filename, len(result))
 						return result
 		log("cfact.request: Nothing else caught. Returning None")
 		return None
+	def send_tracking_update(self, ipaddr, filename, filesize):
+		tracking.report({
+			"ipaddr": ipaddr,
+			"filename": filename,
+			"filesize": filesize,
+			"port": None,
+			"position": None,
+			"source": "config_factory"})
 	def create_snmp_request(self, tempid, ipaddr):
 		newquery = snmp_query(ipaddr, self.basesnmpcom, self.snmpoid)
 		self.snmprequests.update({tempid: newquery})
@@ -479,7 +500,7 @@ class snmp_query:
 				log("snmp_query._query_worker: Timeout Expired, Query Thread Terminating")
 				break
 			else:
-				time.sleep(3)
+				time.sleep(0.5)
 	def _get_oid(self, oid):
 		errorIndication, errorStatus, errorIndex, varBinds = next(
 			pysnmp.hlapi.getCmd(pysnmp.hlapi.SnmpEngine(),
@@ -719,8 +740,9 @@ class config_manager:
 		for template in self.running["templates"]:
 			tempval = self.running["templates"][template]["value"]
 			tempdel = self.running["templates"][template]["delineator"]
+			templatetext += "#\n#\n#\n"
 			templatetext += "ztp set template %s %s\n%s\n%s" % (template, tempdel, tempval, tempdel)
-			templatetext += "\n!\n!\n!\n#######################################################\n"
+			templatetext += "\n#\n#\n#\n#######################################################\n"
 		###########
 		idarraylist = []
 		for arrayname in self.running["idarrays"]:
@@ -734,7 +756,7 @@ class config_manager:
 			for key in self.running["keyvalstore"][iden]:
 				value = self.running["keyvalstore"][iden][key]
 				keylist.append("ztp set keystore %s %s %s" % (iden, key, value))
-			keylist.append("!")
+			keylist.append("#")
 		############
 		associationlist = []
 		for association in self.running["associations"]:
@@ -752,40 +774,40 @@ class config_manager:
 				command = "ztp set dhcpd %s %s %s" % (scope, option, value)
 				command = command.replace(",", "")
 				scopelist.append(command)
-			scopelist.append("!")
-		scopelist = scopelist[:len(scopelist)-1] # Remove last !
+			scopelist.append("#")
+		scopelist = scopelist[:len(scopelist)-1] # Remove last '#'
 		############
-		configtext = "!\n!\n!\n"
+		configtext = "#######################################################\n#\n#\n#\n"
 		for cmd in cmdlist:
 			configtext += cmd + "\n"
-		configtext += "!\n!\n"
+		configtext += "#\n#\n"
 		configtext += itemp
-		configtext += "\n!\n#######################################################\n"
-		configtext += "#######################################################\n"
 		###########
 		###########
-		configtext += "\n!\n!\n!\n#######################################################\n"
+		configtext += "\n#\n#\n#\n#######################################################\n"
+		configtext += "#\n#\n#\n"
+		for cmd in scopelist:
+			configtext += cmd + "\n"
+		###########
+		configtext += "#\n#\n#\n#######################################################\n"
 		configtext += templatetext
 		###########
-		configtext += "!\n!\n!\n"
+		configtext += "#\n#\n#\n"
 		for cmd in keylist:
 			configtext += cmd + "\n"
-		configtext += "!\n"
+		configtext += "#\n#\n"
 		for cmd in idarraylist:
 			configtext += cmd + "\n"
-		configtext += "!\n!\n"
+		configtext += "#\n#\n#\n"
 		for cmd in associationlist:
 			configtext += cmd + "\n"
-		configtext += "!\n!\n"
+		configtext += "#\n#\n#\n"
 		configtext += dkeystore
 		configtext += "\n"
 		configtext += imagefile
 		configtext += "\n"
 		configtext += imagesup
-		###########
-		configtext += "\n!\n"
-		for cmd in scopelist:
-			configtext += cmd + "\n"
+		configtext += "\n#\n#\n#\n#######################################################"
 		###########
 		console(configtext)
 	def calcopt125hex(self):
@@ -1171,6 +1193,7 @@ class installer:
 		os.system("pip install jinja2")
 		os.system("pip install netaddr")
 		os.system("pip install netifaces")
+		os.system("pip install isc_dhcp_leases")
 	def dhcp_setup(self):
 		console("\n\nInstalling DHCPD...\n")
 		osd.install_pkg(osd.DHCPPKG)
@@ -1528,6 +1551,9 @@ _ztp_complete()
 	  if [ "$prev3" == "set" ]; then
 		COMPREPLY=( $(compgen -W "subnet first-address last-address gateway ztp-tftp-address imagediscoveryfile-option dns-servers domain-name lease-time" -- $cur) )
 	  fi
+	  if [ "$prev3" == "show" ]; then
+		COMPREPLY=( $(compgen -W "current all raw" -- $cur) )
+	  fi
 	fi
   elif [ $COMP_CWORD -eq 5 ]; then
 	prev3=${COMP_WORDS[COMP_CWORD-3]}
@@ -1750,7 +1776,7 @@ class tracking_class:
 			if args["source"] != "end":
 				filename = args["filename"]
 				ip = args["ipaddr"]
-				log("tracking_class.report: New download of (%s) from (%s) detected" % (filename, ip))
+				log("tracking_class.report: New transfer of (%s) from (%s) detected" % (filename, ip))
 				self._master.update({time.time(): self.request_class(args, self)})
 	def _maintenance(self):
 		self.sthread = threading.Thread(target=self._maintain_store)
@@ -1759,14 +1785,14 @@ class tracking_class:
 		while True:
 			time.sleep(1)
 			if not self.sthread.is_alive():
+				log("tracking_class._maintenance: Maintenance thread died. Restarting")
 				self.sthread = threading.Thread(target=self._maintain_store)
 				self.sthread.daemon = True
 				self.sthread.start()
 	def _maintain_store(self):
 		while True:
 			time.sleep(1)
-			### Update tracking status ###
-			##############################
+			### Update all downloads in memory (self._master)
 			for session in self._master:
 				self._master[session].update_percent()
 				self._master[session].update_rate()
@@ -1783,9 +1809,11 @@ class tracking_class:
 					"rate": self._master[session].rate
 				}
 				self.status.update({session: data})
+			### Mark any old downloads in store (and not in mem) as dead
+			for session in self.status:
+				if session not in self._master:
+					self.status[session]["active"] = False
 			self.store(self.status)
-			##############################
-			##############################
 	class request_class:
 		def __init__(self, args, parent):
 			self.ipaddr = None
@@ -1814,11 +1842,13 @@ class tracking_class:
 					if arg == "ipaddr":
 						self.ipaddr = args[arg]
 					elif arg == "filename":
-						if not self.filename:
+						if not self.filesize:
 							self.filename = args[arg]
 							self.check_file()
 					elif arg == "position":
 						self.position = args[arg]
+					elif arg == "filesize":
+						self.filesize = args[arg]
 		def _inactivity_timeout(self, seconds, thread=False):
 			if not thread:  #If not started in a thread, restart in a thread
 				thread = threading.Thread(target=self._inactivity_timeout, 
@@ -1858,6 +1888,44 @@ class tracking_class:
 			else:
 				self.rate = str(rate) + " bps"
 			self.last_position = self.position
+	class dhcplease_class:
+		def __init__(self):
+			global isc
+			global datetime
+			import isc_dhcp_leases as isc
+			import datetime
+			self.leasesobj = isc.IscDhcpLeases("/var/lib/dhcp/dhcpd.leases")
+		def utc_to_local(self, dt):
+			if time.localtime().tm_isdst:
+				return dt - datetime.timedelta(seconds = time.altzone)
+			else:
+				return dt - datetime.timedelta(seconds = time.timezone)
+		def get(self, mode="current"):
+			index = 0
+			result = {}
+			if mode == "current":
+				leases = self.leasesobj.get_current()
+				for lease in leases:
+					result.update({index: self._format_lease(leases[lease])})
+					index += 1
+				return result
+			else:
+				leases = self.leasesobj.get()
+				for lease in leases:
+					result.update({index: self._format_lease(lease)})
+					index += 1
+				return result
+		def _format_lease(self, lease):
+			result = {
+				"ip": lease.ip,
+				"ethernet": lease.ethernet,
+				"hostname": lease.hostname,
+				"state": lease.binding_state,
+				"start": self.utc_to_local(lease.start).strftime("%Y-%m-%d %H:%M:%S"),
+				"end": self.utc_to_local(lease.end).strftime("%Y-%m-%d %H:%M:%S"),
+				"uid": lease.data["uid"]
+			}
+			return result
 	########################################################################
 	########################################################################
 	########################################################################
@@ -2030,6 +2098,13 @@ class tracking_class:
 			curses.nocbreak()
 			curses.endwin()
 			quit()
+	def show_dhcp_leases(self, mode="current"):
+		dleases = self.dhcplease_class()
+		leases = dleases.get(mode)
+		data = []
+		for lease in leases:
+			data.append(leases[lease])
+		return self.make_table(['ethernet', 'ip', 'start', 'end', 'state', 'uid'], data)
 
 
 class persistent_store:
@@ -2196,7 +2271,7 @@ def interpreter():
 		console(" - show version                                   |  Show the current version of ZTP")
 		console(" - show log (tail) (<num_of_lines>)               |  Show or tail the log file")
 		console(" - show downloads (live)                          |  Show list of TFTP downloads")
-		console(" - show dhcpd leases                              |  Show current DHCPD leases")
+		console(" - show dhcpd leases (current|all|raw)            |  Show DHCPD leases")
 	elif arguments == "show config raw" or arguments == "show run raw":
 		os.system("more /etc/ztp/ztp.cfg")
 	elif arguments == "show config" or arguments == "show run":
@@ -2217,10 +2292,16 @@ def interpreter():
 	elif arguments[:14] == "show downloads":
 		tracking = tracking_class(client=True)
 		console(tracking.show_downloads(sys.argv))
-	elif arguments == "show dhcpd":
-		console(" - show dhcpd leases                              |  Show current DHCPD leases")
-	elif arguments[:17] == "show dhcpd leases":
+	elif arguments == "show dhcpd" or arguments == "show dhcpd leases":
+		console(" - show dhcpd leases (current|all|raw)            |  Show DHCPD leases")
+	elif arguments == "show dhcpd leases raw":
 		os.system("more /var/lib/dhcp/dhcpd.leases")
+	elif arguments == "show dhcpd leases current":
+		tracking = tracking_class(client=True)
+		console(tracking.show_dhcp_leases())
+	elif arguments == "show dhcpd leases all":
+		tracking = tracking_class(client=True)
+		console(tracking.show_dhcp_leases("all"))
 	##### SET #####
 	elif arguments == "set":
 		console("--------------------------------------------------- SETTINGS YOU PROBABLY SHOULDN'T CHANGE ---------------------------------------------------")
@@ -2400,7 +2481,7 @@ def interpreter():
 		console(" - show version                                                |  Show the current version of ZTP")
 		console(" - show log (tail) (<num_of_lines>)                            |  Show or tail the log file")
 		console(" - show downloads (live)                                       |  Show list of TFTP downloads")
-		console(" - show dhcpd leases                                           |  Show current DHCPD leases")
+		console(" - show dhcpd leases (current|all|raw)                         |  Show DHCPD leases")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console("--------------------------------------------------- SETTINGS YOU PROBABLY SHOULDN'T CHANGE ---------------------------------------------------")
