@@ -7,7 +7,7 @@
 ##### https://github.com/convergeone/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "v1.0.0"
+version = "v0.9.1"
 
 
 # NEXT: Recognize client tracking (dhcp, upgrade, initial file, custom file)
