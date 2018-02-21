@@ -7,7 +7,7 @@
 ##### https://github.com/convergeone/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "v0.9.1"
+version = "v0.9.2"
 
 
 # NEXT: Recognize client tracking (dhcp, upgrade, initial file, custom file)
@@ -62,16 +62,19 @@ class os_detect:
 			self.DHCPPKG = "dhcp"
 			self.PIPPKG = "python2-pip"
 			self.PKGDIR = "/usr/lib/python2.7/site-packages/"
+			self.DHCPLEASES = "/var/lib/dhcpd/dhcpd.leases"
 		elif self._dist == "ubuntu":
 			self.DHCPSVC = "isc-dhcp-server"
 			self.DHCPPKG = "isc-dhcp-server"
 			self.PIPPKG = "python-pip"
 			self.PKGDIR = "/usr/local/lib/python2.7/dist-packages/"
+			self.DHCPLEASES = "/var/lib/dhcp/dhcpd.leases"
 		elif self._dist == "debian":
 			self.DHCPSVC = "isc-dhcp-server"
 			self.DHCPPKG = "isc-dhcp-server"
 			self.PIPPKG = "python-pip"
 			self.PKGDIR = "/usr/local/lib/python2.7/dist-packages/"
+			self.DHCPLEASES = "/var/lib/dhcp/dhcpd.leases"
 	def service_control(self, cmd, service):
 		if self._systemd:
 			os.system("sudo systemctl %s %s" % (cmd, service))
@@ -1894,7 +1897,7 @@ class tracking_class:
 			global datetime
 			import isc_dhcp_leases as isc
 			import datetime
-			self.leasesobj = isc.IscDhcpLeases("/var/lib/dhcp/dhcpd.leases")
+			self.leasesobj = isc.IscDhcpLeases(osd.DHCPLEASES)
 		def utc_to_local(self, dt):
 			if time.localtime().tm_isdst:
 				return dt - datetime.timedelta(seconds = time.altzone)
@@ -2295,7 +2298,7 @@ def interpreter():
 	elif arguments == "show dhcpd" or arguments == "show dhcpd leases":
 		console(" - show dhcpd leases (current|all|raw)            |  Show DHCPD leases")
 	elif arguments == "show dhcpd leases raw":
-		os.system("more /var/lib/dhcp/dhcpd.leases")
+		os.system("more "+osd.DHCPLEASES)
 	elif arguments == "show dhcpd leases current":
 		tracking = tracking_class(client=True)
 		console(tracking.show_dhcp_leases())
