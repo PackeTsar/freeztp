@@ -7,7 +7,7 @@
 ##### https://github.com/convergeone/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "v0.9.2"
+version = "v0.9.3"
 
 
 # NEXT: Recognize client tracking (dhcp, upgrade, initial file, custom file)
@@ -257,7 +257,7 @@ class config_factory:
 			if self.snmprequests[tempid].complete:  # If the snmprequest has completed
 				log("cfact.lookup: The SNMP request is showing as completed")
 				for response in self.snmprequests[tempid].responses:
-					if self.id_configured(response):  # If the snmp id response is a configured IDArray or keystore
+					if self.id_configured(self.snmprequests[tempid].responses[response]):  # If the snmp id response is a configured IDArray or keystore
 						log("cfact.lookup: The target ID is in the Keystore or in an IDArray")
 						return True
 				if self._default_lookup():  # If there is a default keystore configured
