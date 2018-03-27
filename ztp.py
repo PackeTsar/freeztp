@@ -7,7 +7,7 @@
 ##### https://github.com/convergeone/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "v0.9.3"
+version = "v0.9.5a"
 
 
 # NEXT: Recognize client tracking (dhcp, upgrade, initial file, custom file)
@@ -275,23 +275,8 @@ class config_factory:
 		if config.running["default-keystore"]:  # If a default keystore ID is set
 			kid = config.running["default-keystore"]
 			log("cfact._default_lookup: A default keystore ID (%s) is configured" % kid)
-			if kid in list(config.running["keyvalstore"]):  # If that default keystore ID has an actual configured keystore
-				log("cfact._default_lookup: The keystore ID (%s) exists in the keystore" % kid)
-				if kid in list(config.running["associations"]):  # If that keystore has an associated template name
-					mtemp = config.running["associations"][kid]
-					log("cfact._default_lookup: An association exists which maps keystore (%s) to template (%s)" % (kid, mtemp))
-					if mtemp in list(config.running["templates"]):  # If that associated template is configured
-						log("cfact._default_lookup: Template (%s) is a configured template" % mtemp)
-						return kid
-					else:
-						log("cfact._default_lookup: The associated template (%s) does not exist. Returning none" % mtemp)
-						return False
-				else:
-					log("cfact._default_lookup: The Keystore ID (%s) has no template association. Returning none" % kid)
-					return False
-			else:
-				log("cfact._default_lookup: The default-keystore ID (%s) is not a configured keystore. Returning none" % kid)
-				return False
+			if self.get_keystore_id({"default-keystore-test": kid}, silent=True):
+				return kid
 		else:
 			log("cfact._default_lookup: Default-keystore set to none. Returning none")
 			return False
@@ -392,26 +377,45 @@ class config_factory:
 		template = j2.Template(templatedata)
 		vals = config.running["keyvalstore"][keystoreid]
 		return template.render(vals)
-	def get_keystore_id(self, idens):
+	def get_keystore_id(self, idens, silent=False):
 		for identifier in idens:
 			identifier = idens[identifier]
-			log("cfact.get_keystore_id: Checking Keystores and IDArrays for (%s)" % identifier)
+			if not silent:
+				log("cfact.get_keystore_id: Checking Keystores and IDArrays for (%s)" % identifier)
 			if identifier in list(config.running["keyvalstore"]):
-				log("cfact.get_keystore_id: ID (%s) resolved directly to a keystore" % identifier)
+				if not silent:
+					log("cfact.get_keystore_id: ID (%s) resolved directly to a keystore" % identifier)
 				return identifier
 			else:
 				identity = False
 				for arrayname in list(config.running["idarrays"]):
 					if identifier in config.running["idarrays"][arrayname]:
-						log("cfact.get_keystore_id: ID '%s' resolved to arrayname '%s'" % (identifier, arrayname))
+						if not silent:
+							log("cfact.get_keystore_id: ID '%s' resolved to arrayname '%s'" % (identifier, arrayname))
 						return arrayname
 	def get_template(self, identity):
+		log("cfact.get_template: Looking up association for identity (%s)" % identity)
 		response = False
 		for association in self.associations:
 			if identity == association:
 				templatename = self.associations[association]
+				log("cfact.get_template: Found associated template (%s)" % templatename)
 				if templatename in self.templates:
+					log("cfact.get_template: Template (%s) exists. Returning" % templatename)
 					response = self.templates[templatename]["value"]
+				else:
+					log("cfact.get_template: Template (%s) does not exist. Checking for default-template" % templatename)
+		if not response:
+			if config.running["default-template"]:
+				log("cfact.get_template: Default-template is pointing to (%s)" % config.running["default-template"])
+				templatename = config.running["default-template"]
+				if templatename in self.templates:
+					log("cfact.get_template: Template (%s) exists. Returning" % templatename)
+					response = self.templates[templatename]["value"]
+				else:
+					log("cfact.get_template: Template (%s) does not exist. Checking for default-template" % templatename)
+			else:
+				log("cfact.get_template: Default-template is set to None")
 		return response
 	def merge_test(self, iden, template):
 		identity = self.get_keystore_id({"Merge Test":iden})
@@ -559,7 +563,7 @@ class config_manager:
 		elif setting == "snmpoid":
 			self.running[setting].update({value: args[4]})
 			self.save()
-		elif "template" in setting:
+		elif setting == "template" or setting == "initial-template":
 			if setting == "initial-template":
 				console("Enter each line of the template ending with '%s' on a line by itself" % args[3])
 				newtemplate = self.multilineinput(args[3])
@@ -581,7 +585,7 @@ class config_manager:
 			iden = args[4]
 			template = args[6]
 			self.set_association(iden, template)
-		elif setting == "default-keystore":
+		elif setting == "default-keystore" or setting == "default-template":
 			if value.lower() == "none":
 				value = None
 			self.running[setting] = value
@@ -635,7 +639,7 @@ class config_manager:
 			elif iden not in list(self.running["templates"]):
 				console("Template '%s' is not currently configured" % iden)
 			else:
-				del self.running["templates"][iden] 
+				del self.running["templates"][iden]
 		elif setting == "association":
 			if "associations" not in list(self.running):
 				console("No associations are currently configured")
@@ -767,6 +771,7 @@ class config_manager:
 			associationlist.append("ztp set association id %s template %s" % (association, template))
 		############
 		dkeystore = "ztp set default-keystore %s"  % str(self.running["default-keystore"])
+		dtemplate = "ztp set default-template %s"  % str(self.running["default-template"])
 		imagefile = "ztp set imagefile %s"  % str(self.running["imagefile"])
 		imagesup = "ztp set image-supression %s"  % str(self.running["image-supression"])
 		############
@@ -806,6 +811,8 @@ class config_manager:
 			configtext += cmd + "\n"
 		configtext += "#\n#\n#\n"
 		configtext += dkeystore
+		configtext += "\n"
+		configtext += dtemplate
 		configtext += "\n"
 		configtext += imagefile
 		configtext += "\n"
@@ -855,7 +862,7 @@ class config_manager:
 				- Description = Used by FreeZTP for IOS upgrade
 			- Click OK
 		- Click OK again
-		
+
 		- Find the DHCP scope serving ZTP devices
 		- Expand the scope and right click "Scope Options"
 			- Click "Configure Options"
@@ -1342,7 +1349,7 @@ _ztp_complete()
 		COMPREPLY=( $(compgen -W "config run status version log downloads dhcpd" -- $cur) )
 		;;
 	  "set")
-		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile file-cache-timeout template keystore idarray association default-keystore imagefile image-supression dhcpd" -- $cur) )
+		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile file-cache-timeout template keystore idarray association default-keystore default-template imagefile image-supression dhcpd" -- $cur) )
 		;;
 	  "clear")
 		COMPREPLY=( $(compgen -W "keystore idarray snmpoid template association dhcpd log downloads" -- $cur) )
@@ -1466,7 +1473,13 @@ _ztp_complete()
 	  default-keystore)
 		if [ "$prev2" == "set" ]; then
 		  local ids=$(for id in `ztp show ids`; do echo $id ; done)
-		  COMPREPLY=( $(compgen -W "${ids} <keystore-id> None -" -- $cur) )
+		  COMPREPLY=( $(compgen -W "${ids} <keystore-id> None" -- $cur) )
+		fi
+		;;
+	  default-template)
+		if [ "$prev2" == "set" ]; then
+		  local templates=$(for k in `ztp show templates`; do echo $k ; done)
+		  COMPREPLY=( $(compgen -W "${templates} <template_name> None" -- $cur) )
 		fi
 		;;
 	  imagefile)
@@ -1854,7 +1867,7 @@ class tracking_class:
 						self.filesize = args[arg]
 		def _inactivity_timeout(self, seconds, thread=False):
 			if not thread:  #If not started in a thread, restart in a thread
-				thread = threading.Thread(target=self._inactivity_timeout, 
+				thread = threading.Thread(target=self._inactivity_timeout,
 					args=(seconds, True))
 				thread.daemon = True
 				thread.start()
@@ -1866,7 +1879,7 @@ class tracking_class:
 						return None  # Return and stop the thread
 					else:  # If it is still active
 						if time.time() - self.lastupdate > seconds:
-							# If there has been no activity 
+							# If there has been no activity
 							# in the timeout period
 							self.active = False  # Mark session as inactive
 					time.sleep(0.1)  # Sleep for .1 seconds
@@ -1989,7 +2002,7 @@ class tracking_class:
 					result += tablewrap + "\n" + tablewrap # Add the wrapper, a line break, and start the next row
 				else: # If this is not the last entry in the row
 					result += columnsep # Add a column seperator
-				del spacing # Remove the spacing settings for this entry 
+				del spacing # Remove the spacing settings for this entry
 				columnqty -= 1 # Keep count of how many row values are left so we know when we hit the last one
 		result += tablewrap * (totalwidth - 1) # When all rows are complete, wrap the table with a trailer
 		return result
@@ -2322,6 +2335,7 @@ def interpreter():
 		console(" - set idarray <arrayname> <id's>                              |  Create an ID array to allow multiple real ids to match one keystore id")
 		console(" - set association id <id/arrayname> template <template_name>  |  Associate a keystore id or an idarray to a specific named template")
 		console(" - set default-keystore (none|keystore-id)                     |  Set a last-resort keystore and template for when target identification fails")
+		console(" - set default-template (none|template_name)                   |  Set a last-resort template for when no keystore/template association is found")
 		console(" - set imagefile <binary_image_file_name>                      |  Set the image file name to be used for upgrades (must be in tftp root dir)")
 		console(" - set image-supression <seconds-to-supress>                   |  Set the seconds to supress a second image download preventing double-upgrades")
 		console(" - set dhcpd <scope-name> [parameters]                         |  Configure DHCP scope(s) to serve IP addresses to ZTP clients")
@@ -2502,6 +2516,7 @@ def interpreter():
 		console(" - set idarray <arrayname> <id_#1> <id_#2> ...                 |  Create an ID array to allow multiple real ids to match one keystore id")
 		console(" - set association id <id/arrayname> template <template_name>  |  Associate a keystore id or an idarray to a specific named template")
 		console(" - set default-keystore (none|keystore-id)                     |  Set a last-resort keystore and template for when target identification fails")
+		console(" - set default-template (none|template_name)                   |  Set a last-resort template for when no keystore/template association is found")
 		console(" - set imagefile <binary_image_file_name>                      |  Set the image file name to be used for upgrades (must be in tftp root dir)")
 		console(" - set image-supression <seconds-to-supress>                   |  Set the seconds to supress a second image download preventing double-upgrades")
 		console(" - set dhcpd <scope-name> [parameters]                         |  Configure DHCP scope(s) to serve IP addresses to ZTP clients")
