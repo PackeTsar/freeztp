@@ -663,6 +663,10 @@ class config_manager:
 			result += line+"\n"
 		return result[0:len(result)-1]
 	def set_keystore(self, iden, keyword, value):
+		try:
+			value = json.loads(value)
+		except ValueError:
+			pass
 		if iden in list(self.running["keyvalstore"]):
 			self.running["keyvalstore"][iden].update({keyword: value})
 		else:
@@ -762,6 +766,12 @@ class config_manager:
 		for iden in self.running["keyvalstore"]:
 			for key in self.running["keyvalstore"][iden]:
 				value = self.running["keyvalstore"][iden][key]
+				if type(value) != type("") and type(value) != type(u""):
+					print(type(value))
+					value = "'%s'" % json.dumps(value)
+				else:
+					if " " in value:
+						value = "'%s'" % value
 				keylist.append("ztp set keystore %s %s %s" % (iden, key, value))
 			keylist.append("#")
 		############
