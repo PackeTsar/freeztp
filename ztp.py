@@ -1146,7 +1146,8 @@ class installer:
 		newconfigkeys = {
 		"imagediscoveryfile": "autoinstall_dhcp",
 		"imagefile": "cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin",
-		"tftproot": "/etc/ztp/tftproot/"
+		"tftproot": "/etc/ztp/tftproot/",
+		"default-template": None
 		}
 		for key in newconfigkeys:
 			if key not in list(config.running):
