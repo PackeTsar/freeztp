@@ -7,7 +7,7 @@
 ##### https://github.com/convergeone/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "v0.9.6"
+version = "v0.9.7"
 
 
 # NEXT: Recognize client tracking (dhcp, upgrade, initial file, custom file)
@@ -277,6 +277,8 @@ class config_factory:
 			log("cfact._default_lookup: A default keystore ID (%s) is configured" % kid)
 			if self.get_keystore_id({"default-keystore-test": kid}, silent=True):
 				return kid
+			else:
+				log("cfact._default_lookup: Keystore (%s) does not exist. Nothing to return" % kid)
 		else:
 			log("cfact._default_lookup: Default-keystore set to none. Returning none")
 			return False
