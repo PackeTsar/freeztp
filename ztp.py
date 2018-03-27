@@ -7,7 +7,7 @@
 ##### https://github.com/convergeone/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "v0.9.7"
+version = "v0.9.8"
 
 
 # NEXT: Recognize client tracking (dhcp, upgrade, initial file, custom file)
@@ -769,7 +769,6 @@ class config_manager:
 			for key in self.running["keyvalstore"][iden]:
 				value = self.running["keyvalstore"][iden][key]
 				if type(value) != type("") and type(value) != type(u""):
-					print(type(value))
 					value = "'%s'" % json.dumps(value)
 				else:
 					if " " in value:
