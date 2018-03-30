@@ -344,8 +344,12 @@ class config_factory:
 					if not test:
 						tracking.provision({
 							"Temp ID": tempid,
+							"IP Address": ipaddr,
+							"Matched Keystore": None,
 							"Status": "Processing",
-							"Real IDs": identifiers
+							"Real IDs": identifiers,
+							"MAC Address": None,
+							"Timestamp": time.time()
 							})
 					keystoreid = self.get_keystore_id(identifiers)
 					log("cfact.request: Keystore ID Lookup returned (%s)" % keystoreid)
@@ -356,8 +360,12 @@ class config_factory:
 						if not test:
 							tracking.provision({
 								"Temp ID": tempid,
+								"IP Address": ipaddr,
 								"Matched Keystore": keystoreid,
 								"Status": "Complete",
+								"Real IDs": None,
+								"MAC Address": None,
+								"Timestamp": time.time()
 								})
 						return result
 					else:
@@ -371,8 +379,12 @@ class config_factory:
 							if not test:
 								tracking.provision({
 									"Temp ID": tempid,
+									"IP Address": ipaddr,
 									"Matched Keystore": default,
 									"Status": "Complete",
+									"Real IDs": None,
+									"MAC Address": None,
+									"Timestamp": time.time()
 									})
 							return result
 				else:
@@ -386,8 +398,12 @@ class config_factory:
 						if not test:
 							tracking.provision({
 								"Temp ID": tempid,
+								"IP Address": ipaddr,
 								"Matched Keystore": default,
 								"Status": "Complete",
+								"Real IDs": None,
+								"MAC Address": None,
+								"Timestamp": time.time()
 								})
 						return result
 		log("cfact.request: Nothing else caught. Returning None")
@@ -1738,7 +1754,7 @@ def start(self, buffer):
 			"filename": pkt.filename,
 			"source": "start"})
 	except Exception as e:
-		print(e)
+		pass
 	#### END CHANGES ####
 	self.state = self.state.handle(pkt,
 									self.host,
@@ -2197,7 +2213,8 @@ class tracking_class:
 						current[tstamp][attrib] = data[attrib]  # Update the provdb
 				self.provdb(current)
 				return None  # Return to prevent further execution
-		for tstamp in current:  # For each ID in provdb
+		# To prevent multiple provdb entries when multiple requests
+		for tstamp in current:
 			if "IP Address" in data:
 				if data["IP Address"] == current[tstamp]["IP Address"]:
 					if data["Timestamp"] - current[tstamp]["Timestamp"] < 60:
@@ -2447,7 +2464,7 @@ def interpreter():
 		console(tracking.show_dhcp_leases("all"))
 	elif arguments == "show provisioning":
 		tracking = tracking_class(client=True)
-		print(tracking.show_provisioning())
+		console(tracking.show_provisioning())
 	##### SET #####
 	elif arguments == "set":
 		console("--------------------------------------------------- SETTINGS YOU PROBABLY SHOULDN'T CHANGE ---------------------------------------------------")
