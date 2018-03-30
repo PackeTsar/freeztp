@@ -7,7 +7,7 @@
 ##### https://github.com/convergeone/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "v0.9.9"
+version = "v0.9.10"
 
 
 # NEXT: Recognize client tracking (dhcp, upgrade, initial file, custom file)
@@ -306,7 +306,7 @@ class config_factory:
 					"Temp ID": tempid,
 					"IP Address": ipaddr,
 					"Matched Keystore": None,
-					"Final Request": "Incomplete",
+					"Status": "Incomplete",
 					"Real IDs": None,
 					"MAC Address": None,
 					"Timestamp": time.time()
@@ -344,7 +344,7 @@ class config_factory:
 					if not test:
 						tracking.provision({
 							"Temp ID": tempid,
-							"Final Request": "Processing",
+							"Status": "Processing",
 							"Real IDs": identifiers
 							})
 					keystoreid = self.get_keystore_id(identifiers)
@@ -357,7 +357,7 @@ class config_factory:
 							tracking.provision({
 								"Temp ID": tempid,
 								"Matched Keystore": keystoreid,
-								"Final Request": "Complete",
+								"Status": "Complete",
 								})
 						return result
 					else:
@@ -372,7 +372,7 @@ class config_factory:
 								tracking.provision({
 									"Temp ID": tempid,
 									"Matched Keystore": default,
-									"Final Request": "Complete",
+									"Status": "Complete",
 									})
 							return result
 				else:
@@ -387,7 +387,7 @@ class config_factory:
 							tracking.provision({
 								"Temp ID": tempid,
 								"Matched Keystore": default,
-								"Final Request": "Complete",
+								"Status": "Complete",
 								})
 						return result
 		log("cfact.request: Nothing else caught. Returning None")
@@ -2089,16 +2089,18 @@ class tracking_class:
 				self.win.addstr(index, 0, line)
 				index += 1
 			self.win.refresh()
-	def clear_downloads(self):
+	def clear_downloads(self, nested=False):
 		self._master = {}
 		self.status = {}
-		try:
-			client = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-			client.connect(('localhost', 10000))
-			client.send("clear downloads\n")
-			client.close()
-		except socket.error:
-			console("Service not running. Clearing store.")
+		if not nested:
+			try:
+				client = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+				client.connect(('localhost', 10000))
+				client.send("clear downloads\n")
+				client.send("exit\n")
+				client.close()
+			except socket.error:
+				console("Service not running. Clearing store.")
 		self.store({})
 	def ipc_server(self):
 		self.ipcthread = threading.Thread(target=self._status_ipc)
@@ -2133,13 +2135,13 @@ class tracking_class:
 					client.send(str(threading.activeCount()))  # Send the query response
 					client.send(str(threading.enumerate()))
 				elif "clear downloads" in recieve:
-					self.clear_downloads()
+					self.clear_downloads(nested=True)
 					client.send(json.dumps(self.status, indent=4, sort_keys=True)+"\n")  # Send the query response
 				elif "get downloads" in recieve:
 					client.send(json.dumps(self.status, indent=4, sort_keys=True)+"\n")  # Send the query response
 				elif "clear provisioning" in recieve:
-					self.clear_provisioning()
-					client.send(json.dumps(self.provdb, indent=4, sort_keys=True)+"\n")  # Send the query response
+					self.clear_provisioning(nested=True)
+					client.send(json.dumps(self.provdb.recall(), indent=4, sort_keys=True)+"\n")  # Send the query response
 				else:
 					client.send("ZTP#")  # Send the query response
 	def _gen_animation(self):
@@ -2205,25 +2207,47 @@ class tracking_class:
 						self.provdb(current)
 						return None  # Return to prevent further execution
 		# If the tempid was not in provdb
+		dhcpinfo = self.prov_get_mac(data["IP Address"])
+		data["MAC Address"] = dhcpinfo[0]
 		current.update({data["Timestamp"]: data})  # Add the entry with data
 		self.provdb(current)
 		########
-	def clear_provisioning(self):
+	def clear_provisioning(self, nested=False):
 		self.provdb({})
-		try:
-			client = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-			client.connect(('localhost', 10000))
-			client.send("clear provisioning\n")
-			client.close()
-		except socket.error:
-			console("Service not running. Clearing provisioning.")
+		if not nested:
+			try:
+				client = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+				client.connect(('localhost', 10000))
+				client.send("clear provisioning\n")
+				client.send("exit\n")
+				client.close()
+			except socket.error:
+				console("Service not running. Clearing provisioning.")
 		self.store({})
 	def show_provisioning(self):
 		data = self.provdb.recall()
 		tabledata = []
 		for each in data:
+			if type(data[each]["Real IDs"]) == type({}):
+				real = ""
+				for id in data[each]["Real IDs"]:
+					if data[each]["Real IDs"][id]:
+						if real == "":
+							real += data[each]["Real IDs"][id]
+						else:
+							real += "," + data[each]["Real IDs"][id]
+				data[each]["Real IDs"] = real
 			tabledata.append(data[each])
-		return self.make_table(["Timestamp", "IP Address", "Temp ID", "Real IDs", "Matched Keystore", "Final Request"], tabledata)
+		return self.make_table(["Timestamp", "IP Address", "Temp ID", "MAC Address", "Real IDs", "Matched Keystore", "Status"], tabledata)
+	def prov_get_mac(self, ip):
+		dleases = self.dhcplease_class()
+		leases = dleases.get("current")
+		for lease in leases:
+			if leases[lease]["ip"] == ip:
+				mac = leases[lease]["ethernet"]
+				uid = leases[lease]["uid"]
+				return [mac, uid]
+		return None
 
 class persistent_store:
 	def __init__(self, dbid):
