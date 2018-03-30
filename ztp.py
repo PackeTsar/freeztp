@@ -270,7 +270,7 @@ class config_factory:
 			log("cfact.lookup: Creating new SNMP request for %s: %s" % (str(tempid), str(ipaddr)))
 			self.create_snmp_request(tempid, ipaddr)
 		return False
-	def _default_lookup(self, ):
+	def _default_lookup(self):
 		log("cfact._default_lookup: Checking if a default-keystore is configured and ready...")
 		if config.running["default-keystore"]:  # If a default keystore ID is set
 			kid = config.running["default-keystore"]
@@ -302,6 +302,15 @@ class config_factory:
 			log("cfact.request: Generated a TempID with cfact._generate_name: (%s)" % tempid)
 			if not test:
 				self.create_snmp_request(tempid, ipaddr)
+				tracking.provision({
+					"Temp ID": tempid,
+					"IP Address": ipaddr,
+					"Matched Keystore": None,
+					"Final Request": "Incomplete",
+					"Real IDs": None,
+					"MAC Address": None,
+					"Timestamp": time.time()
+					})
 			log("cfact.request: Generated a SNMP Request with TempID (%s) and IP (%s)" % (tempid, ipaddr))
 			result = self.merge_base_config(tempid)
 			log("cfact.request: Returning the below config to TFTPy:\n%s\n%s\n%s" % ("#"*25, result, "#"*25))
@@ -332,12 +341,24 @@ class config_factory:
 					log("cfact.request: SNMP Request says it has completed")
 					identifiers = self.snmprequests[tempid].responses
 					log("cfact.request: SNMP request returned target ID (%s)" % identifiers)
+					if not test:
+						tracking.provision({
+							"Temp ID": tempid,
+							"Final Request": "Processing",
+							"Real IDs": identifiers
+							})
 					keystoreid = self.get_keystore_id(identifiers)
 					log("cfact.request: Keystore ID Lookup returned (%s)" % keystoreid)
 					if keystoreid:
 						result = self.merge_final_config(keystoreid)
 						log("cfact.request: Returning the below config to TFTPy:\n%s\n%s\n%s" % ("#"*25, result, "#"*25))
 						self.send_tracking_update(ipaddr, filename, len(result))
+						if not test:
+							tracking.provision({
+								"Temp ID": tempid,
+								"Matched Keystore": keystoreid,
+								"Final Request": "Complete",
+								})
 						return result
 					else:
 						log("cfact.request: SNMP request for (%s) returned an unknown ID, checking for default-keystore" % self.snmprequests[tempid].host)
@@ -347,6 +368,12 @@ class config_factory:
 							result = self.merge_final_config(default)
 							log("cfact.request: Returning the below config to TFTPy:\n%s\n%s\n%s" % ("#"*25, result, "#"*25))
 							self.send_tracking_update(ipaddr, filename, len(result))
+							if not test:
+								tracking.provision({
+									"Temp ID": tempid,
+									"Matched Keystore": default,
+									"Final Request": "Complete",
+									})
 							return result
 				else:
 					log("cfact.request: SNMP request is not complete on host (%s), checking for default-keystore" % self.snmprequests[tempid].host)
@@ -356,6 +383,12 @@ class config_factory:
 						result = self.merge_final_config(default)
 						log("cfact.request: Returning the below config to TFTPy:\n%s" % result)
 						self.send_tracking_update(ipaddr, filename, len(result))
+						if not test:
+							tracking.provision({
+								"Temp ID": tempid,
+								"Matched Keystore": default,
+								"Final Request": "Complete",
+								})
 						return result
 		log("cfact.request: Nothing else caught. Returning None")
 		return None
@@ -1366,13 +1399,13 @@ _ztp_complete()
   elif [ $COMP_CWORD -eq 2 ]; then
 	case "$prev" in
 	  show)
-		COMPREPLY=( $(compgen -W "config run status version log downloads dhcpd" -- $cur) )
+		COMPREPLY=( $(compgen -W "config run status version log downloads dhcpd provisioning" -- $cur) )
 		;;
 	  "set")
 		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile file-cache-timeout template keystore idarray association default-keystore default-template imagefile image-supression delay-keystore dhcpd" -- $cur) )
 		;;
 	  "clear")
-		COMPREPLY=( $(compgen -W "keystore idarray snmpoid template association dhcpd log downloads" -- $cur) )
+		COMPREPLY=( $(compgen -W "keystore idarray snmpoid template association dhcpd log downloads provisioning" -- $cur) )
 		;;
 	  "request")
 		COMPREPLY=( $(compgen -W "merge-test initial-merge default-keystore-test snmp-test dhcp-option-125 dhcpd-commit auto-dhcpd ipc-console" -- $cur) )
@@ -1697,12 +1730,15 @@ def start(self, buffer):
 	# Call handle once with the initial packet. This should put us into
 	# the download or the upload state.
 	#### BEGIN CHANGES ####
-	tracking.report({
-		"ipaddr": self.host,
-		"port": self.port,
-		"block": None,
-		"filename": pkt.filename,
-		"source": "start"})
+	try:
+		tracking.report({
+			"ipaddr": self.host,
+			"port": self.port,
+			"block": None,
+			"filename": pkt.filename,
+			"source": "start"})
+	except Exception as e:
+		print(e)
 	#### END CHANGES ####
 	self.state = self.state.handle(pkt,
 									self.host,
@@ -1792,6 +1828,7 @@ class tracking_class:
 	def __init__(self, client=False):
 		self._master = {}
 		self.store = persistent_store("tracking")
+		self.provdb = persistent_store("provisioning")
 		if not client:
 			self.status = self.store.recall()
 			self.mthread = threading.Thread(target=self._maintenance)
@@ -2063,7 +2100,6 @@ class tracking_class:
 		except socket.error:
 			console("Service not running. Clearing store.")
 		self.store({})
-
 	def ipc_server(self):
 		self.ipcthread = threading.Thread(target=self._status_ipc)
 		self.ipcthread.daemon = True
@@ -2085,6 +2121,7 @@ class tracking_class:
 					table = """
 - threads
 - clear downloads
+- clear provisioning
 - get downloads
 - exit
 """
@@ -2100,6 +2137,9 @@ class tracking_class:
 					client.send(json.dumps(self.status, indent=4, sort_keys=True)+"\n")  # Send the query response
 				elif "get downloads" in recieve:
 					client.send(json.dumps(self.status, indent=4, sort_keys=True)+"\n")  # Send the query response
+				elif "clear provisioning" in recieve:
+					self.clear_provisioning()
+					client.send(json.dumps(self.provdb, indent=4, sort_keys=True)+"\n")  # Send the query response
 				else:
 					client.send("ZTP#")  # Send the query response
 	def _gen_animation(self):
@@ -2146,7 +2186,44 @@ class tracking_class:
 		for lease in leases:
 			data.append(leases[lease])
 		return self.make_table(['ethernet', 'ip', 'start', 'end', 'state', 'uid'], data)
-
+	def provision(self, data):
+		current = self.provdb.recall()
+		for tstamp in current:  # For each ID in provdb
+			if data["Temp ID"] == current[tstamp]["Temp ID"]:  # If the temp IDs match
+				for attrib in data:  # For each reported attribute
+					if data[attrib]:  # If the attribute has a value
+						current[tstamp][attrib] = data[attrib]  # Update the provdb
+				self.provdb(current)
+				return None  # Return to prevent further execution
+		for tstamp in current:  # For each ID in provdb
+			if "IP Address" in data:
+				if data["IP Address"] == current[tstamp]["IP Address"]:
+					if data["Timestamp"] - current[tstamp]["Timestamp"] < 60:
+						for attrib in data:  # For each reported attribute
+							if data[attrib]:  # If the attribute has a value
+								current[tstamp][attrib] = data[attrib]  # Update the provdb
+						self.provdb(current)
+						return None  # Return to prevent further execution
+		# If the tempid was not in provdb
+		current.update({data["Timestamp"]: data})  # Add the entry with data
+		self.provdb(current)
+		########
+	def clear_provisioning(self):
+		self.provdb({})
+		try:
+			client = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+			client.connect(('localhost', 10000))
+			client.send("clear provisioning\n")
+			client.close()
+		except socket.error:
+			console("Service not running. Clearing provisioning.")
+		self.store({})
+	def show_provisioning(self):
+		data = self.provdb.recall()
+		tabledata = []
+		for each in data:
+			tabledata.append(data[each])
+		return self.make_table(["Timestamp", "IP Address", "Temp ID", "Real IDs", "Matched Keystore", "Final Request"], tabledata)
 
 class persistent_store:
 	def __init__(self, dbid):
@@ -2313,6 +2390,7 @@ def interpreter():
 		console(" - show log (tail) (<num_of_lines>)               |  Show or tail the log file")
 		console(" - show downloads (live)                          |  Show list of TFTP downloads")
 		console(" - show dhcpd leases (current|all|raw)            |  Show DHCPD leases")
+		console(" - show provisioning                              |  Show list of provisioned devices")
 	elif arguments == "show config raw" or arguments == "show run raw":
 		os.system("more /etc/ztp/ztp.cfg")
 	elif arguments == "show config" or arguments == "show run":
@@ -2343,6 +2421,9 @@ def interpreter():
 	elif arguments == "show dhcpd leases all":
 		tracking = tracking_class(client=True)
 		console(tracking.show_dhcp_leases("all"))
+	elif arguments == "show provisioning":
+		tracking = tracking_class(client=True)
+		print(tracking.show_provisioning())
 	##### SET #####
 	elif arguments == "set":
 		console("--------------------------------------------------- SETTINGS YOU PROBABLY SHOULDN'T CHANGE ---------------------------------------------------")
@@ -2413,6 +2494,7 @@ def interpreter():
 		console(" - clear dhcpd <scope-name>                       |  Delete a DHCP scope")
 		console(" - clear log                                      |  Delete the logging info from the logfile")
 		console(" - clear downloads                                |  Delete the list of TFTP downloads")
+		console(" - clear provisioning                             |  Delete the list of provisioned devices")
 	elif (arguments[:13] == "clear snmpoid" and len(sys.argv) < 4) or arguments == "clear snmpoid":
 		console(" - clear snmpoid <name>                           |  Delete an SNMP OID from the configuration")
 	elif (arguments[:14] == "clear template" and len(sys.argv) < 4) or arguments == "clear template":
@@ -2444,6 +2526,10 @@ def interpreter():
 		tracking = tracking_class(client=True)
 		tracking.clear_downloads()
 		log("Downloads have been cleared")
+	elif arguments == "clear provisioning":
+		tracking = tracking_class(client=True)
+		tracking.clear_provisioning()
+		log("Provisioning history has been cleared")
 	##### REQUEST #####
 	elif arguments == "request":
 		console(" - request merge-test <id>                        |  Perform a test jinja2 merge of the final template with a keystore ID")
@@ -2460,6 +2546,7 @@ def interpreter():
 		console(" - request dhcp-option-125 (windows|cisco)        |  Show the DHCP Option 125 Hex value to use on the DHCP server for OS upgrades")
 	elif arguments == "request initial-merge":
 		cfact = config_factory()
+		tracking = tracking_class(client=True)
 		cfact.request(config.running["initialfilename"], "10.0.0.1", test=True)
 	elif arguments == "request default-keystore-test":
 		cfact = config_factory()
@@ -2529,6 +2616,7 @@ def interpreter():
 		console(" - show log (tail) (<num_of_lines>)                            |  Show or tail the log file")
 		console(" - show downloads (live)                                       |  Show list of TFTP downloads")
 		console(" - show dhcpd leases (current|all|raw)                         |  Show DHCPD leases")
+		console(" - show provisioning                                           |  Show list of provisioned devices")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console("--------------------------------------------------- SETTINGS YOU PROBABLY SHOULDN'T CHANGE ---------------------------------------------------")
@@ -2561,6 +2649,7 @@ def interpreter():
 		console(" - clear dhcpd <scope-name>                                    |  Delete a DHCP scope")
 		console(" - clear log                                                   |  Delete the logging info from the logfile")
 		console(" - clear downloads                                             |  Delete the list of TFTP downloads")
+		console(" - clear provisioning                                          |  Delete the list of provisioned devices")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console(" - request merge-test <id>                                     |  Perform a test jinja2 merge of the final template with a keystore ID")
 		console(" - request initial-merge                                       |  See the result of an auto-merge of the initial-template")
