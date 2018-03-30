@@ -7,7 +7,7 @@
 ##### https://github.com/convergeone/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "v0.9.8"
+version = "v0.9.9"
 
 
 # NEXT: Recognize client tracking (dhcp, upgrade, initial file, custom file)
@@ -322,6 +322,10 @@ class config_factory:
 			log("cfact.request: Filename (%s) does NOT match the configured initialfilename" % filename)
 			tempid = filename.replace(self.uniquesuffix, "")
 			log("cfact.request: Stripped filename to TempID (%s)" % tempid)
+			if config.running["delay-keystore"]:
+				delay = float(config.running["delay-keystore"])
+				log("cfact.request: Delaying keystore loopup for (%s) milliseconds" % config.running["delay-keystore"])
+				time.sleep(delay/1000)
 			if self.uniquesuffix in filename and tempid in list(self.snmprequests):
 				log("cfact.request: Seeing the suffix in the filename and the TempID in the SNMP Requests")
 				if self.snmprequests[tempid].complete:
@@ -509,7 +513,7 @@ class snmp_query:
 				log("snmp_query._query_worker: Timeout Expired, Query Thread Terminating")
 				break
 			else:
-				time.sleep(0.5)
+				time.sleep(0.1)
 	def _get_oid(self, oid):
 		errorIndication, errorStatus, errorIndex, varBinds = next(
 			pysnmp.hlapi.getCmd(pysnmp.hlapi.SnmpEngine(),
@@ -592,7 +596,7 @@ class config_manager:
 				value = None
 			self.running[setting] = value
 			self.save()
-		elif setting == "image-supression" or setting == "file-cache-timeout":
+		elif setting == "image-supression" or setting == "file-cache-timeout" or setting == "delay-keystore":
 			try:
 				self.running[setting] = int(value)
 				self.save()
@@ -785,6 +789,7 @@ class config_manager:
 		dtemplate = "ztp set default-template %s"  % str(self.running["default-template"])
 		imagefile = "ztp set imagefile %s"  % str(self.running["imagefile"])
 		imagesup = "ztp set image-supression %s"  % str(self.running["image-supression"])
+		delaykey = "ztp set delay-keystore %s"  % str(self.running["delay-keystore"])
 		############
 		scopelist = []
 		for scope in self.running["dhcpd"]:
@@ -828,6 +833,8 @@ class config_manager:
 		configtext += imagefile
 		configtext += "\n"
 		configtext += imagesup
+		configtext += "\n"
+		configtext += delaykey
 		configtext += "\n#\n#\n#\n#######################################################"
 		###########
 		console(configtext)
@@ -1158,7 +1165,8 @@ class installer:
 		"imagediscoveryfile": "autoinstall_dhcp",
 		"imagefile": "cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin",
 		"tftproot": "/etc/ztp/tftproot/",
-		"default-template": None
+		"default-template": None,
+		"delay-keystore": None
 		}
 		for key in newconfigkeys:
 			if key not in list(config.running):
@@ -1361,7 +1369,7 @@ _ztp_complete()
 		COMPREPLY=( $(compgen -W "config run status version log downloads dhcpd" -- $cur) )
 		;;
 	  "set")
-		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile file-cache-timeout template keystore idarray association default-keystore default-template imagefile image-supression dhcpd" -- $cur) )
+		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile file-cache-timeout template keystore idarray association default-keystore default-template imagefile image-supression delay-keystore dhcpd" -- $cur) )
 		;;
 	  "clear")
 		COMPREPLY=( $(compgen -W "keystore idarray snmpoid template association dhcpd log downloads" -- $cur) )
@@ -1503,6 +1511,11 @@ _ztp_complete()
 	  image-supression)
 		if [ "$prev2" == "set" ]; then
 		  COMPREPLY=( $(compgen -W "<seconds-to-supress> -" -- $cur) )
+		fi
+		;;
+	  delay-keystore)
+		if [ "$prev2" == "set" ]; then
+		  COMPREPLY=( $(compgen -W "<msec-to-delay> -" -- $cur) )
 		fi
 		;;
 	  dhcpd)
@@ -2350,6 +2363,7 @@ def interpreter():
 		console(" - set default-template (none|template_name)                   |  Set a last-resort template for when no keystore/template association is found")
 		console(" - set imagefile <binary_image_file_name>                      |  Set the image file name to be used for upgrades (must be in tftp root dir)")
 		console(" - set image-supression <seconds-to-supress>                   |  Set the seconds to supress a second image download preventing double-upgrades")
+		console(" - set delay-keystore <msec-to-delay>                          |  Set the miliseconds to delay the processing of a keystore lookup")
 		console(" - set dhcpd <scope-name> [parameters]                         |  Configure DHCP scope(s) to serve IP addresses to ZTP clients")
 	elif arguments == "set suffix":
 		console(" - set suffix <value>                             |  Set the file name suffix used by target when requesting the final config")
@@ -2377,10 +2391,14 @@ def interpreter():
 		console(" - set association id <id/arrayname> template <template_name>  |  Associate a keystore id or an idarray to a specific named template")
 	elif (arguments[:20] == "set default-keystore" and len(sys.argv) < 4) or arguments == "default-keystore":
 		console(" - set default-keystore (none|keystore-id)        |  Set a last-resort keystore and template for when target identification fails")
+	elif (arguments[:20] == "set default-template" and len(sys.argv) < 4) or arguments == "default-template":
+		console(" - set default-template (none|template_name)                   |  Set a last-resort template for when no keystore/template association is found")
 	elif arguments == "set imagefile":
 		console(" - set imagefile <binary_image_file_name>         |  Set the image file name to be used for upgrades (must be in tftp root dir)")
 	elif arguments == "set image-supression":
 		console(" - set image-supression <seconds-to-supress>      |  Set the seconds to supress a second image download preventing double-upgrades")
+	elif arguments == "set delay-keystore":
+		console(" - set delay-keystore <msec-to-delay>             |  Set the miliseconds to delay the processing of a keystore lookup")
 	elif arguments == "set dhcpd":
 		console(" - set dhcpd <scope-name> [parameters]            |  Configure DHCP scope(s) to serve IP addresses to ZTP clients")
 	elif arguments[:3] == "set" and len(sys.argv) >= 4:
@@ -2531,6 +2549,7 @@ def interpreter():
 		console(" - set default-template (none|template_name)                   |  Set a last-resort template for when no keystore/template association is found")
 		console(" - set imagefile <binary_image_file_name>                      |  Set the image file name to be used for upgrades (must be in tftp root dir)")
 		console(" - set image-supression <seconds-to-supress>                   |  Set the seconds to supress a second image download preventing double-upgrades")
+		console(" - set delay-keystore <msec-to-delay>                          |  Set the miliseconds to delay the processing of a keystore lookup")
 		console(" - set dhcpd <scope-name> [parameters]                         |  Configure DHCP scope(s) to serve IP addresses to ZTP clients")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
