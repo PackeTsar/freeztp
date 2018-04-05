@@ -7,11 +7,7 @@
 ##### https://github.com/convergeone/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "v0.9.10"
-
-
-# NEXT: Recognize client tracking (dhcp, upgrade, initial file, custom file)
-
+version = "v0.9.13"
 
 ##### Import native modules #####
 import os
@@ -2225,7 +2221,8 @@ class tracking_class:
 						return None  # Return to prevent further execution
 		# If the tempid was not in provdb
 		dhcpinfo = self.prov_get_mac(data["IP Address"])
-		data["MAC Address"] = dhcpinfo[0]
+		if dhcpinfo:
+			data["MAC Address"] = dhcpinfo[0]
 		current.update({data["Timestamp"]: data})  # Add the entry with data
 		self.provdb(current)
 		########
@@ -2291,11 +2288,15 @@ class persistent_store:
 		f.write("{}")
 		f.close()
 	def _read(self):
-		data = self._pull_full_db()
 		try:
-			self._running = data[self._dbid]
-		except KeyError:
-			self._write()
+			data = self._pull_full_db()
+			try:
+				self._running = data[self._dbid]
+			except KeyError:
+				self._write()
+		except Exception as e:
+			log("persistent_store: ERROR: Error in reading from store file")
+			log("persistent_store: ERROR: " + str(e))
 	def _pull_full_db(self):
 		try:
 			f = open(self._file, "r")
@@ -2452,8 +2453,11 @@ def interpreter():
 	elif arguments[:14] == "show downloads":
 		tracking = tracking_class(client=True)
 		console(tracking.show_downloads(sys.argv))
-	elif arguments == "show dhcpd" or arguments == "show dhcpd leases":
+	elif arguments == "show dhcpd":
 		console(" - show dhcpd leases (current|all|raw)            |  Show DHCPD leases")
+	elif arguments == "show dhcpd leases":
+		tracking = tracking_class(client=True)
+		console(tracking.show_dhcp_leases())
 	elif arguments == "show dhcpd leases raw":
 		os.system("more "+osd.DHCPLEASES)
 	elif arguments == "show dhcpd leases current":
