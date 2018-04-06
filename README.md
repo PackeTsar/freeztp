@@ -82,55 +82,55 @@ The only part missing on the configuration is an IP lease range for DHCP. You wi
 -----------------------------------------
 ##   TERMINOLOGY   ##
 Due to the unique nature of how FreeZTP works and performs discovery of switches, there are a few terms you will need to know to understand the application.
-	- **Template**
-		- FreeZTP relies on the Jinja2 templating standard to take a common Cisco IOS configuration and templatize it: creating variables (with the `{{ i_am_a_variable }}` syntax) in the template where unique values can be inserted for a specific switch upon a configuration pull.
-		- FreeZTP uses two different template types: the 'initial-template', and the custom named final templates. The initial-template is used to set the switch up for discovery, the named (final) templates are used to push the final configuration once the discovery is complete and the switch has been identified (this will make more sense in the **ZTP Process** section). You will most likely never need to change the initial-template. It has a default configuration that will most likely work for you. You will definitely be changing the named templates to fit the configurations you want your switches to have.
-		- **Template Example Config**
-				```
-				ztp set template SHORT_TEMPLATE ^
-				hostname {{ hostname }}
-				!
-				interface Vlan1
-				ip address {{ vl1_ip_address }} 255.255.255.0
-				no shut
-				!
-				end
-				^
-				```
-	- **Keystore**
-		- The counterpart to the template (specifically: named templates) is the keystore. The keystore is the part of the ZTP configuration which holds the unique configuration values for specific switches (or for many switches). The keystore provides those values for the merge of the final-template once the switch has been identified by the discovery process.
-		- **Keystore ID**
-			- A Keystore ID is the named identifier for a specific store which holds a set of key-value pairs.
-				- ie "SOMEID" in: `ztp set keystore SOMEID hostname SOMEDEVICE`
-		- **Keystore Key**
-			- A Keystore Key is the key side of a certain key-value pair which resides under a named Keystore ID.
-				- ie "hostname" in: `ztp set keystore SOMEID hostname SOMEDEVICE`
-		- **Keystore Value**
-			- A Keystore Value is the value side of a certain key-value pair which resides under a named Keystore ID.
-				- ie "SOMEDEVICE" in: `ztp set keystore SOMEID hostname SOMEDEVICE`
-		- **Keystore Hierarchy**
-			- The hierarchy of the Keystore works as follows: A Keystore ID can contain multiple (unique) keys, each key with a different value. The Keystore can contain multiple IDs, each with its own set of key-value pairs.
-		- **Keystore Example Config**
-				```
-				ztp set keystore STACK1 vl1_netmask 255.255.255.0
-				ztp set keystore STACK1 vl1_ip_address 10.0.0.200
-				ztp set keystore STACK1 hostname CORESWITCH
-				```
-	- **ID Arrays**
-		- An ID Array is a method of mapping one or more Real switch IDs (ie: serial numbers) to a specific keystore. Multiple Real IDs can be mapped to the same Keystore ID, which comes in handy when building a configuration for a switch stack (which could take on the serial number of any of the member switches when it boots up).
-		- The ID array has two pieces:
-			- The **Array Name** is the name of the specific array. The Array Name must match a Keystore ID in order to pull values from that keystore.
-			- The **Array ID List** is a list of Real switch IDs (serial numbers) which, when searched for, will resolve to the Array Name before mapping to a Keystore ID. When configuring an IDArray in the CLI, each ID in the list is separated by a space.
-		- **ID Array Example Config**
-				```
-				ztp set idarray STACK1 SERIAL1 SERIAL2 SERIAL3
-				```
-	- **Associations**
-		- An association is a configuration element which maps a keystore to a named template. An association is required for each keystore in order to tell FreeZTP which template to use to do the merge when using certain keystore.
-		- **Association Example Config**
-				```
-				ztp set association id STACK1 template LONG_TEMPLATE
-				```
+- **Template**
+	- FreeZTP relies on the Jinja2 templating standard to take a common Cisco IOS configuration and templatize it: creating variables (with the `{{ i_am_a_variable }}` syntax) in the template where unique values can be inserted for a specific switch upon a configuration pull.
+	- FreeZTP uses two different template types: the 'initial-template', and the custom named final templates. The initial-template is used to set the switch up for discovery, the named (final) templates are used to push the final configuration once the discovery is complete and the switch has been identified (this will make more sense in the **ZTP Process** section). You will most likely never need to change the initial-template. It has a default configuration that will most likely work for you. You will definitely be changing the named templates to fit the configurations you want your switches to have.
+	- **Template Example Config**
+			```
+			ztp set template SHORT_TEMPLATE ^
+			hostname {{ hostname }}
+			!
+			interface Vlan1
+			ip address {{ vl1_ip_address }} 255.255.255.0
+			no shut
+			!
+			end
+			^
+			```
+- **Keystore**
+	- The counterpart to the template (specifically: named templates) is the keystore. The keystore is the part of the ZTP configuration which holds the unique configuration values for specific switches (or for many switches). The keystore provides those values for the merge of the final-template once the switch has been identified by the discovery process.
+	- **Keystore ID**
+		- A Keystore ID is the named identifier for a specific store which holds a set of key-value pairs.
+			- ie "SOMEID" in: `ztp set keystore SOMEID hostname SOMEDEVICE`
+	- **Keystore Key**
+		- A Keystore Key is the key side of a certain key-value pair which resides under a named Keystore ID.
+			- ie "hostname" in: `ztp set keystore SOMEID hostname SOMEDEVICE`
+	- **Keystore Value**
+		- A Keystore Value is the value side of a certain key-value pair which resides under a named Keystore ID.
+			- ie "SOMEDEVICE" in: `ztp set keystore SOMEID hostname SOMEDEVICE`
+	- **Keystore Hierarchy**
+		- The hierarchy of the Keystore works as follows: A Keystore ID can contain multiple (unique) keys, each key with a different value. The Keystore can contain multiple IDs, each with its own set of key-value pairs.
+	- **Keystore Example Config**
+			```
+			ztp set keystore STACK1 vl1_netmask 255.255.255.0
+			ztp set keystore STACK1 vl1_ip_address 10.0.0.200
+			ztp set keystore STACK1 hostname CORESWITCH
+			```
+- **ID Arrays**
+	- An ID Array is a method of mapping one or more Real switch IDs (ie: serial numbers) to a specific keystore. Multiple Real IDs can be mapped to the same Keystore ID, which comes in handy when building a configuration for a switch stack (which could take on the serial number of any of the member switches when it boots up).
+	- The ID array has two pieces:
+		- The **Array Name** is the name of the specific array. The Array Name must match a Keystore ID in order to pull values from that keystore.
+		- The **Array ID List** is a list of Real switch IDs (serial numbers) which, when searched for, will resolve to the Array Name before mapping to a Keystore ID. When configuring an IDArray in the CLI, each ID in the list is separated by a space.
+	- **ID Array Example Config**
+			```
+			ztp set idarray STACK1 SERIAL1 SERIAL2 SERIAL3
+			```
+- **Associations**
+	- An association is a configuration element which maps a keystore to a named template. An association is required for each keystore in order to tell FreeZTP which template to use to do the merge when using certain keystore.
+	- **Association Example Config**
+			```
+			ztp set association id STACK1 template LONG_TEMPLATE
+			```
 
 
 -----------------------------------------
@@ -140,55 +140,55 @@ FreeZTP relies on the 'AutoInstall' function of a Cisco Catalyst switch to confi
 The new switch should have one of its ports connected to a network (likely an upstream switch) which has the FreeZTP server accessible. The FreeZTP server can be on the same VLAN as the new switch (so it can serve up DHCP addresses directly) or on a different VLAN which has a gateway and an IP helper pointed at the FreeZTP server so it can serve up DHCP.
 
 ####  1. STEP 1 - POWER ON: Initial boot up and DHCP leasing
-	- NOTE: _Once the operating system is loaded on the switch and it completes the boot-up process, it will start the AutoInstall process_
-	- **Step 1.1:** The switch will enable all of its ports as access ports for VLAN 1.
-	- **Step 1.2:** The switch will enable interface (SVI) Vlan1 and begin sending out DHCP requests from interface Vlan1.
-	- **Step 1.3:** The switch will get a DHCP lease from the ZTP server or from a different DHCP server. The lease will contain DHCP option 150 (TFTP Server) which points at the IP of the ZTP server.
-	- **Step 1.4:** To upgrade, or not to upgrade:
-		- IF DHCP option 125 was configured (`ztp set dhcpd SCOPENAME imagediscoveryfile-option enable`) and that option is handed to the switch in its DHCP lease, then the switch will proceed to **Step 2**.
-		- IF DHCP option 125 was not configured (`ztp set dhcpd SCOPENAME imagediscoveryfile-option disable`), the switch will proceed to **Step 3**.
+- NOTE: _Once the operating system is loaded on the switch and it completes the boot-up process, it will start the AutoInstall process_
+- **Step 1.1:** The switch will enable all of its ports as access ports for VLAN 1.
+- **Step 1.2:** The switch will enable interface (SVI) Vlan1 and begin sending out DHCP requests from interface Vlan1.
+- **Step 1.3:** The switch will get a DHCP lease from the ZTP server or from a different DHCP server. The lease will contain DHCP option 150 (TFTP Server) which points at the IP of the ZTP server.
+- **Step 1.4:** To upgrade, or not to upgrade:
+	- IF DHCP option 125 was configured (`ztp set dhcpd SCOPENAME imagediscoveryfile-option enable`) and that option is handed to the switch in its DHCP lease, then the switch will proceed to **Step 2**.
+	- IF DHCP option 125 was not configured (`ztp set dhcpd SCOPENAME imagediscoveryfile-option disable`), the switch will proceed to **Step 3**.
 
 ####  2. STEP 2 - IOS Upgrade: The imagediscoveryfile is used to discover the IOS bin file
-	- NOTE: _DHCP Option 125 will contain (in hex form) the name of the imagediscoveryfile setting ("freeztp_ios_upgrade" by default in the ZTP configuration) which is a fictitious file containing the name of the .bin or .tar file the switch needs to download for the upgrade._
-	- **Step 2.1:** The switch will send a TFTP request to ZTP requesting imagediscoveryfile ("freeztp_ios_upgrade" by default).
-		- **Step 2.1.1:** FreeZTP will check the file download log (seen by using `ztp show downloads`) to see if the "freeztp_ios_upgrade" file has been downloaded by that IP address within the image-supression timeframe (set with `set image-supression <seconds-to-supress>`). This time-saving feature prevents some switch models from upgrading their IOS, automatically rebooting, then attempting the upgrade again after a reboot (which results in the switch downloading the IOS image a second time, just to abort the upgrade since the software is the same version).
-			- If a valid suppression entry is found, then ZTP will return the "freeztp_ios_upgrade" with a bogus value; causing the switch to fail the IOS download and move on to configuration downloads in **Step 3**.
-	- **Step 2.2:** FreeZTP will check its "imagefile" (`ztp set imagefile someIOSfile.bin`) setting and dynamically generate a "freeztp_ios_upgrade" file containing the name of that .bin or .tar file. This "freeztp_ios_upgrade" file is then sent to the switch to be downloaded.
-	- **Step 2.3:** The switch reads the file and determines what .bin or .tar file it should download as its upgrade image. Once determined, the switch sends a TFTP download request to ZTP for that .bin or .tar filename .
-	- **Step 2.4:** If the .bin or .tar file does not exist, the switch abandons the upgrade attempt and proceeds to **Step 3**. If the .bin or .tar file does exist, then the ZTP server allows the switch to download it with TFTP.
-	- **Step 2.5:** Once fully downloaded, the switch will install the image and upgrade itself. Depending on the switch model, it may or may not automatically reboot itself. After the upgrade, the switch will continue through the ZTP process.
+- NOTE: _DHCP Option 125 will contain (in hex form) the name of the imagediscoveryfile setting ("freeztp_ios_upgrade" by default in the ZTP configuration) which is a fictitious file containing the name of the .bin or .tar file the switch needs to download for the upgrade._
+- **Step 2.1:** The switch will send a TFTP request to ZTP requesting imagediscoveryfile ("freeztp_ios_upgrade" by default).
+	- **Step 2.1.1:** FreeZTP will check the file download log (seen by using `ztp show downloads`) to see if the "freeztp_ios_upgrade" file has been downloaded by that IP address within the image-supression timeframe (set with `set image-supression <seconds-to-supress>`). This time-saving feature prevents some switch models from upgrading their IOS, automatically rebooting, then attempting the upgrade again after a reboot (which results in the switch downloading the IOS image a second time, just to abort the upgrade since the software is the same version).
+		- If a valid suppression entry is found, then ZTP will return the "freeztp_ios_upgrade" with a bogus value; causing the switch to fail the IOS download and move on to configuration downloads in **Step 3**.
+- **Step 2.2:** FreeZTP will check its "imagefile" (`ztp set imagefile someIOSfile.bin`) setting and dynamically generate a "freeztp_ios_upgrade" file containing the name of that .bin or .tar file. This "freeztp_ios_upgrade" file is then sent to the switch to be downloaded.
+- **Step 2.3:** The switch reads the file and determines what .bin or .tar file it should download as its upgrade image. Once determined, the switch sends a TFTP download request to ZTP for that .bin or .tar filename .
+- **Step 2.4:** If the .bin or .tar file does not exist, the switch abandons the upgrade attempt and proceeds to **Step 3**. If the .bin or .tar file does exist, then the ZTP server allows the switch to download it with TFTP.
+- **Step 2.5:** Once fully downloaded, the switch will install the image and upgrade itself. Depending on the switch model, it may or may not automatically reboot itself. After the upgrade, the switch will continue through the ZTP process.
 
 ####  3. STEP 3 - INITIAL-CONFIG: An initial config is generated, sent, and loaded for switch (target) discovery
-	- **Step 3.1:** The switch will send a TFTP request for a file named "**network-confg**" to the IP address specified in the DHCP option 150 (which should be the ZTP server).
-	- **Step 3.2:** When the request for the "network-confg" file is received by the ZTP server, it generates the config by performing an automatic merge with the `initial-template`:
-		- **Step 3.2.1:** The `{{ autohostname }}` variable in the initial-template is filled by an automatically generated hexadecimal temporary name (example: ZTP-22F1388804). This temporary name is saved in memory by the ZTP server for future reference because the switch will use it's temporary hostname to request a new TFTP file in a later step.
-		- **Step 3.2.2:** The SNMP `{{ community }}` variable is filled with the value set in the `community` configuration field
-	- **Step 3.3:** This merged configuration is passed to the Cisco switch as the "network-confg" file. The switch loads it into its active running-config and proceeds to **Step 5**
-		- NOTE: _You can see an example initial configuration from the ZTP server by issuing the command_ `ztp request initial-merge`
+- **Step 3.1:** The switch will send a TFTP request for a file named "**network-confg**" to the IP address specified in the DHCP option 150 (which should be the ZTP server).
+- **Step 3.2:** When the request for the "network-confg" file is received by the ZTP server, it generates the config by performing an automatic merge with the `initial-template`:
+	- **Step 3.2.1:** The `{{ autohostname }}` variable in the initial-template is filled by an automatically generated hexadecimal temporary name (example: ZTP-22F1388804). This temporary name is saved in memory by the ZTP server for future reference because the switch will use it's temporary hostname to request a new TFTP file in a later step.
+	- **Step 3.2.2:** The SNMP `{{ community }}` variable is filled with the value set in the `community` configuration field
+- **Step 3.3:** This merged configuration is passed to the Cisco switch as the "network-confg" file. The switch loads it into its active running-config and proceeds to **Step 5**
+	- NOTE: _You can see an example initial configuration from the ZTP server by issuing the command_ `ztp request initial-merge`
 
 ####  4. STEP 4 - SNMP DISCOVERY: The ZTP server discovers the switch's "Real ID" (ie: serial number) using SNMP
-	- **Step 4.1:** After the initial config file is passed to and loaded by the switch, the ZTP server initiates a SNMP discovery of the switch's serial number, or "Real ID"
-		- **Step 4.1.1:** The SNMP requests target the source IP of the switch which was used to originally request the "network-confg" file in **Step 3.1**
-		- **Step 4.1.2:** The SNMP requests use the value of the `community` configuration field as the authentication community (which the switch should honor once it loads the configuration from the "network-confg" file)
-		- **Step 4.1.3:** The SNMP requests use the OIDs from the `snmpoid` configuration field. The FreeZTP default configuration comes with a few different OIDs pre-configured for some popular switch models.
-			- NOTE: _You may need to add an OID based on the switch model you are discovering. You can test the configured OIDs for returned values using the following command. Your switch will need to be accessible and ready to accept the ZTP configured community_ `ztp request snmp-test <ip_address>`
-		- **Step 4.1.4:** Once the SNMP query succeeds, the ZTP server maps the Real ID (ie: serial number) of the discovered switch to its temporary hostname generated in **Step 3.2.1**
+- **Step 4.1:** After the initial config file is passed to and loaded by the switch, the ZTP server initiates a SNMP discovery of the switch's serial number, or "Real ID"
+	- **Step 4.1.1:** The SNMP requests target the source IP of the switch which was used to originally request the "network-confg" file in **Step 3.1**
+	- **Step 4.1.2:** The SNMP requests use the value of the `community` configuration field as the authentication community (which the switch should honor once it loads the configuration from the "network-confg" file)
+	- **Step 4.1.3:** The SNMP requests use the OIDs from the `snmpoid` configuration field. The FreeZTP default configuration comes with a few different OIDs pre-configured for some popular switch models.
+		- NOTE: _You may need to add an OID based on the switch model you are discovering. You can test the configured OIDs for returned values using the following command. Your switch will need to be accessible and ready to accept the ZTP configured community_ `ztp request snmp-test <ip_address>`
+	- **Step 4.1.4:** Once the SNMP query succeeds, the ZTP server maps the Real ID (ie: serial number) of the discovered switch to its temporary hostname generated in **Step 3.2.1**
 
 ####  5. STEP 5 - FINAL CONFIG REQUEST: The switch requests the final configuration file and the ZTP server generates it based on the ZTP configuration
-	- **Step 5.1:** After the switch loads the "network-confg" file into its running-config, it sends out a new TFTP request to the ZTP server for a new configuration file. The file name for the new TFTP request is based upon the hostname passed to the switch in the initial ("network-confg") file (example filename: "ZTP-22F1388804-confg") from **Step 3.2.1**.
-	- **Step 5.2 (FIND A KEYSTORE ID):** ZTP attempts to find a usable Keystore ID to create the final configuration:
-		- **Step 5.2.1 (USING THE REAL ID):** ZTP uses the requested filename (example filename: "ZTP-22F1388804-confg") to look up the Real ID (serial number) of the requesting switch (it was saved in **Step 3.2.1**). If the Real ID of the requesting switch is known, the ZTP server attempts to use that ID to find a suitable Keystore ID:
-			- **Step 5.2.1.1:** The Real ID of the switch is used to search through all of the Keystore IDs to see if one of them matches the Real ID. If a Keystore ID matches, then the server proceeds to **Step 5.3** with that Keystore ID.
-			- **Step 5.2.1.2:** If there is no match between the Real ID and a Keystore ID, then the server looks to the ID Arrays for a match. It searches through the ID list in each IDArray, once a match is found, the server resolves the Real ID to the IDArray Name and re-searches the Keystore IDs for a match using the resolved IDArray name. Once a match is found, the server continues to **Step 5.3** with the matched Keystore ID.
-		- **Step 5.2.2 (USING THE DEFAULT KEYSTORE):** If ZTP was unable to determine the ID of the switch, or the ID of the switch does not match either a Keystore ID or an ID Array, then ZTP will look to see if a default Keystore ID has been configured using the `default-keystore` setting. If a default Keystore ID is set, and that Keystore ID is actually configured with at least one key/value pair, then ZTP will continue on through the process using that Keystore ID.
-			- NOTE: _If the `default-keystore` is set to_ `None`_, or the default-keystore name does not actually exist as a configured Keystore ID, then ZTP will send a "no such file" failure message to the switch as a response to the TFTP request_
-			- NOTE: _You can test the default-keystore configuration by issuing the command_ `ztp request default-keystore-test`
-	- **Step 5.3 (FIND THE ASSOCIATED TEMPLATE):** Once a candidate Keystore ID is found, the server checks to see if an `association` exists in the ZTP configuration to associate the Keystore ID with a template. It will then use the associated template to perform the Jinja2 merge of the final configuration.
-		- NOTE: _If no association exists for the Keystore ID, or an association exists, but the associated template name doesn't match any configured template, then ZTP will send a "no such file" failure message to the switch as a response to the TFTP request_
-	- **Step 5.4 (COMPLETE THE FINAL CONFIG):** After the matching keystore and an associated template have been found, the ZTP server will perform the Jinja2 merge between the template and the key/value pairs in the Keystore ID. This configuration is then passed to the switch in response to its TFTP request made in **Step 5.1**.
-		- NOTE: _You can see this merged configuration by issuing the command_ `ztp request merge-test <keystore-id>`
-		- NOTE: _If you configured static IP addresses in the final-template, the switch will then start using those static IPs and can be remotely accessible via them (assuming you also included config for AAA and SSH)_
-		- NOTE: _The switch does not save the new configurations into its startup-config. That has to be done manually_
+- **Step 5.1:** After the switch loads the "network-confg" file into its running-config, it sends out a new TFTP request to the ZTP server for a new configuration file. The file name for the new TFTP request is based upon the hostname passed to the switch in the initial ("network-confg") file (example filename: "ZTP-22F1388804-confg") from **Step 3.2.1**.
+- **Step 5.2 (FIND A KEYSTORE ID):** ZTP attempts to find a usable Keystore ID to create the final configuration:
+	- **Step 5.2.1 (USING THE REAL ID):** ZTP uses the requested filename (example filename: "ZTP-22F1388804-confg") to look up the Real ID (serial number) of the requesting switch (it was saved in **Step 3.2.1**). If the Real ID of the requesting switch is known, the ZTP server attempts to use that ID to find a suitable Keystore ID:
+		- **Step 5.2.1.1:** The Real ID of the switch is used to search through all of the Keystore IDs to see if one of them matches the Real ID. If a Keystore ID matches, then the server proceeds to **Step 5.3** with that Keystore ID.
+		- **Step 5.2.1.2:** If there is no match between the Real ID and a Keystore ID, then the server looks to the ID Arrays for a match. It searches through the ID list in each IDArray, once a match is found, the server resolves the Real ID to the IDArray Name and re-searches the Keystore IDs for a match using the resolved IDArray name. Once a match is found, the server continues to **Step 5.3** with the matched Keystore ID.
+	- **Step 5.2.2 (USING THE DEFAULT KEYSTORE):** If ZTP was unable to determine the ID of the switch, or the ID of the switch does not match either a Keystore ID or an ID Array, then ZTP will look to see if a default Keystore ID has been configured using the `default-keystore` setting. If a default Keystore ID is set, and that Keystore ID is actually configured with at least one key/value pair, then ZTP will continue on through the process using that Keystore ID.
+		- NOTE: _If the `default-keystore` is set to_ `None`_, or the default-keystore name does not actually exist as a configured Keystore ID, then ZTP will send a "no such file" failure message to the switch as a response to the TFTP request_
+		- NOTE: _You can test the default-keystore configuration by issuing the command_ `ztp request default-keystore-test`
+- **Step 5.3 (FIND THE ASSOCIATED TEMPLATE):** Once a candidate Keystore ID is found, the server checks to see if an `association` exists in the ZTP configuration to associate the Keystore ID with a template. It will then use the associated template to perform the Jinja2 merge of the final configuration.
+	- NOTE: _If no association exists for the Keystore ID, or an association exists, but the associated template name doesn't match any configured template, then ZTP will send a "no such file" failure message to the switch as a response to the TFTP request_
+- **Step 5.4 (COMPLETE THE FINAL CONFIG):** After the matching keystore and an associated template have been found, the ZTP server will perform the Jinja2 merge between the template and the key/value pairs in the Keystore ID. This configuration is then passed to the switch in response to its TFTP request made in **Step 5.1**.
+	- NOTE: _You can see this merged configuration by issuing the command_ `ztp request merge-test <keystore-id>`
+	- NOTE: _If you configured static IP addresses in the final-template, the switch will then start using those static IPs and can be remotely accessible via them (assuming you also included config for AAA and SSH)_
+	- NOTE: _The switch does not save the new configurations into its startup-config. That has to be done manually_
 
 ####   Ladder Diagram   ####
 
@@ -237,6 +237,7 @@ Below is the CLI guide for FreeZTP. You can see this at the command line by ente
  - show log (tail) (<num_of_lines>)                            |  Show or tail the log file
  - show downloads (live)                                       |  Show list of TFTP downloads
  - show dhcpd leases (current|all|raw)                         |  Show DHCPD leases
+ - show provisioning                                           |  Show list of provisioned devices
 ----------------------------------------------------------------------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------------------------------------------------
 --------------------------------------------------- SETTINGS YOU PROBABLY SHOULDN'T CHANGE ---------------------------------------------------
@@ -254,8 +255,10 @@ Below is the CLI guide for FreeZTP. You can see this at the command line by ente
  - set idarray <arrayname> <id_#1> <id_#2> ...                 |  Create an ID array to allow multiple real ids to match one keystore id
  - set association id <id/arrayname> template <template_name>  |  Associate a keystore id or an idarray to a specific named template
  - set default-keystore (none|keystore-id)                     |  Set a last-resort keystore and template for when target identification fails
+ - set default-template (none|template_name)                   |  Set a last-resort template for when no keystore/template association is found
  - set imagefile <binary_image_file_name>                      |  Set the image file name to be used for upgrades (must be in tftp root dir)
  - set image-supression <seconds-to-supress>                   |  Set the seconds to supress a second image download preventing double-upgrades
+ - set delay-keystore <msec-to-delay>                          |  Set the miliseconds to delay the processing of a keystore lookup
  - set dhcpd <scope-name> [parameters]                         |  Configure DHCP scope(s) to serve IP addresses to ZTP clients
 ----------------------------------------------------------------------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------------------------------------------------
@@ -267,6 +270,7 @@ Below is the CLI guide for FreeZTP. You can see this at the command line by ente
  - clear dhcpd <scope-name>                                    |  Delete a DHCP scope
  - clear log                                                   |  Delete the logging info from the logfile
  - clear downloads                                             |  Delete the list of TFTP downloads
+ - clear provisioning                                          |  Delete the list of provisioned devices
 ----------------------------------------------------------------------------------------------------------------------------------------------
  - request merge-test <id>                                     |  Perform a test jinja2 merge of the final template with a keystore ID
  - request initial-merge                                       |  See the result of an auto-merge of the initial-template
@@ -314,6 +318,15 @@ end
 #
 #
 #
+ztp set dhcpd INTERFACE-ENS160 subnet 192.168.1.0/24
+ztp set dhcpd INTERFACE-ENS160 lease-time 3600
+ztp set dhcpd INTERFACE-ENS160 imagediscoveryfile-option enable
+ztp set dhcpd INTERFACE-ENS160 ztp-tftp-address 192.168.1.11
+#
+ztp set dhcpd INTERFACE-ENS192 subnet 10.162.30.0/24
+ztp set dhcpd INTERFACE-ENS192 lease-time 3600
+ztp set dhcpd INTERFACE-ENS192 imagediscoveryfile-option enable
+ztp set dhcpd INTERFACE-ENS192 ztp-tftp-address 10.162.30.101
 #
 #
 #
@@ -344,6 +357,14 @@ interface Vlan1
  ip address {{ vl1_ip_address }} {{ vl1_netmask }}
  no shut
 !
+!{% for interface in range(1,49) %}
+interface GigabitEthernet1/0/{{interface}}
+ description User Port (VLAN 1)
+ switchport access vlan 1
+ switchport mode access
+ no shutdown
+!{% endfor %}
+!
 ip domain-name test.com
 !
 username admin privilege 15 secret password123
@@ -373,8 +394,8 @@ end
 #
 #
 #
-ztp set keystore MY_DEFAULT vl1_ip_address dhcp
-ztp set keystore MY_DEFAULT hostname UNKNOWN_HOST
+ztp set keystore DEFAULT_VALUES vl1_ip_address dhcp
+ztp set keystore DEFAULT_VALUES hostname UNKNOWN_HOST
 #
 ztp set keystore SERIAL100 vl1_ip_address 10.0.0.201
 ztp set keystore SERIAL100 hostname SOMEDEVICE
@@ -389,15 +410,16 @@ ztp set idarray STACK1 SERIAL1 SERIAL2 SERIAL3
 #
 #
 #
-ztp set association id MY_DEFAULT template LONG_TEMPLATE
 ztp set association id SERIAL100 template SHORT_TEMPLATE
 ztp set association id STACK1 template LONG_TEMPLATE
 #
 #
 #
-ztp set default-keystore MY_DEFAULT
+ztp set default-keystore DEFAULT_VALUES
+ztp set default-template LONG_TEMPLATE
 ztp set imagefile cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin
 ztp set image-supression 3600
+ztp set delay-keystore 1000
 #
 #
 #
