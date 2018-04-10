@@ -1413,6 +1413,9 @@ _ztp_complete()
 	  show)
 		COMPREPLY=( $(compgen -W "config run status version log downloads dhcpd provisioning" -- $cur) )
 		;;
+	  hidden)
+		COMPREPLY=( $(compgen -W "show" -- $cur) )
+		;;
 	  "set")
 		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile file-cache-timeout template keystore idarray association default-keystore default-template imagefile image-supression delay-keystore dhcpd" -- $cur) )
 		;;
@@ -1430,6 +1433,11 @@ _ztp_complete()
 	esac
   elif [ $COMP_CWORD -eq 3 ]; then
 	case "$prev" in
+	  show)
+		if [ "$prev2" == "hidden" ]; then
+		  COMPREPLY=( $(compgen -W "keystores keys idarrays idarray snmpoids templates associations all_ids imagefiles dhcpd-scopes" -- $cur) )
+		fi
+		;;
 	  config)
 		if [ "$prev2" == "show" ]; then
 		  COMPREPLY=( $(compgen -W "raw -" -- $cur) )
@@ -1466,7 +1474,7 @@ _ztp_complete()
 		fi
 		;;
 	  snmpoid)
-		local oids=$(for k in `ztp show snmpoid`; do echo $k ; done)
+		local oids=$(for k in `ztp hidden show snmpoids`; do echo $k ; done)
 		if [ "$prev2" == "set" ]; then
 		  COMPREPLY=( $(compgen -W "${oids} <name> -" -- $cur) )
 		fi
@@ -1500,7 +1508,7 @@ _ztp_complete()
 		fi
 		;;
 	  template)
-		local templates=$(for k in `ztp show templates`; do echo $k ; done)
+		local templates=$(for k in `ztp hidden show templates`; do echo $k ; done)
 		if [ "$prev2" == "set" ]; then
 		  COMPREPLY=( $(compgen -W "${templates} <template_name> -" -- $cur) )
 		fi
@@ -1509,7 +1517,7 @@ _ztp_complete()
 		fi
 		;;
 	  keystore)
-		local ids=$(for id in `ztp show ids`; do echo $id ; done)
+		local ids=$(for id in `ztp hidden show keystores`; do echo $id ; done)
 		if [ "$prev2" == "set" ]; then
 		  COMPREPLY=( $(compgen -W "${ids} <new_id_or_arrayname> -" -- $cur) )
 		fi
@@ -1518,12 +1526,12 @@ _ztp_complete()
 		fi
 		;;
 	  idarray)
-		local ids=$(for id in `ztp show arrays`; do echo $id ; done)
+		local arrays=$(for id in `ztp hidden show idarrays`; do echo $id ; done)
 		if [ "$prev2" == "set" ]; then
-		  COMPREPLY=( $(compgen -W "${ids} <new_array_name> -" -- $cur) )
+		  COMPREPLY=( $(compgen -W "${arrays} <new_array_name> -" -- $cur) )
 		fi
 		if [ "$prev2" == "clear" ]; then
-		  COMPREPLY=( $(compgen -W "${ids}" -- $cur) )
+		  COMPREPLY=( $(compgen -W "${arrays}" -- $cur) )
 		fi
 		;;
 	  association)
@@ -1531,25 +1539,25 @@ _ztp_complete()
 		  COMPREPLY=( $(compgen -W "id" -- $cur) )
 		fi
 		if [ "$prev2" == "clear" ]; then
-		  local ids=$(for id in `ztp show associations`; do echo $id ; done)
-		  COMPREPLY=( $(compgen -W "${ids}" -- $cur) )
+		  local asso=$(for id in `ztp hidden show associations`; do echo $id ; done)
+		  COMPREPLY=( $(compgen -W "${asso}" -- $cur) )
 		fi
 		;;
 	  default-keystore)
 		if [ "$prev2" == "set" ]; then
-		  local ids=$(for id in `ztp show ids`; do echo $id ; done)
+		  local ids=$(for id in `ztp hidden show keystores`; do echo $id ; done)
 		  COMPREPLY=( $(compgen -W "${ids} <keystore-id> None" -- $cur) )
 		fi
 		;;
 	  default-template)
 		if [ "$prev2" == "set" ]; then
-		  local templates=$(for k in `ztp show templates`; do echo $k ; done)
+		  local templates=$(for k in `ztp hidden show templates`; do echo $k ; done)
 		  COMPREPLY=( $(compgen -W "${templates} <template_name> None" -- $cur) )
 		fi
 		;;
 	  imagefile)
 		if [ "$prev2" == "set" ]; then
-		  local ids=$(for id in `ztp show imagefiles`; do echo $id ; done)
+		  local ids=$(for id in `ztp hidden show imagefiles`; do echo $id ; done)
 		  COMPREPLY=( $(compgen -W "${ids} <binary_image_file_name> -" -- $cur) )
 		fi
 		;;
@@ -1568,17 +1576,17 @@ _ztp_complete()
 		  COMPREPLY=( $(compgen -W "leases" -- $cur) )
 		fi
 		if [ "$prev2" == "set" ]; then
-		  local ids=$(for id in `ztp show dhcpd-scopes`; do echo $id ; done)
+		  local ids=$(for id in `ztp hidden show dhcpd-scopes`; do echo $id ; done)
 		  COMPREPLY=( $(compgen -W "${ids} <new_dhcp_scope_name> -" -- $cur) )
 		fi
 		if [ "$prev2" == "clear" ]; then
-		  local ids=$(for id in `ztp show dhcpd-scopes`; do echo $id ; done)
+		  local ids=$(for id in `ztp hidden show dhcpd-scopes`; do echo $id ; done)
 		  COMPREPLY=( $(compgen -W "${ids}" -- $cur) )
 		fi
 		;;
 	  merge-test)
-		local ids=$(for id in `ztp show ids`; do echo $id ; done)
-		local mems=$(for id in `ztp show array members`; do echo $id ; done)
+		local ids=$(for id in `ztp hidden show keystores`; do echo $id ; done)
+		local mems=$(for id in `ztp hidden show idarray members`; do echo $id ; done)
 		if [ "$prev2" == "request" ]; then
 		  COMPREPLY=( $(compgen -W "${ids} ${mems}" -- $cur) )
 		fi
@@ -1599,12 +1607,23 @@ _ztp_complete()
   elif [ $COMP_CWORD -eq 4 ]; then
 	prev3=${COMP_WORDS[COMP_CWORD-3]}
 	if [ "$prev2" == "keystore" ]; then
-	  local idkeys=$(for k in `ztp show keys $prev`; do echo $k ; done)
+	  local idkeys=$(for k in `ztp hidden show keys $prev`; do echo $k ; done)
 	  if [ "$prev3" == "set" ]; then
 		COMPREPLY=( $(compgen -W "${idkeys} <new_key> -" -- $cur) )
 	  fi
 	  if [ "$prev3" == "clear" ]; then
 		COMPREPLY=( $(compgen -W "${idkeys} all" -- $cur) )
+	  fi
+	fi
+	if [ "$prev2" == "show" ]; then
+	  if [ "$prev3" == "hidden" ]; then
+		if [ "$prev" == "idarray" ]; then
+		  COMPREPLY=( $(compgen -W "members" -- $cur) )
+		fi
+		if [ "$prev" == "keys" ]; then
+		  local keystores=$(for k in `ztp hidden show keystores`; do echo $k ; done)
+		  COMPREPLY=( $(compgen -W "${keystores} <keystore> -" -- $cur) )
+		fi
 	  fi
 	fi
 	if [ "$prev2" == "idarray" ]; then
@@ -1629,7 +1648,7 @@ _ztp_complete()
 	fi
 	if [ "$prev2" == "association" ]; then
 	  if [ "$prev3" == "set" ]; then
-		local allids=$(for k in `ztp show all_ids`; do echo $k ; done)
+		local allids=$(for k in `ztp hidden show all_ids`; do echo $k ; done)
 		COMPREPLY=( $(compgen -W "<id/arrayname> ${allids} -" -- $cur) )
 	  fi
 	fi
@@ -1690,7 +1709,7 @@ _ztp_complete()
 	prev5=${COMP_WORDS[COMP_CWORD-5]}
 	if [ "$prev5" == "set" ]; then
 	  if [ "$prev4" == "association" ]; then
-		local templates=$(for k in `ztp show templates`; do echo $k ; done)
+		local templates=$(for k in `ztp hidden show templates`; do echo $k ; done)
 		COMPREPLY=( $(compgen -W "<template_name> ${templates} -" -- $cur) )
 	  fi
 	fi
@@ -2404,25 +2423,57 @@ def interpreter():
 		else:
 			console("Install/upgrade cancelled")
 	##### HIDDEN SHOW #####
-	elif arguments == "show ids":
+	#elif arguments == "show ids":
+	#	config.hidden_list_ids()
+	#elif arguments[:9] == "show keys" and len(sys.argv) >= 4:
+	#	config.hidden_list_keys(sys.argv[3])
+	#elif arguments == "show arrays":
+	#	config.hidden_list_arrays()
+	#elif arguments == "show array members":
+	#	config.hidden_list_array_members()
+	#elif arguments == "show snmpoids":
+	#	config.hidden_list_snmpoid()
+	#elif arguments == "show templates":
+	#	config.hidden_list_templates()
+	#elif arguments == "show associations":
+	#	config.hidden_list_associations()
+	#elif arguments == "show all_ids":
+	#	config.hidden_list_all_ids()
+	#elif arguments == "show imagefiles":
+	#	config.hidden_list_image_files()
+	#elif arguments == "show dhcpd-scopes":
+	#	config.hidden_list_dhcpd_scopes()
+	##### HIDDEN SHOW #####
+	elif arguments == "hidden" or arguments == "hidden show":
+		console(" - hidden show keystores                          |  Show a list of configured keystores")
+		console(" - hidden show keys <keystore>                    |  Show a list of configured keys under a keystore")
+		console(" - hidden show idarrays                           |  Show a list of configured IDArrays")
+		console(" - hidden show idarray members                    |  Show a list of members in an IDArray")
+		console(" - hidden show snmpoids                           |  Show a list of configured SNMP OIDs")
+		console(" - hidden show templates                          |  Show a list of configured templates")
+		console(" - hidden show associations                       |  Show a list of configured template associations")
+		console(" - hidden show all_ids                            |  Show a list of all configured IDs (Keystores and IDArrays)")
+		console(" - hidden show imagefiles                         |  Show a list of candidate imagefiles in the TFTP root directory")
+		console(" - hidden show dhcpd-scopes                       |  Show a list of configured DHCPD scopes")
+	elif arguments == "hidden show keystores":
 		config.hidden_list_ids()
-	elif arguments[:9] == "show keys" and len(sys.argv) >= 4:
-		config.hidden_list_keys(sys.argv[3])
-	elif arguments == "show arrays":
+	elif arguments[:16] == "hidden show keys" and len(sys.argv) >= 4:
+		config.hidden_list_keys(sys.argv[4])
+	elif arguments == "hidden show idarrays":
 		config.hidden_list_arrays()
-	elif arguments == "show array members":
+	elif arguments == "hidden show idarray members":
 		config.hidden_list_array_members()
-	elif arguments == "show snmpoid":
+	elif arguments == "hidden show snmpoids":
 		config.hidden_list_snmpoid()
-	elif arguments == "show templates":
+	elif arguments == "hidden show templates":
 		config.hidden_list_templates()
-	elif arguments == "show associations":
+	elif arguments == "hidden show associations":
 		config.hidden_list_associations()
-	elif arguments == "show all_ids":
+	elif arguments == "hidden show all_ids":
 		config.hidden_list_all_ids()
-	elif arguments == "show imagefiles":
+	elif arguments == "hidden show imagefiles":
 		config.hidden_list_image_files()
-	elif arguments == "show dhcpd-scopes":
+	elif arguments == "hidden show dhcpd-scopes":
 		config.hidden_list_dhcpd_scopes()
 	##### SHOW #####
 	elif arguments == "show":
