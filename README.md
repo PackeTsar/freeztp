@@ -5,7 +5,7 @@ A Zero-Touch Provisioning system built for Cisco Catalyst switches.
 
 -----------------------------------------
 ##   VERSION   ##
-The version of FreeZTP documented here is: **v0.9.13 (beta)**
+The version of FreeZTP documented here is: **v0.9.14 (beta)**
 
 
 -----------------------------------------
@@ -23,7 +23,7 @@ The version of FreeZTP documented here is: **v0.9.13 (beta)**
 
 -----------------------------------------
 ##   WHAT IS FREEZTP   ##
-FreeZTP is a dynamic TFTP server built to automatically configure Cisco Catalyst switches upon first boot (Zero-Touch Provisioning). FreeZTP does this using the 'AutoInstall' feature built into Cisco IOS and automatically enabled by default. FreeZTP configures switches with individual, templatized configurations based upon the unique ID of the switch (usually the serial number).
+FreeZTP is a dynamic TFTP server built to automatically configure Cisco Catalyst switches upon first boot (Zero-Touch Provisioning). FreeZTP does this using the 'AutoInstall' feature built into Cisco IOS and automatically enabled by default. FreeZTP configures switches with individual, "templatized" configurations based upon the unique ID of the switch (usually the serial number).
 
 
 -----------------------------------------
@@ -54,29 +54,30 @@ The installation of FreeZTP is quick and easy using the built-in installer. Make
 3. Change to the directory where the FreeZTP main code file (ztp.py) is stored: `cd freeztp`
 4. Run the FreeZTP program in install mode to perform the installation: `sudo python ztp.py install`. Make sure the machine has internet access as this process will download and install several packages for this to happen.
 	- FreeZTP will perform the install of the packages and services for full operation.
-	- The installation will also install a CLI helper script. You will need to logout and log back into your SSH session to activate this helper script.
+	- The installation will also install a CLI completion (helper) script. You will need to logout and log back into your SSH session to activate this completion script.
 
 
 -----------------------------------------
 ##   GETTING STARTED   ##
-The ZTP server comes with an [almost] fully functional default configuration, ready to serve out a basic config to switches.
+The ZTP server comes with an [almost] fully functional default configuration, ready to serve out a basic config to switches. You can view the configuration (after installation) by issuing the command `ztp show config`.
 
-The only part missing on the configuration is an IP lease range for DHCP. You will need to add this IP range in order to enable the DHCP service to hand out IP addresses (see below instructions). After this range is added, you can connect the ZTP server directly to the switch (on any of its ports), power on the switch, and watch it go!
+The only part missing on the configuration is an IP lease range for DHCPD. You will need to add this IP range in order to enable the DHCPD service to hand out IP addresses (see below instructions). After this range is added and the DHCPD service restarted, you can connect the ZTP server directly to the switch (on any of its ports), power on the switch, and watch it go!
 
-1. Configure DHCP using the ZTP commands
-	- During installation, ZTP will install a DHCP server, detect the network interfaces in Linux, and configure DHCP scopes for each of the interfaces. The created DHCP scopes will be inactive to serve DHCP as they will have no addresses available to lease.
-	- If you want to use the automatically generated DHCP scope (the new switches will be on the same VLAN as one of FreeZTPs interfaces), you just need to specify a first and last address for the lease range. After configured, you will need to commit the ZTP DHCP configuration. Below is example of how to do this.
+1. Configure DHCPD using the ZTP commands
+	- During installation, ZTP will install the DHCPD service, detect the network interfaces in Linux, and configure DHCPD scopes for each of the interfaces. The created DHCPD scopes will be inactive to serve DHCPD as they will have no addresses available to lease.
+	- If you want to use the automatically generated DHCPD scope (the new switches will be on the same VLAN as one of FreeZTPs interfaces), you just need to specify a first and last address for the lease range. After configured, you will need to commit the ZTP DHCPD configuration. Committing the DHCPD configuration (`ztp request dhcpd-commit`) automatically compiles/saves the DHCP configuration and restarts the DHCPD service. Below is example of how to do this.
 			```
 			ztp set dhcpd INTERFACE-ETH0 first-address 192.168.1.100
 			ztp set dhcpd INTERFACE-ETH0 last-address 192.168.1.200
 			!
 			ztp request dhcpd-commit
 			```
-	- If the switches will not be on the same VLAN, then create a new scope.
-	- There are other basic DHCP options included in the scope settings like `dns-servers`, `domain-name`, and `gateway`.
+	- If the switches will not be on the same VLAN, then create a new scope (you can use the existing scope configuration commands as a reference).
+	- There are other basic DHCPD options included in the scope settings like `dns-servers`, `domain-name`, and `gateway` which can be set as needed. Make sure to do a `ztp request dhcpd-commit` after any changes to DHCPD configurations.
 2. Start configuring switches!
 	- FreeZTP comes with a default configuration which is ready to configure switches. A default-keystore is configured which will hand out a basic (non-individualized) config to a newly booted switch.
-	- There are a few example templates, keystores, associations, an ID array already in the config. Feel free to modify them to do what you want, or blow them away and customize everything.
+	- There are a few example templates, keystores, associations, and an ID array already in the default config which you can reference. Feel free to modify them to do what you want, or blow them away and customize everything.
+	- Once you have the ZTP configuration set, restart the ZTP service (`ztp service restart`) for your changes to take effect. Then boot up a switch (with a blank configuration) and watch it grab a DHCP address and contact ZTP for image upgrades and configurations. Be patient when the switch boots up as it sometimes takes a few (1-3) minutes after the "press RETURN to get started" message to begin the AutoInstall process. You can watch for action in ZTP by checking the DHCP leases (`ztp show dhcpd leases`) and watching the active logs (`ztp show log tail`). You can also see the history of devices which have gone through the provisioning process using `ztp show provisioning`.
 
 
 -----------------------------------------
