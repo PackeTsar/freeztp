@@ -79,7 +79,11 @@ The only part missing on the configuration is an IP lease range for DHCPD. You w
 2. Start configuring switches!
 	- FreeZTP comes with a default configuration which is ready to configure switches. A default-keystore is configured which will hand out a basic (non-individualized) config to a newly booted switch.
 	- There are a few example templates, keystores, associations, and an ID array already in the default config which you can reference. Feel free to modify them to do what you want, or blow them away and customize everything.
-	- Once you have the ZTP configuration set, restart the ZTP service (`ztp service restart`) for your changes to take effect. Then boot up a switch (with a blank configuration) and watch it grab a DHCP address and contact ZTP for image upgrades and configurations. Be patient when the switch boots up as it sometimes takes a few (1-3) minutes after the "press RETURN to get started" message to begin the AutoInstall process. You can watch for action in ZTP by checking the DHCP leases (`ztp show dhcpd leases`) and watching the active logs (`ztp show log tail`). You can also see the history of devices which have gone through the provisioning process using `ztp show provisioning`.
+	- Once you have the ZTP configuration set, restart the ZTP service (`ztp service restart`) for your changes to take effect.
+	- Boot up a switch (with a blank configuration) and watch it grab a DHCP address and contact ZTP for image upgrades and configurations.
+		- Be patient when the switch boots up as it sometimes takes a few (1-3) minutes after the "press RETURN to get started" message to begin the AutoInstall process.
+		- You can watch for action in ZTP by checking the DHCP leases (`ztp show dhcpd leases`) and watching the active logs (`ztp show log tail`).
+		- You can also see the history of devices which have gone through the provisioning process using `ztp show provisioning`.
 
 
 -----------------------------------------
