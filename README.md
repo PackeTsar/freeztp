@@ -462,7 +462,7 @@ It is possible to use an external DHCP server instead of the FreeZTP one, but yo
 
 -----------------------------------------
 ##   ADVANCED USAGE   ##
-- Complex Keystores with JSON
+- **Complex Keystores with JSON**
 	- For you more advanced Jinja2 users out there who want to set complex (multi-level) values in your keystores: a value in a keystore can be a JSON entry instead of just a flat value. Below is an example of how to do this:
 		- A flat keystore value entry looks like `ztp set keystore STACK1 hostname CORESWITCH`
 		- A JSON value looks like `ztp set keystore STACK1 settings '{"hostname": "CORESWITCH", "ip_address": "192.168.1.1"}'`
