@@ -188,7 +188,7 @@ The new switch should have one of its ports connected to a network (likely an up
 	- **Step 4.1.1:** The SNMP requests target the source IP of the switch which was used to originally request the "network-confg" file in **Step 3.1**
 	- **Step 4.1.2:** The SNMP requests use the value of the `community` configuration field as the authentication community (which the switch should honor once it loads the configuration from the "network-confg" file)
 	- **Step 4.1.3:** The SNMP requests use the OIDs set with `ztp set snmpoid NAME <oid>`. The FreeZTP default configuration comes with a few different OIDs pre-configured for some popular switch models.
-		- NOTE: _You may need to add an OID based on the switch model you are discovering. You can test the configured OIDs for returned values using the following command. Your switch will need to be accessible and ready to accept the ZTP configured community_ `ztp request snmp-test <ip_address>`
+		- NOTE: _You may need to add an OID based on the switch model you are discovering. You can test the configured OIDs for returned values using the command_ `ztp request snmp-test <ip_address>` _. Your switch will need to be accessible and ready to accept the ZTP configured community_
 	- **Step 4.1.4:** Once the SNMP query succeeds, the ZTP server maps the Real ID (ie: serial number) of the discovered switch to its temporary hostname generated in **Step 3.2.1**
 
 ####  5. STEP 5 - FINAL CONFIG REQUEST: The switch requests the final configuration file and the ZTP server generates it based on the ZTP configuration
