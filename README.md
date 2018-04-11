@@ -203,7 +203,7 @@ The new switch should have one of its ports connected to a network (likely an up
 - **Step 5.3 (FIND THE ASSOCIATED TEMPLATE):** Once a candidate Keystore ID is found, the server checks to see if an `association` exists in the ZTP configuration to associate the Keystore ID with a template.
 	- If a specific association exists for that Keystore ID, ZTP performs the Jinja2 merge of the final configuration using the associated template.
 	- If a specific association does NOT exist for that Keystore ID, ZTP checks the `default-template` setting for a usable template for a Jinja2 merge. If the setting points to an existing template, ZTP performs the Jinja2 merge of the final configuration using the default template.
-	- NOTE: _If no association exists for the Keystore ID, or an association exists, but the associated template name doesn't match any configured template, then ZTP will send a "no such file" failure message to the switch as a response to the TFTP request_
+	- NOTE: _If no association exists for the Keystore ID, or an association exists, but the associated template name doesn't match any configured template, AND ZTP cannot find a usable default template, then ZTP will send a "no such file" failure message to the switch as a response to the TFTP request_
 - **Step 5.4 (COMPLETE THE FINAL CONFIG):** After the matching keystore and an associated template have been found, the ZTP server will perform the Jinja2 merge between the template and the key/value pairs in the Keystore ID. This configuration is then passed to the switch in response to its TFTP request made in **Step 5.1**.
 	- NOTE: _You can see this merged configuration by issuing the command_ `ztp request merge-test <keystore-id>`
 	- NOTE: _If you configured static IP addresses in the final-template, the switch will then start using those static IPs and can be remotely accessible via them (assuming you also included config for AAA and SSH)_
@@ -211,23 +211,23 @@ The new switch should have one of its ports connected to a network (likely an up
 
 ####   Ladder Diagram   ####
 
-**SWITCH**  -----> Step 2.1: File "freeztp_ios_upgrade" requested ---------------------->  **ZTP Server**
+**SWITCH**  -----> Step 2.1: File "freeztp_ios_upgrade" requested ------------------------------->  **ZTP Server**
 
-**SWITCH**  <----- Step 2.2: Auto-generated "freeztp_ios_upgrade" file sent to switch <--  **ZTP Server**
+**SWITCH**  <----- Step 2.1.1 or 2.2: Auto-generated "freeztp_ios_upgrade" file sent to switch <--  **ZTP Server**
 
-**SWITCH**  -----> Step 2.3: .bin or .tar file requested ------------------------------->  **ZTP Server**
+**SWITCH**  -----> Step 2.3: .bin or .tar file requested ---------------------------------------->  **ZTP Server**
 
-**SWITCH**  <----- Step 2.4: .bin or .tar file sent to switch if it exists <-------------  **ZTP Server**
+**SWITCH**  <----- Step 2.4: .bin or .tar file sent to switch if it exists <----------------------  **ZTP Server**
 
-**SWITCH**  -----> Step 3.1: File "network-confg" requested ---------------------------->  **ZTP Server**
+**SWITCH**  -----> Step 3.1: File "network-confg" requested ------------------------------------->  **ZTP Server**
 
-**SWITCH**  <----- Step 3.3: Auto-generated initial config passed to switch <------------  **ZTP Server**
+**SWITCH**  <----- Step 3.3: Auto-generated initial config passed to switch <---------------------  **ZTP Server**
 
-**SWITCH**  <----- Step 4:   ZTP server performs discovery of Real ID using SNMP <-------  **ZTP Server**
+**SWITCH**  <----- Step 4:   ZTP server performs discovery of Real ID using SNMP <----------------  **ZTP Server**
 
-**SWITCH**  -----> Step 5.1: Switch requests new file based on new hostname ------------>  **ZTP Server**
+**SWITCH**  -----> Step 5.1: Switch requests new file based on new hostname --------------------->  **ZTP Server**
 
-**SWITCH**  <----- Step 5.4: ZTP responds to TFTP request with final config <------------  **ZTP Server**
+**SWITCH**  <----- Step 5.4: ZTP responds to TFTP request with final config <---------------------  **ZTP Server**
 
 
 -----------------------------------------
