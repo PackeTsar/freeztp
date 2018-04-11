@@ -127,20 +127,20 @@ Due to the unique nature of how FreeZTP works and performs discovery of switches
 			ztp set keystore STACK1 hostname CORESWITCH
 
 - **ID Arrays**
-	- An ID Array is a method of mapping one or more Real switch IDs (ie: serial numbers) to a specific keystore. Multiple Real IDs can be mapped to the same Keystore ID, which comes in handy when building a configuration for a switch stack (which could take on the serial number of any of the member switches when it boots up).
+	- An ID Array is a method of mapping one or more Real switch IDs (ie: serial numbers) to a specific keystore. Multiple Real IDs can be mapped to the same Keystore ID, which comes in handy when building a configuration for a switch stack (which will assume the serial number of the stack master when it boots up).
 	- The ID array has two pieces:
-		- The **Array Name** is the name of the specific array. The Array Name must match a Keystore ID in order to pull values from that keystore.
+		- The **Array Name** is the name of the specific array. The Array Name must match a Keystore ID in order to assign its real-IDs to that Keystore.
 		- The **Array ID List** is a list of Real switch IDs (serial numbers) which, when searched for, will resolve to the Array Name before mapping to a Keystore ID. When configuring an IDArray in the CLI, each ID in the list is separated by a space.
 	- **ID Array Example Config**
-			```
+
 			ztp set idarray STACK1 SERIAL1 SERIAL2 SERIAL3
-			```
+
 - **Associations**
 	- An association is a configuration element which maps a keystore to a named template. An association is required for each keystore in order to tell FreeZTP which template to use to do the merge when using certain keystore.
 	- **Association Example Config**
-			```
+
 			ztp set association id STACK1 template LONG_TEMPLATE
-			```
+
 
 
 -----------------------------------------
@@ -457,7 +457,7 @@ It is possible to use an external DHCP server instead of the FreeZTP one, but yo
 -----------------------------------------
 ##   ADVANCED USAGE   ##
 - Complex Keystores with JSON
-	- For you more advanced Jinja2 users out there who want to set complex (milti-level) values in your keystores: a value in a keystore can be a JSON entry instead of just a flat value. Below is an example of how to do This
+	- For you more advanced Jinja2 users out there who want to set complex (multi-level) values in your keystores: a value in a keystore can be a JSON entry instead of just a flat value. Below is an example of how to do this:
 		- A flat keystore value entry looks like `ztp set keystore STACK1 hostname CORESWITCH`
 		- A JSON value looks like `ztp set keystore STACK1 settings '{"hostname": "CORESWITCH", "ip_address": "192.168.1.1"}'`
 	- You can tell if ZTP accepted the entry as a JSON entry by using `ztp show config raw` and looking to see if the value of the `settings` key is complex instead of flat.
