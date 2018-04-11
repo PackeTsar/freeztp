@@ -18,7 +18,8 @@ The version of FreeZTP documented here is: **v0.9.14 (beta)**
 6. [ZTP Process](#ztp-process)
 7. [Command Interface](#command-interface)
 8. [DHCP Functionality](#dhcp-functionality)
-9. [Contributing](#contributing)
+9. [Advanced Usage](#advanced-usage)
+10. [Contributing](#contributing)
 
 
 -----------------------------------------
@@ -120,11 +121,11 @@ Due to the unique nature of how FreeZTP works and performs discovery of switches
 	- **Keystore Hierarchy**
 		- The hierarchy of the Keystore works as follows: A Keystore ID can contain multiple (unique) keys, each key with a different value. The Keystore can contain multiple IDs, each with its own set of key-value pairs.
 	- **Keystore Example Config**
-			```
+
 			ztp set keystore STACK1 vl1_netmask 255.255.255.0
 			ztp set keystore STACK1 vl1_ip_address 10.0.0.200
 			ztp set keystore STACK1 hostname CORESWITCH
-			```
+
 - **ID Arrays**
 	- An ID Array is a method of mapping one or more Real switch IDs (ie: serial numbers) to a specific keystore. Multiple Real IDs can be mapped to the same Keystore ID, which comes in handy when building a configuration for a switch stack (which could take on the serial number of any of the member switches when it boots up).
 	- The ID array has two pieces:
@@ -451,6 +452,15 @@ You can check on the status of the DHCP server using the command `ztp show statu
 If at any point you have botched up your DHCP scopes and the DHCP service will not start back up, just delete all your scopes (using `ztp clear dhcpd` commands), and run the `ztp request auto-dhcpd` command. This will rerun the DHCP discovery and auto scope creation. Then you will just need to do a `ztp request dhcpd-commit` to commit the changes and restart the service.
 
 It is possible to use an external DHCP server instead of the FreeZTP one, but you will have to manually configure option 150 (for TFTP service from FreeZTP's IP), and option 125 (to specify the IOS image discovery file). Option 150 will need to contain the IP address of the ZTP server. You can get some instructions on how to configure option 125 by running the command `ztp request dhcp-option-125 cisco` or `ztp request dhcp-option-125 windows`.
+
+
+-----------------------------------------
+##   ADVANCED USAGE   ##
+- Complex Keystores with JSON
+	- For you more advanced Jinja2 users out there who want to set complex (milti-level) values in your keystores: a value in a keystore can be a JSON entry instead of just a flat value. Below is an example of how to do This
+		- A flat keystore value entry looks like `ztp set keystore STACK1 hostname CORESWITCH`
+		- A JSON value looks like `ztp set keystore STACK1 settings '{"hostname": "CORESWITCH", "ip_address": "192.168.1.1"}'`
+	- You can tell if ZTP accepted the entry as a JSON entry by using `ztp show config raw` and looking to see if the value of the `settings` key is complex instead of flat.
 
 
 -----------------------------------------
