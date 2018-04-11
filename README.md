@@ -145,8 +145,8 @@ Due to the unique nature of how FreeZTP works and performs discovery of switches
 	- The `default-keystore` setting allows you to specify a keystore which will be matched in the event that the switch has a real-ID (ie: serial number) which is not configured in any Keystore or IDArray. It can be set to `None` if you don't want a functional default keystore.
 	- The `default-template` setting associates all keystores to a template when a keystore has no specific association (ie: `ztp set association id STACK1 template LONG_TEMPLATE`)
 	- The `imagefile` setting specifies the image file you want to have switches use for software upgrades. The image file must exist in the TFTP root directory (/etc/ztp/tftproot/ by default). The TFTP root directory is set with the configuration command `ztp set tftproot /etc/ztp/tftproot/`.
-	- The `image-supression` setting prevents a second attempt by a switch to download its software image. This exists because some switches may upgrade their software, reboot into the new software version, begin the AutoInstall process again and try to upgrade again. The image-supression time setting is in seconds and is 1 hour by default.
-	- The `delay-keystore` setting delays the internal lookup of a keystore by ZTP for the specified number of milliseconds (1000 msec by default). This prevents ZTP from checking the SNMP discovery before it has a chance to finish discovering the switch's real-ID using the configured SNMP OIDs.
+	- The `image-supression` setting prevents a second attempt by a switch to download its software image. This exists because some switches may upgrade their software, reboot into the new software version, begin the AutoInstall process again and try to upgrade again. The image-supression time setting is in seconds and is 3600 seconds (1 hour) by default.
+	- The `delay-keystore` setting delays the internal lookup of a keystore by ZTP for the specified number of milliseconds (1000 msec by default). This prevents ZTP from checking the SNMP discovery status before it has a chance to finish discovering the switch's real-ID using the configured SNMP OIDs.
 
 
 -----------------------------------------
@@ -156,7 +156,7 @@ FreeZTP relies on the 'AutoInstall' function of a Cisco Catalyst switch to confi
 The new switch should have one of its ports connected to a network (likely an upstream switch) which has the FreeZTP server accessible. The FreeZTP server can be on the same VLAN as the new switch (so it can serve up DHCP addresses directly) or on a different VLAN which has a gateway and an IP helper pointed at the FreeZTP server so it can serve up DHCP.
 
 ####  1. STEP 1 - POWER ON: Initial boot up and DHCP leasing
-- NOTE: _Once the operating system is loaded on the switch and it completes the boot-up process, it will start the AutoInstall process_
+- NOTE: _Once the operating system is loaded on the switch and it completes the boot-up process (after the "press RETURN to get started" message), it will start the AutoInstall process_
 - **Step 1.1:** The switch will enable all of its ports as access ports for VLAN 1.
 - **Step 1.2:** The switch will enable interface (SVI) Vlan1 and begin sending out DHCP requests from interface Vlan1.
 - **Step 1.3:** The switch will get a DHCP lease from the ZTP server or from a different DHCP server. The lease will contain DHCP option 150 (TFTP Server) which points at the IP of the ZTP server.
@@ -164,11 +164,12 @@ The new switch should have one of its ports connected to a network (likely an up
 	- IF DHCP option 125 was configured (`ztp set dhcpd SCOPENAME imagediscoveryfile-option enable`) and that option is handed to the switch in its DHCP lease, then the switch will proceed to **Step 2**.
 	- IF DHCP option 125 was not configured (`ztp set dhcpd SCOPENAME imagediscoveryfile-option disable`), the switch will proceed to **Step 3**.
 
-####  2. STEP 2 - IOS Upgrade: The imagediscoveryfile is used to discover the IOS bin file
+####  2. STEP 2 - IOS Upgrade: The imagediscoveryfile is used to discover the IOS image file
 - NOTE: _DHCP Option 125 will contain (in hex form) the name of the imagediscoveryfile setting ("freeztp_ios_upgrade" by default in the ZTP configuration) which is a fictitious file containing the name of the .bin or .tar file the switch needs to download for the upgrade._
-- **Step 2.1:** The switch will send a TFTP request to ZTP requesting imagediscoveryfile ("freeztp_ios_upgrade" by default).
+- **Step 2.1:** The switch will send a TFTP request to ZTP requesting the imagediscoveryfile ("freeztp_ios_upgrade" by default).
 	- **Step 2.1.1:** FreeZTP will check the file download log (seen by using `ztp show downloads`) to see if the "freeztp_ios_upgrade" file has been downloaded by that IP address within the image-supression timeframe (set with `set image-supression <seconds-to-supress>`). This time-saving feature prevents some switch models from upgrading their IOS, automatically rebooting, then attempting the upgrade again after a reboot (which results in the switch downloading the IOS image a second time, just to abort the upgrade since the software is the same version).
-		- If a valid suppression entry is found, then ZTP will return the "freeztp_ios_upgrade" with a bogus value; causing the switch to fail the IOS download and move on to configuration downloads in **Step 3**.
+		- If a valid suppression entry is found, then ZTP will return the "freeztp_ios_upgrade" file containing a bogus value; causing the switch to fail the IOS download and move on to configuration downloads in **Step 3**.
+		- If a valid suppression entry is NOT found, the switch will return the "freeztp_ios_upgrade" file containing the value of `imagefile` setting. Then the switch will continue to Step 2.2.
 - **Step 2.2:** FreeZTP will check its "imagefile" (`ztp set imagefile someIOSfile.bin`) setting and dynamically generate a "freeztp_ios_upgrade" file containing the name of that .bin or .tar file. This "freeztp_ios_upgrade" file is then sent to the switch to be downloaded.
 - **Step 2.3:** The switch reads the file and determines what .bin or .tar file it should download as its upgrade image. Once determined, the switch sends a TFTP download request to ZTP for that .bin or .tar filename .
 - **Step 2.4:** If the .bin or .tar file does not exist, the switch abandons the upgrade attempt and proceeds to **Step 3**. If the .bin or .tar file does exist, then the ZTP server allows the switch to download it with TFTP.
