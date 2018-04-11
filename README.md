@@ -141,6 +141,12 @@ Due to the unique nature of how FreeZTP works and performs discovery of switches
 
 			ztp set association id STACK1 template LONG_TEMPLATE
 
+- **Others**
+	- The `default-keystore` setting allows you to specify a keystore which will be matched in the event that the switch has a real-ID (ie: serial number) which is not configured in any Keystore or IDArray. It can be set to `None` if you don't want a functional default keystore.
+	- The `default-template` setting associates all keystores to a template when a keystore has no specific association (ie: `ztp set association id STACK1 template LONG_TEMPLATE`)
+	- The `imagefile` setting specifies the image file you want to have switches use for software upgrades. The image file must exist in the TFTP root directory (/etc/ztp/tftproot/ by default). The TFTP root directory is set with the configuration command `ztp set tftproot /etc/ztp/tftproot/`.
+	- The `image-supression` setting prevents a second attempt by a switch to download its software image. This exists because some switches may upgrade their software, reboot into the new software version, begin the AutoInstall process again and try to upgrade again. The image-supression time setting is in seconds and is 1 hour by default.
+	- The `delay-keystore` setting delays the internal lookup of a keystore by ZTP for the specified number of milliseconds (1000 msec by default). This prevents ZTP from checking the SNMP discovery before it has a chance to finish discovering the switch's real-ID using the configured SNMP OIDs.
 
 
 -----------------------------------------
