@@ -180,7 +180,7 @@ The new switch should have one of its ports connected to a network (likely an up
 - **Step 3.2:** When the request for the "network-confg" file is received by the ZTP server, it generates the config by performing an automatic merge with the `initial-template`:
 	- **Step 3.2.1:** The `{{ autohostname }}` variable in the initial-template is filled by an automatically generated hexadecimal temporary name (example: ZTP-22F1388804). This temporary name is saved in memory by the ZTP server for future reference because the switch will use it's temporary hostname to request a new TFTP file in **Step 5.1**.
 	- **Step 3.2.2:** The SNMP `{{ community }}` variable is filled with the value set in the `community` configuration field
-- **Step 3.3:** This merged configuration is passed to the Cisco switch as the "network-confg" file. The switch loads it into its active running-config and proceeds to **Step 5**
+- **Step 3.3:** This merged configuration is passed to the Cisco switch as the "network-confg" file. The switch loads it into its active running-config and proceeds to **Step 5** (ZTP performs **Step 4** in the mean time).
 	- NOTE: _You can see an example initial configuration from the ZTP server by issuing the command_ `ztp request initial-merge`
 
 ####  4. STEP 4 - SNMP DISCOVERY: The ZTP server discovers the switch's "Real ID" (ie: serial number) using SNMP
@@ -239,6 +239,8 @@ The command interface is fully featured with helpers which can be seen either by
 All commands which change the ZTP configuration use the `set` or `clear` arguments. Commands issued with the `set` argument will overwrite an existing configuration item if that item already exists. The `clear` argument allows you to remove configuration items.
 
 The initial and final template configurations are entered as multi-line text blocks. To facilitate this, you must specify a delineation character in the `set` command. As an example, you will issue the command `ztp set template MY_TEMPLATE ^` where the carat (`^`) character is set as the delineation character. After that command is issued, you can paste in the multi-line Cisco IOS template text. Once finished, enter that delineation character (`^` in this case) on a line by itself to exit the text block entry mode.
+
+For configuration changes to take effect, you must always restart the ZTP service using the `ztp service restart` command.
 
 Below is the CLI guide for FreeZTP. You can see this at the command line by entering `ztp` and hitting ENTER (after installation).
 ```
@@ -337,15 +339,10 @@ end
 #
 #
 #
-ztp set dhcpd INTERFACE-ENS160 subnet 192.168.1.0/24
-ztp set dhcpd INTERFACE-ENS160 lease-time 3600
-ztp set dhcpd INTERFACE-ENS160 imagediscoveryfile-option enable
-ztp set dhcpd INTERFACE-ENS160 ztp-tftp-address 192.168.1.11
-#
-ztp set dhcpd INTERFACE-ENS192 subnet 10.162.30.0/24
-ztp set dhcpd INTERFACE-ENS192 lease-time 3600
-ztp set dhcpd INTERFACE-ENS192 imagediscoveryfile-option enable
-ztp set dhcpd INTERFACE-ENS192 ztp-tftp-address 10.162.30.101
+ztp set dhcpd INTERFACE-ETH0 subnet 192.168.1.0/24
+ztp set dhcpd INTERFACE-ETH0 lease-time 3600
+ztp set dhcpd INTERFACE-ETH0 imagediscoveryfile-option enable
+ztp set dhcpd INTERFACE-ETH0 ztp-tftp-address 192.168.1.11
 #
 #
 #
