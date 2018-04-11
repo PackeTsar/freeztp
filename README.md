@@ -67,12 +67,12 @@ The only part missing on the configuration is an IP lease range for DHCPD. You w
 	- During installation, ZTP will install the DHCPD service, detect the network interfaces in Linux, and configure DHCPD scopes for each of the interfaces. The created DHCPD scopes will be inactive to serve DHCPD as they will have no addresses available to lease.
 	- If you want to use the automatically generated DHCPD scope (the new switches will be on the same VLAN as one of FreeZTPs interfaces), you just need to specify a first and last address for the lease range. After configured, you will need to commit the ZTP DHCPD configuration. Committing the DHCPD configuration (`ztp request dhcpd-commit`) automatically compiles/saves the DHCP configuration and restarts the DHCPD service. Below is example of how to do this.
 
-			```
+
 			ztp set dhcpd INTERFACE-ETH0 first-address 192.168.1.100
 			ztp set dhcpd INTERFACE-ETH0 last-address 192.168.1.200
-			!
+			#
 			ztp request dhcpd-commit
-			```
+
 
 	- If the switches will not be on the same VLAN, then create a new scope (you can use the existing scope configuration commands as a reference).
 	- There are other basic DHCPD options included in the scope settings like `dns-servers`, `domain-name`, and `gateway` which can be set as needed. Make sure to do a `ztp request dhcpd-commit` after any changes to DHCPD configurations.
