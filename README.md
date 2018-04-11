@@ -173,12 +173,12 @@ The new switch should have one of its ports connected to a network (likely an up
 - **Step 2.2:** FreeZTP will check its "imagefile" (`ztp set imagefile someIOSfile.bin`) setting and dynamically generate a "freeztp_ios_upgrade" file containing the name of that .bin or .tar file. This "freeztp_ios_upgrade" file is then sent to the switch to be downloaded.
 - **Step 2.3:** The switch reads the file and determines what .bin or .tar file it should download as its upgrade image. Once determined, the switch sends a TFTP download request to ZTP for that .bin or .tar filename .
 - **Step 2.4:** If the .bin or .tar file does not exist, the switch abandons the upgrade attempt and proceeds to **Step 3**. If the .bin or .tar file does exist, then the ZTP server allows the switch to download it with TFTP.
-- **Step 2.5:** Once fully downloaded, the switch will install the image and upgrade itself. Depending on the switch model, it may or may not automatically reboot itself. After the upgrade, the switch will start the ZTP process over, but will likely bypass the IOS upgrade step due to the image-supression function in **Step 2.1.1:**.
+- **Step 2.5:** Once fully downloaded, the switch will install the image and upgrade itself. Depending on the switch model, it may or may not automatically reboot itself. After the upgrade, the switch will start the ZTP process over, but will likely bypass the IOS upgrade step due to the image-supression function in **Step 2.1.1**.
 
 ####  3. STEP 3 - INITIAL-CONFIG: An initial config is generated, sent, and loaded for switch (target) discovery
 - **Step 3.1:** The switch will send a TFTP request for a file named "**network-confg**" to the IP address specified in the DHCP option 150 (which should be the ZTP server).
 - **Step 3.2:** When the request for the "network-confg" file is received by the ZTP server, it generates the config by performing an automatic merge with the `initial-template`:
-	- **Step 3.2.1:** The `{{ autohostname }}` variable in the initial-template is filled by an automatically generated hexadecimal temporary name (example: ZTP-22F1388804). This temporary name is saved in memory by the ZTP server for future reference because the switch will use it's temporary hostname to request a new TFTP file in a later step.
+	- **Step 3.2.1:** The `{{ autohostname }}` variable in the initial-template is filled by an automatically generated hexadecimal temporary name (example: ZTP-22F1388804). This temporary name is saved in memory by the ZTP server for future reference because the switch will use it's temporary hostname to request a new TFTP file in **Step 5.1**.
 	- **Step 3.2.2:** The SNMP `{{ community }}` variable is filled with the value set in the `community` configuration field
 - **Step 3.3:** This merged configuration is passed to the Cisco switch as the "network-confg" file. The switch loads it into its active running-config and proceeds to **Step 5**
 	- NOTE: _You can see an example initial configuration from the ZTP server by issuing the command_ `ztp request initial-merge`
@@ -187,7 +187,7 @@ The new switch should have one of its ports connected to a network (likely an up
 - **Step 4.1:** After the initial config file is passed to and loaded by the switch, the ZTP server initiates a SNMP discovery of the switch's serial number, or "Real ID"
 	- **Step 4.1.1:** The SNMP requests target the source IP of the switch which was used to originally request the "network-confg" file in **Step 3.1**
 	- **Step 4.1.2:** The SNMP requests use the value of the `community` configuration field as the authentication community (which the switch should honor once it loads the configuration from the "network-confg" file)
-	- **Step 4.1.3:** The SNMP requests use the OIDs from the `snmpoid` configuration field. The FreeZTP default configuration comes with a few different OIDs pre-configured for some popular switch models.
+	- **Step 4.1.3:** The SNMP requests use the OIDs set with `ztp set snmpoid NAME <oid>`. The FreeZTP default configuration comes with a few different OIDs pre-configured for some popular switch models.
 		- NOTE: _You may need to add an OID based on the switch model you are discovering. You can test the configured OIDs for returned values using the following command. Your switch will need to be accessible and ready to accept the ZTP configured community_ `ztp request snmp-test <ip_address>`
 	- **Step 4.1.4:** Once the SNMP query succeeds, the ZTP server maps the Real ID (ie: serial number) of the discovered switch to its temporary hostname generated in **Step 3.2.1**
 
