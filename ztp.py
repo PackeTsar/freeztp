@@ -7,7 +7,7 @@
 ##### https://github.com/convergeone/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "v0.9.14"
+version = "v0.9.15"
 
 ##### Import native modules #####
 import os
