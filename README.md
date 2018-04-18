@@ -40,7 +40,7 @@ The installation of FreeZTP is quick and easy using the built-in installer. Make
 
 1. Install OS with appropriate IP and OS settings and update to latest patches (recommended). Check out the below links for easy Post-Install processes for OS's supported by FreeZTP.
 	- **CentOS 7:** [CentOS Minimal Server - Post-Install Setup][centos-post-install]
-		- Make sure to install Git for a CentOS instal
+		- Make sure to install Git for a CentOS install
 			- `sudo yum install git -y`
 	- **Ubuntu 16:** [Ubuntu Minimal Server - Post-Install Setup][ubuntu-post-install]
 		- Make sure to install python-pip and git for Ubuntu
