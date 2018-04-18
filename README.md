@@ -51,7 +51,7 @@ The installation of FreeZTP is quick and easy using the built-in installer. Make
 			- `sudo apt install -y python-pip`
 			- `sudo apt-get install -y git`
 2. Download the FreeZTP repository using Git
-	- `git clone https://github.com/convergeone/freeztp.git`
+	- `git clone https://github.com/packetsar/freeztp.git`
 3. Change to the directory where the FreeZTP main code file (ztp.py) is stored: `cd freeztp`
 4. Run the FreeZTP program in install mode to perform the installation: `sudo python ztp.py install`. Make sure the machine has internet access as this process will download and install several packages for this to happen.
 	- FreeZTP will perform the install of the packages and services for full operation.
@@ -473,7 +473,7 @@ It is possible to use an external DHCP server instead of the FreeZTP one, but yo
 ##   CONTRIBUTING   ##
 If you would like to help out by contributing code or reporting issues, please do!
 
-Visit the GitHub page (https://github.com/convergeone/freeztp) and either report an issue or fork the project, commit some changes, and submit a pull request.
+Visit the GitHub page (https://github.com/packetsar/freeztp) and either report an issue or fork the project, commit some changes, and submit a pull request.
 
 
 [logo]: http://www.packetsar.com/wp-content/uploads/FreeZTP-100.png
