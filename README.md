@@ -37,7 +37,7 @@ Interpreter: **Python 2.7.5+**
 -----------------------------------------
 ##   INSTALLATION   ##
 
- <a href="https://www.youtube.com/watch?v=x4wZvtHiyvE" target="_blank">
+ <a href="https://www.youtube.com/watch?v=x4wZvtHiyvE">
 	<img src="https://img.youtube.com/vi/x4wZvtHiyvE/0.jpg" alt="FreeZTP Installation Video" align="right" width="200" height="200">
 </a>
 
