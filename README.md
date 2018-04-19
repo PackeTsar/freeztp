@@ -38,7 +38,7 @@ Interpreter: **Python 2.7.5+**
 ##   INSTALLATION   ##
 
  <a href="https://www.youtube.com/watch?v=x4wZvtHiyvE">
-	<img src="https://packetpushers.net/wp-content/uploads/2018/04/image.png" alt="FreeZTP Installation Video" align="right" width="200" height="200">
+	<img src="https://packetpushers.net/wp-content/uploads/2018/04/image.png" alt="FreeZTP Installation Video" align="right" width="200" height="150">
 </a>
 
 The installation of FreeZTP is quick and easy using the built-in installer. Click the picture on the right to watch a quick 7 minute video on the installation, initial configuration, and first switch deployment with FreeZTP.
