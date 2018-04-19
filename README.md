@@ -41,7 +41,9 @@ Interpreter: **Python 2.7.5+**
 	<img src="https://img.youtube.com/vi/x4wZvtHiyvE/0.jpg" alt="FreeZTP Installation Video" align="right" width="200" height="200">
 </a>
 
-The installation of FreeZTP is quick and easy using the built-in installer. Make sure you are logged in as root or are able to `sudo su` to install and operate FreeZTP.
+The installation of FreeZTP is quick and easy using the built-in installer. Click the picture on the right to watch a quick 7 minute video on the installation, initial configuration, and first switch deployment with FreeZTP.
+
+Make sure you are logged in as root or are able to `sudo su` to install and operate FreeZTP.
 
 1. Install OS with appropriate IP and OS settings and update to latest patches (recommended). Check out the below links for easy Post-Install processes for OS's supported by FreeZTP.
 	- **CentOS 7:** [CentOS Minimal Server - Post-Install Setup][centos-post-install]
