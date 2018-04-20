@@ -4,7 +4,7 @@
 #####             FreeZTP Server             #####
 #####        Written by John W Kerns         #####
 #####       http://blog.packetsar.com        #####
-##### https://github.com/convergeone/freeztp #####
+##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
 version = "v1.0.0"
