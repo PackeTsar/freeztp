@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "v1.0.0"
+version = "dev1.1.0a"
 
 ##### Import native modules #####
 import os
@@ -46,12 +46,14 @@ class os_detect:
 		distlist = platform.linux_distribution()
 		if "centos" in distlist[0].lower():
 			return "centos"
-		if "ubuntu" in distlist[0].lower():
+		elif "ubuntu" in distlist[0].lower():
 			return "ubuntu"
-		if "debian" in distlist[0].lower():
+		elif "debian" in distlist[0].lower():
 			return "debian"
 		else:
-			return "unknown"
+			console("Unsupported OS Type! Please create an issue at https://github.com/PackeTsar/freeztp/issues and include below information.")
+			console(platform.linux_distribution())
+			sys.exit()
 	def _make_names(self):
 		if self._dist == "centos":
 			self.DHCPSVC = "dhcpd"
