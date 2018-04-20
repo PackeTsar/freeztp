@@ -9,6 +9,13 @@
 ##### Inform FreeZTP version here #####
 version = "dev1.1.0a"
 
+
+# NEXT: Finish clear integration
+# NEXT: Fully test inputs to integrations and helpers
+# NEXT: Get spark integration working
+
+
+
 ##### Import native modules #####
 import os
 import re
@@ -616,6 +623,8 @@ class config_manager:
 		elif setting == "snmpoid":
 			self.running[setting].update({value: args[4]})
 			self.save()
+		elif setting == "integration":
+			self.set_integration(args[3], args[4], args[5])
 		elif setting == "template" or setting == "initial-template":
 			if setting == "initial-template":
 				console("Enter each line of the template ending with '%s' on a line by itself" % args[3])
@@ -715,6 +724,15 @@ class config_manager:
 		for line in iter(raw_input, ending):
 			result += line+"\n"
 		return result[0:len(result)-1]
+	def set_integration(self, iden, key, value):
+		print(iden)
+		print(key)
+		print(value)
+		if iden in list(self.running["integrations"]):
+			self.running["integrations"][iden].update({key: value})
+		else:
+			self.running["integrations"].update({iden: {key: value}})
+		self.save()
 	def set_keystore(self, iden, keyword, value):
 		try:
 			value = json.loads(value)
@@ -986,6 +1004,28 @@ class config_manager:
 	def hidden_list_dhcpd_scopes(self):
 		for scope in self.running["dhcpd"]:
 			console(scope)
+	def hidden_list_integrations(self):
+		for scope in self.running["integrations"]:
+			console(scope)
+	def hidden_show_integration_keys(self, iden):
+		try:
+			for key in list(self.running["integrations"][iden]):
+				console(key)
+		except KeyError:
+			pass
+	def hidden_show_integration_opts(self, iden):
+		try:
+			typ = self.running["integrations"][iden]["type"]
+			if typ == "spark":
+				options = ["api-key", "roomId", "toPersonId", "toPersonEmail"]
+			elif typ == "gsheet":
+				options = ["api-key", "sheetId"]
+			else:
+				options = []
+			for option in options:
+				console(option)
+		except KeyError:
+			pass
 	def dhcpd_compile(self):
 		result = "########### FREEZTP DHCP SCOPES ###########\n"
 		result += "############## DO NOT MODIFY ##############\n"
@@ -1206,29 +1246,38 @@ class log_management:
 #####   installation scripts used to install/upgrade the ZTP server       #####
 class installer:
 	defaultconfig = '''{\n    "associations": {\n        "SERIAL100": "SHORT_TEMPLATE", \n        "STACK1": "LONG_TEMPLATE"\n    }, \n    "community": "secretcommunity", \n    "default-keystore": "DEFAULT_VALUES", \n    "default-template": "LONG_TEMPLATE", \n    "delay-keystore": 1000, \n    "dhcpd": {}, \n    "file-cache-timeout": 10, \n    "idarrays": {\n        "STACK1": [\n            "SERIAL1", \n            "SERIAL2", \n            "SERIAL3"\n        ]\n    }, \n    "image-supression": 3600, \n    "imagediscoveryfile": "freeztp_ios_upgrade", \n    "imagefile": "cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin", \n    "initialfilename": "network-confg", \n    "keyvalstore": {\n        "DEFAULT_VALUES": {\n            "hostname": "UNKNOWN_HOST", \n            "vl1_ip_address": "dhcp"\n        }, \n        "SERIAL100": {\n            "hostname": "SOMEDEVICE", \n            "vl1_ip_address": "10.0.0.201"\n        }, \n        "STACK1": {\n            "hostname": "CORESWITCH", \n            "vl1_ip_address": "10.0.0.200", \n            "vl1_netmask": "255.255.255.0"\n        }\n    }, \n    "snmpoid": {\n        "WS-C2960_SERIAL_NUMBER": "1.3.6.1.2.1.47.1.1.1.1.11.1001", \n        "WS-C3850_SERIAL_NUMBER": "1.3.6.1.2.1.47.1.1.1.1.11.1000"\n    }, \n    "starttemplate": {\n        "delineator": "^", \n        "value": "hostname {{ autohostname }}\\n!\\nsnmp-server community {{ community }} RO\\n!\\nend"\n    }, \n    "suffix": "-confg", \n    "templates": {\n        "LONG_TEMPLATE": {\n            "delineator": "^", \n            "value": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} {{ vl1_netmask }}\\n no shut\\n!\\n!{% for interface in range(1,49) %}\\ninterface GigabitEthernet1/0/{{interface}}\\n description User Port (VLAN 1)\\n switchport access vlan 1\\n switchport mode access\\n no shutdown\\n!{% endfor %}\\n!\\nip domain-name test.com\\n!\\nusername admin privilege 15 secret password123\\n!\\naaa new-model\\n!\\n!\\naaa authentication login CONSOLE local\\naaa authorization console\\naaa authorization exec default local if-authenticated\\n!\\ncrypto key generate rsa modulus 2048\\n!\\nip ssh version 2\\n!\\nline vty 0 15\\nlogin authentication default\\ntransport input ssh\\nline console 0\\nlogin authentication CONSOLE\\nend"\n        }, \n        "SHORT_TEMPLATE": {\n            "delineator": "^", \n            "value": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} 255.255.255.0\\n no shut\\n!\\nend"\n        }\n    }, \n    "tftproot": "/etc/ztp/tftproot/"\n}'''
+	#def beta_minor_update_script(self):
+	#	os.system('mkdir -p ' + "/etc/ztp/tftproot/")  # Create new tftproot dir
+	#	newconfigkeys = {
+	#	"imagediscoveryfile": "autoinstall_dhcp",
+	#	"imagefile": "cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin",
+	#	"tftproot": "/etc/ztp/tftproot/",
+	#	"default-template": None,
+	#	"delay-keystore": None
+	#	}
+	#	for key in newconfigkeys:
+	#		if key not in list(config.running):
+	#			console("Adding (%s) to config schema" % key)
+	#			config.running.update({key: newconfigkeys[key]})
+	#	config.save()
+	#	try:
+	#		import netifaces
+	#	except ImportError:
+	#		#### DHCPD Install Process
+	#		console("\n\nInstalling some new dependencies...\n")
+	#		os.system("pip install netaddr")
+	#		os.system("pip install netifaces")
+	#		osd.install_pkg("telnet")
+	#		self.dhcp_setup()
 	def minor_update_script(self):
-		os.system('mkdir -p ' + "/etc/ztp/tftproot/")  # Create new tftproot dir
 		newconfigkeys = {
-		"imagediscoveryfile": "autoinstall_dhcp",
-		"imagefile": "cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin",
-		"tftproot": "/etc/ztp/tftproot/",
-		"default-template": None,
-		"delay-keystore": None
+		"integrations": {}
 		}
 		for key in newconfigkeys:
 			if key not in list(config.running):
 				console("Adding (%s) to config schema" % key)
 				config.running.update({key: newconfigkeys[key]})
 		config.save()
-		try:
-			import netifaces
-		except ImportError:
-			#### DHCPD Install Process
-			console("\n\nInstalling some new dependencies...\n")
-			os.system("pip install netaddr")
-			os.system("pip install netifaces")
-			osd.install_pkg("telnet")
-			self.dhcp_setup()
 	def copy_binary(self):
 		binpath = "/bin/"
 		binname = "ztp"
@@ -1419,10 +1468,10 @@ _ztp_complete()
 		COMPREPLY=( $(compgen -W "show" -- $cur) )
 		;;
 	  "set")
-		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile file-cache-timeout template keystore idarray association default-keystore default-template imagefile image-supression delay-keystore dhcpd" -- $cur) )
+		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile file-cache-timeout integration template keystore idarray association default-keystore default-template imagefile image-supression delay-keystore dhcpd" -- $cur) )
 		;;
 	  "clear")
-		COMPREPLY=( $(compgen -W "keystore idarray snmpoid template association dhcpd log downloads provisioning" -- $cur) )
+		COMPREPLY=( $(compgen -W "keystore idarray snmpoid integration template association dhcpd log downloads provisioning" -- $cur) )
 		;;
 	  "request")
 		COMPREPLY=( $(compgen -W "merge-test initial-merge default-keystore-test snmp-test dhcp-option-125 dhcpd-commit auto-dhcpd ipc-console" -- $cur) )
@@ -1437,7 +1486,7 @@ _ztp_complete()
 	case "$prev" in
 	  show)
 		if [ "$prev2" == "hidden" ]; then
-		  COMPREPLY=( $(compgen -W "keystores keys idarrays idarray snmpoids templates associations all_ids imagefiles dhcpd-scopes" -- $cur) )
+		  COMPREPLY=( $(compgen -W "keystores keys idarrays idarray snmpoids templates associations all_ids imagefiles dhcpd-scopes integrations integration-opts integration-keys" -- $cur) )
 		fi
 		;;
 	  config)
@@ -1507,6 +1556,15 @@ _ztp_complete()
 	  imagediscoveryfile)
 		if [ "$prev2" == "set" ]; then
 		  COMPREPLY=( $(compgen -W "<filename> -" -- $cur) )
+		fi
+		;;
+	  integration)
+		local integrations=$(for k in `ztp hidden show integrations`; do echo $k ; done)
+		if [ "$prev2" == "set" ]; then
+		  COMPREPLY=( $(compgen -W "${integrations} <svc_name> -" -- $cur) )
+		fi
+		if [ "$prev2" == "clear" ]; then
+		  COMPREPLY=( $(compgen -W "${integrations}" -- $cur) )
 		fi
 		;;
 	  template)
@@ -1626,6 +1684,24 @@ _ztp_complete()
 		  local keystores=$(for k in `ztp hidden show keystores`; do echo $k ; done)
 		  COMPREPLY=( $(compgen -W "${keystores} <keystore> -" -- $cur) )
 		fi
+		if [ "$prev" == "integration-opts" ]; then
+		  local integrations=$(for k in `ztp hidden show integrations`; do echo $k ; done)
+		  COMPREPLY=( $(compgen -W "${integrations} <svc_name> -" -- $cur) )
+		fi
+		if [ "$prev" == "integration-keys" ]; then
+		  local integrations=$(for k in `ztp hidden show integrations`; do echo $k ; done)
+		  COMPREPLY=( $(compgen -W "${integrations} <svc_name> -" -- $cur) )
+		fi
+	  fi
+	fi
+	if [ "$prev2" == "integration" ]; then
+	  local keys=$(for k in `ztp hidden show integration-keys $prev`; do echo $k ; done)
+	  if [ "$prev3" == "set" ]; then
+		local opts=$(for k in `ztp hidden show integration-opts $prev`; do echo $k ; done)
+		COMPREPLY=( $(compgen -W "${opts} ${keys} type" -- $cur) )
+	  fi
+	  if [ "$prev3" == "clear" ]; then
+		COMPREPLY=( $(compgen -W "${keys} all -" -- $cur) )
 	  fi
 	fi
 	if [ "$prev2" == "idarray" ]; then
@@ -1668,6 +1744,15 @@ _ztp_complete()
 	if [ "$prev4" == "set" ]; then
 	  if [ "$prev3" == "keystore" ]; then
 		COMPREPLY=( $(compgen -W "<value> -" -- $cur) )
+	  fi
+	fi
+	if [ "$prev4" == "set" ]; then
+	  if [ "$prev3" == "integration" ]; then
+		if [ "$prev" == "type" ]; then
+		  COMPREPLY=( $(compgen -W "spark gsheet" -- $cur) )
+		else
+		  COMPREPLY=( $(compgen -W "<value> -" -- $cur) )
+		fi
 	  fi
 	fi
 	if [ "$prev4" == "set" ]; then
@@ -1776,7 +1861,6 @@ def start(self, buffer):
 	self.state = self.state.handle(pkt,
 									self.host,
 									self.port)
-
 
 
 def handle(self, pkt, raddress, rport):
@@ -2334,6 +2418,40 @@ class persistent_store:
 #s.recall()
 
 
+class integration_spark:
+	def __init__(self, api_key):
+		global requests
+		global MultipartEncoder
+		import requests
+		from requests_toolbelt import MultipartEncoder
+		self._api_key = api_key
+		self.me = self._get("https://api.ciscospark.com/v1/people/me")
+	def _get(self, url, payload=None):
+		headers = {'Authorization': "Bearer "+self._api_key, 'Content-Type': 'application/json'}
+		response = requests.get(url=url, headers=headers, params=payload)
+		return(self._decode(response))
+	def _post(self, url, payload):
+		payload = MultipartEncoder(fields=payload)
+		headers = {'Authorization': "Bearer "+self._api_key, 'Content-Type': payload.content_type}
+		response = requests.post(url=url, headers=headers, data=payload)
+		return(self._decode(response))
+	def _decode(self, response):
+		if response.status_code == 200:
+			try:
+				return json.loads(response.text)
+			except Exception as e:
+				print(e)
+				return None
+		else:
+			raise ValueError("Invalid Server Response Status Code: (%s)\n(%s)" % (str(response.status_code), response.text))
+	def rooms(self):
+		return self._get("https://api.ciscospark.com/v1/rooms")
+	def people(self, query):
+		return self._get("https://api.ciscospark.com/v1/people", payload=query)
+	def send(self, data):
+		return self._post("https://api.ciscospark.com/v1/messages", data)
+
+
 ##### TFTP Server main entry. Starts the TFTP server listener and is the  #####
 #####   main program loop. It is started with the ztp_dyn_file class      #####
 #####   passed in as the dynamic file function.                           #####
@@ -2457,6 +2575,9 @@ def interpreter():
 		console(" - hidden show all_ids                            |  Show a list of all configured IDs (Keystores and IDArrays)")
 		console(" - hidden show imagefiles                         |  Show a list of candidate imagefiles in the TFTP root directory")
 		console(" - hidden show dhcpd-scopes                       |  Show a list of configured DHCPD scopes")
+		console(" - hidden show integrations                       |  Show a list of external integrations")
+		console(" - hidden show integration-opts <svc_name>        |  Show a external integration key options")
+		console(" - hidden show integration-keys <svc_name>        |  Show a list of keys configured on an integration")
 	elif arguments == "hidden show keystores":
 		config.hidden_list_ids()
 	elif arguments[:16] == "hidden show keys" and len(sys.argv) >= 4:
@@ -2477,6 +2598,12 @@ def interpreter():
 		config.hidden_list_image_files()
 	elif arguments == "hidden show dhcpd-scopes":
 		config.hidden_list_dhcpd_scopes()
+	elif arguments == "hidden show integrations":
+		config.hidden_list_integrations()
+	elif arguments[:28] == "hidden show integration-keys" and len(sys.argv) >= 4:
+		config.hidden_show_integration_keys(sys.argv[4])
+	elif arguments[:28] == "hidden show integration-opts" and len(sys.argv) >= 4:
+		config.hidden_show_integration_opts(sys.argv[4])
 	##### SHOW #####
 	elif arguments == "show":
 		console(" - show (config|run) (raw)                        |  Show the current ZTP configuration")
@@ -2534,6 +2661,7 @@ def interpreter():
 		console(" - set imagediscoveryfile <filename>                           |  Set the name of the IOS image discovery file used for IOS upgrades")
 		console(" - set file-cache-timeout <timeout>                            |  Set the timeout for cacheing of files. '0' disables caching.")
 		console("--------------------------------------------------------- SETTINGS YOU SHOULD CHANGE ---------------------------------------------------------")
+		console(" - set integration <svc_name> [parameters]                     |  Configure external integrations")
 		console(" - set template <template_name> <end_char>                     |  Create/Modify a named J2 tempate which is used for the final config push")
 		console(" - set keystore <id/arrayname> <keyword> <value>               |  Create a keystore entry to be used when merging final configurations")
 		console(" - set idarray <arrayname> <id's>                              |  Create an ID array to allow multiple real ids to match one keystore id")
@@ -2560,6 +2688,16 @@ def interpreter():
 		console(" - set imagediscoveryfile <filename>              |  Set the name of the IOS image discovery file used for IOS upgrades")
 	elif arguments == "set file-cache-timeout":
 		console(" - set file-cache-timeout <timeout>               |  Set the timeout for cacheing of files. '0' disables caching.")
+	elif (arguments[:15] == "set integration" and len(sys.argv) < 6) or arguments == "set integration":
+		console(" - set integration <svc_name> [parameters]                     |  Configure external integrations")
+		console("                                                                    Examples:")
+		console("                                                                         - set integration ADMINSROOM type spark")
+		console("                                                                         - set integration ADMINSROOM api-key $ucH@ran60mk3y")
+		console("                                                                           set integration ADMINSROOM roomId SOMEROOMID")
+		console("                                                                         ")
+		console("                                                                         - set integration DIRECTMSG type spark")
+		console("                                                                         - set integration DIRECTMSG api-key $ucH@ran60mk3y")
+		console("                                                                           set integration DIRECTMSG toPersonEmail admin@company.com")
 	elif (arguments[:12] == "set template" and len(sys.argv) < 5) or arguments == "set template":
 		console(" - set template <template_name> <end_char>        |  Set the final configuration j2 template pushed to host after discovery/identification")
 	elif (arguments[:12] == "set keystore" and len(sys.argv) < 6) or arguments == "set keystore":
@@ -2571,7 +2709,7 @@ def interpreter():
 	elif (arguments[:20] == "set default-keystore" and len(sys.argv) < 4) or arguments == "default-keystore":
 		console(" - set default-keystore (none|keystore-id)        |  Set a last-resort keystore and template for when target identification fails")
 	elif (arguments[:20] == "set default-template" and len(sys.argv) < 4) or arguments == "default-template":
-		console(" - set default-template (none|template_name)                   |  Set a last-resort template for when no keystore/template association is found")
+		console(" - set default-template (none|template_name)      |  Set a last-resort template for when no keystore/template association is found")
 	elif arguments == "set imagefile":
 		console(" - set imagefile <binary_image_file_name>         |  Set the image file name to be used for upgrades (must be in tftp root dir)")
 	elif arguments == "set image-supression":
@@ -2727,6 +2865,7 @@ def interpreter():
 		console(" - set imagediscoveryfile <filename>                           |  Set the name of the IOS image discovery file used for IOS upgrades")
 		console(" - set file-cache-timeout <timeout>                            |  Set the timeout for cacheing of files. '0' disables caching.")
 		console("--------------------------------------------------------- SETTINGS YOU SHOULD CHANGE ---------------------------------------------------------")
+		console(" - set integration <svc_name> [parameters]                     |  Configure external integrations")
 		console(" - set template <template_name> <end_char>                     |  Create/Modify a named J2 tempate which is used for the final config push")
 		console(" - set keystore <id/arrayname> <keyword> <value>               |  Create a keystore entry to be used when merging final configurations")
 		console(" - set idarray <arrayname> <id_#1> <id_#2> ...                 |  Create an ID array to allow multiple real ids to match one keystore id")
@@ -2740,6 +2879,7 @@ def interpreter():
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console(" - clear snmpoid <name>                                        |  Delete an SNMP OID from the configuration")
+		console(" - clear integration <svc_name> (all|<key>)                    |  Delete an individual integration key or the whole object")
 		console(" - clear template <template_name>                              |  Delete a named configuration template")
 		console(" - clear keystore <id> (all|<keyword>)                         |  Delete an individual key or a whole keystore ID from the configuration")
 		console(" - clear idarray <arrayname>                                   |  Delete an ID array from the configuration")
