@@ -167,12 +167,13 @@ class file_cache:
 class ztp_dyn_file:
 	closed = False
 	position = 0
-	def __init__(self, afile, raddress, rport):
+	def __init__(self, afile, raddress, rport, data=None):
 		self.filename = afile
 		self.ipaddr = raddress
 		self.port = rport
 		log("ztp_dyn_file: Instantiated as (%s)" % str(self))
-		self.data = cfact.request(afile, raddress)
+		if not data:
+			self.data = cfact.request(afile, raddress)
 		log("ztp_dyn_file: File size is %s bytes" % len(self.data))
 		pass
 	def tell(self):
@@ -583,6 +584,14 @@ class snmp_query:
 #####   configuration input by the administrator                          #####
 class config_manager:
 	def __init__(self):
+		self.sections = [
+		{"name": "dhcpd", "function": self.show_config_dhcpd},
+		{"name": "template", "function": self.show_config_template},
+		{"name": "keystore", "function": self.show_config_keystore},
+		{"name": "idarray", "function": self.show_config_idarray},
+		{"name": "association", "function": self.show_config_association},
+		{"name": "integration", "function": self.show_config_integration}
+		]
 		self.configfile = self._get_config_file()
 		self._publish()
 	def _get_config_file(self):
@@ -683,6 +692,20 @@ class config_manager:
 						del self.running["keyvalstore"][iden][key]
 						if self.running["keyvalstore"][iden] == {}: # No keys left
 							del self.running["keyvalstore"][iden]
+		elif setting == "integration":
+			key = args[4]
+			if iden not in list(self.running["integrations"]):
+				console("Integration (%s) does not exist!" % iden)
+			else:
+				if key == "all":
+					del self.running["integrations"][iden]
+				else:
+					if key not in list(self.running["integrations"][iden]):
+						console("Key (%s) does not exist under integration (%s)" % (iden, key))
+					else:
+						del self.running["integrations"][iden][key]
+						if self.running["integrations"][iden] == {}: # No keys left
+							del self.running["integrations"][iden]
 		elif setting == "idarray":
 			if iden not in list(self.running["idarrays"]):
 				console("ID does not exist in the idarrays: %s" % iden)
@@ -725,9 +748,10 @@ class config_manager:
 			result += line+"\n"
 		return result[0:len(result)-1]
 	def set_integration(self, iden, key, value):
-		print(iden)
-		print(key)
-		print(value)
+		if key == "type":
+			if value not in integrations.mods:
+				console("Integration type (%s) not recognized or allowed" % value)
+				sys.exit()
 		if iden in list(self.running["integrations"]):
 			self.running["integrations"][iden].update({key: value})
 		else:
@@ -844,6 +868,18 @@ class config_manager:
 						value = "'%s'" % value
 				keylist.append("ztp set keystore %s %s %s" % (iden, key, value))
 			keylist.append("#")
+		###########
+		intglist = []
+		for iden in self.running["integrations"]:
+			for key in self.running["integrations"][iden]:
+				value = self.running["integrations"][iden][key]
+				if type(value) != type("") and type(value) != type(u""):
+					value = "'%s'" % json.dumps(value)
+				else:
+					if " " in value:
+						value = "'%s'" % value
+				intglist.append("ztp set integration %s %s %s" % (iden, key, value))
+			intglist.append("#")
 		############
 		associationlist = []
 		for association in self.running["associations"]:
@@ -900,9 +936,40 @@ class config_manager:
 		configtext += imagesup
 		configtext += "\n"
 		configtext += delaykey
-		configtext += "\n#\n#\n#\n#######################################################"
+		configtext += "\n#\n#\n#\n"
+		for cmd in intglist:
+			configtext += cmd + "\n"
+		configtext += "#\n#\n#\n#######################################################"
 		###########
 		console(configtext)
+	def show_config_dhcpd(self):
+		pass
+	def show_config_template(self):
+		pass
+	def show_config_keystore(self):
+		pass
+	def show_config_idarray(self):
+		pass
+	def show_config_association(self):
+		pass
+	def show_config_integration(self):
+		intglist = []
+		for iden in self.running["integrations"]:
+			for key in self.running["integrations"][iden]:
+				value = self.running["integrations"][iden][key]
+				if type(value) != type("") and type(value) != type(u""):
+					value = "'%s'" % json.dumps(value)
+				else:
+					if " " in value:
+						value = "'%s'" % value
+				intglist.append("ztp set integration %s %s %s" % (iden, key, value))
+			intglist.append("#")
+		return intglist
+	def show_config_section(self, secinput):
+		for section in self.sections:
+			if section["name"] == secinput:
+				return section["function"]()
+		console("Section (%s) not found!" % secinput)
 	def calcopt125hex(self):
 		# Basedata meaning as follows:
 		### 00 00 00 09 = Cisco vendor specific code
@@ -1007,6 +1074,9 @@ class config_manager:
 	def hidden_list_integrations(self):
 		for scope in self.running["integrations"]:
 			console(scope)
+	def hidden_list_integration_types(self):
+		for typ in integrations.mods:
+			console(typ)
 	def hidden_show_integration_keys(self, iden):
 		try:
 			for key in list(self.running["integrations"][iden]):
@@ -1016,12 +1086,7 @@ class config_manager:
 	def hidden_show_integration_opts(self, iden):
 		try:
 			typ = self.running["integrations"][iden]["type"]
-			if typ == "spark":
-				options = ["api-key", "roomId", "toPersonId", "toPersonEmail"]
-			elif typ == "gsheet":
-				options = ["api-key", "sheetId"]
-			else:
-				options = []
+			options = integrations.mods[typ].options
 			for option in options:
 				console(option)
 		except KeyError:
@@ -1278,6 +1343,12 @@ class installer:
 				console("Adding (%s) to config schema" % key)
 				config.running.update({key: newconfigkeys[key]})
 		config.save()
+		try:
+			import requests
+		except ImportError:
+			console("\n\nInstalling some new dependencies...\n")
+			os.system("pip install requests")
+			os.system("pip install requests_toolbelt")
 	def copy_binary(self):
 		binpath = "/bin/"
 		binname = "ztp"
@@ -1474,7 +1545,7 @@ _ztp_complete()
 		COMPREPLY=( $(compgen -W "keystore idarray snmpoid integration template association dhcpd log downloads provisioning" -- $cur) )
 		;;
 	  "request")
-		COMPREPLY=( $(compgen -W "merge-test initial-merge default-keystore-test snmp-test dhcp-option-125 dhcpd-commit auto-dhcpd ipc-console" -- $cur) )
+		COMPREPLY=( $(compgen -W "merge-test initial-merge default-keystore-test snmp-test dhcp-option-125 dhcpd-commit auto-dhcpd ipc-console integration-setup integration-test" -- $cur) )
 		;;
 	  "service")
 		COMPREPLY=( $(compgen -W "start stop restart status" -- $cur) )
@@ -1486,7 +1557,7 @@ _ztp_complete()
 	case "$prev" in
 	  show)
 		if [ "$prev2" == "hidden" ]; then
-		  COMPREPLY=( $(compgen -W "keystores keys idarrays idarray snmpoids templates associations all_ids imagefiles dhcpd-scopes integrations integration-opts integration-keys" -- $cur) )
+		  COMPREPLY=( $(compgen -W "keystores keys idarrays idarray snmpoids templates associations all_ids imagefiles dhcpd-scopes integrations integration-types integration-opts integration-keys" -- $cur) )
 		fi
 		;;
 	  config)
@@ -1661,6 +1732,18 @@ _ztp_complete()
 		  COMPREPLY=( $(compgen -W "cisco windows" -- $cur) )
 		fi
 		;;
+	  integration-setup)
+		if [ "$prev2" == "request" ]; then
+		  local objs=$(for id in `ztp hidden show integrations`; do echo $id ; done)
+		  COMPREPLY=( $(compgen -W "${objs} <svc_name> -" -- $cur) )
+		fi
+		;;
+	  integration-test)
+		if [ "$prev2" == "request" ]; then
+		  local objs=$(for id in `ztp hidden show integrations`; do echo $id ; done)
+		  COMPREPLY=( $(compgen -W "${objs} <svc_name> -" -- $cur) )
+		fi
+		;;
 	  *)
 		;;
 	esac
@@ -1749,7 +1832,8 @@ _ztp_complete()
 	if [ "$prev4" == "set" ]; then
 	  if [ "$prev3" == "integration" ]; then
 		if [ "$prev" == "type" ]; then
-		  COMPREPLY=( $(compgen -W "spark gsheet" -- $cur) )
+		  local types=$(for k in `ztp hidden show integration-types`; do echo $k ; done)
+		  COMPREPLY=( $(compgen -W "${types}" -- $cur) )
 		else
 		  COMPREPLY=( $(compgen -W "<value> -" -- $cur) )
 		fi
@@ -1941,6 +2025,63 @@ def sendDAT(self):
 	return finished
 
 
+def make_table(columnorder, tabledata):
+	##### Check and fix input type #####
+	if type(tabledata) != type([]): # If tabledata is not a list
+		tabledata = [tabledata] # Nest it in a list
+	##### Set seperators and spacers #####
+	tablewrap = "#" # The character used to wrap the table
+	headsep = "=" # The character used to seperate the headers from the table values
+	columnsep = "|" # The character used to seperate each value in the table
+	columnspace = "  " # The amount of space between the largest value and its column seperator
+	##### Generate a dictionary which contains the length of the longest value or head in each column #####
+	datalengthdict = {} # Create the dictionary for storing the longest values
+	for columnhead in columnorder: # For each column in the columnorder input
+		datalengthdict.update({columnhead: len(columnhead)}) # Create a key in the length dict with a value which is the length of the header
+	for row in tabledata: # For each row entry in the tabledata list of dicts
+		for item in columnorder: # For column entry in that row
+			if len(re.sub(r'\x1b[^m]*m', "",  str(row[item]))) > datalengthdict[item]: # If the length of this column entry is longer than the current longest entry
+				datalengthdict[item] = len(str(row[item])) # Then change the value of entry
+	##### Calculate total table width #####
+	totalwidth = 0 # Initialize at 0
+	for columnwidth in datalengthdict: # For each of the longest column values
+		totalwidth += datalengthdict[columnwidth] # Add them all up into the totalwidth variable
+	totalwidth += len(columnorder) * len(columnspace) * 2 # Account for double spaces on each side of each column value
+	totalwidth += len(columnorder) - 1 # Account for seperators for each row entry minus 1
+	totalwidth += 2 # Account for start and end characters for each row
+	##### Build Header #####
+	result = tablewrap * totalwidth + "\n" + tablewrap # Initialize the result with the top header, line break, and beginning of header line
+	columnqty = len(columnorder) # Count number of columns
+	for columnhead in columnorder: # For each column header value
+		spacing = {"before": 0, "after": 0} # Initialize the before and after spacing for that header value before the columnsep
+		spacing["before"] = int((datalengthdict[columnhead] - len(columnhead)) / 2) # Calculate the before spacing
+		spacing["after"] = int((datalengthdict[columnhead] - len(columnhead)) - spacing["before"]) # Calculate the after spacing
+		result += columnspace + spacing["before"] * " " + columnhead + spacing["after"] * " " + columnspace # Add the header entry with spacing
+		if columnqty > 1: # If this is not the last entry
+			result += columnsep # Append a column seperator
+		del spacing # Remove the spacing variable so it can be used again
+		columnqty -= 1 # Remove 1 from the counter to keep track of when we hit the last column
+	del columnqty # Remove the column spacing variable so it can be used again
+	result += tablewrap + "\n" + tablewrap + headsep * (totalwidth - 2) + tablewrap + "\n" # Add bottom wrapper to header
+	##### Build table contents #####
+	result += tablewrap # Add the first wrapper of the value table
+	for row in tabledata: # For each row (dict) in the tabledata input
+		columnqty = len(columnorder) # Set a column counter so we can detect the last entry in this row
+		for column in columnorder: # For each value in this row, but using the correct order from column order
+			spacing = {"before": 0, "after": 0} # Initialize the before and after spacing for that header value before the columnsep
+			spacing["before"] = int((datalengthdict[column] - len(re.sub(r'\x1b[^m]*m', "",  str(row[column])))) / 2) # Calculate the before spacing
+			spacing["after"] = int((datalengthdict[column] - len(re.sub(r'\x1b[^m]*m', "",  str(row[column])))) - spacing["before"]) # Calculate the after spacing
+			result += columnspace + spacing["before"] * " " + str(row[column]) + spacing["after"] * " " + columnspace # Add the entry to the row with spacing
+			if columnqty == 1: # If this is the last entry in this row
+				result += tablewrap + "\n" + tablewrap # Add the wrapper, a line break, and start the next row
+			else: # If this is not the last entry in the row
+				result += columnsep # Add a column seperator
+			del spacing # Remove the spacing settings for this entry
+			columnqty -= 1 # Keep count of how many row values are left so we know when we hit the last one
+	result += tablewrap * (totalwidth - 1) # When all rows are complete, wrap the table with a trailer
+	return result
+
+
 class tracking_class:
 	def __init__(self, client=False):
 		self._master = {}
@@ -2130,61 +2271,6 @@ class tracking_class:
 	########################################################################
 	########################################################################
 	########################################################################
-	def make_table(self, columnorder, tabledata):
-		##### Check and fix input type #####
-		if type(tabledata) != type([]): # If tabledata is not a list
-			tabledata = [tabledata] # Nest it in a list
-		##### Set seperators and spacers #####
-		tablewrap = "#" # The character used to wrap the table
-		headsep = "=" # The character used to seperate the headers from the table values
-		columnsep = "|" # The character used to seperate each value in the table
-		columnspace = "  " # The amount of space between the largest value and its column seperator
-		##### Generate a dictionary which contains the length of the longest value or head in each column #####
-		datalengthdict = {} # Create the dictionary for storing the longest values
-		for columnhead in columnorder: # For each column in the columnorder input
-			datalengthdict.update({columnhead: len(columnhead)}) # Create a key in the length dict with a value which is the length of the header
-		for row in tabledata: # For each row entry in the tabledata list of dicts
-			for item in columnorder: # For column entry in that row
-				if len(re.sub(r'\x1b[^m]*m', "",  str(row[item]))) > datalengthdict[item]: # If the length of this column entry is longer than the current longest entry
-					datalengthdict[item] = len(str(row[item])) # Then change the value of entry
-		##### Calculate total table width #####
-		totalwidth = 0 # Initialize at 0
-		for columnwidth in datalengthdict: # For each of the longest column values
-			totalwidth += datalengthdict[columnwidth] # Add them all up into the totalwidth variable
-		totalwidth += len(columnorder) * len(columnspace) * 2 # Account for double spaces on each side of each column value
-		totalwidth += len(columnorder) - 1 # Account for seperators for each row entry minus 1
-		totalwidth += 2 # Account for start and end characters for each row
-		##### Build Header #####
-		result = tablewrap * totalwidth + "\n" + tablewrap # Initialize the result with the top header, line break, and beginning of header line
-		columnqty = len(columnorder) # Count number of columns
-		for columnhead in columnorder: # For each column header value
-			spacing = {"before": 0, "after": 0} # Initialize the before and after spacing for that header value before the columnsep
-			spacing["before"] = int((datalengthdict[columnhead] - len(columnhead)) / 2) # Calculate the before spacing
-			spacing["after"] = int((datalengthdict[columnhead] - len(columnhead)) - spacing["before"]) # Calculate the after spacing
-			result += columnspace + spacing["before"] * " " + columnhead + spacing["after"] * " " + columnspace # Add the header entry with spacing
-			if columnqty > 1: # If this is not the last entry
-				result += columnsep # Append a column seperator
-			del spacing # Remove the spacing variable so it can be used again
-			columnqty -= 1 # Remove 1 from the counter to keep track of when we hit the last column
-		del columnqty # Remove the column spacing variable so it can be used again
-		result += tablewrap + "\n" + tablewrap + headsep * (totalwidth - 2) + tablewrap + "\n" # Add bottom wrapper to header
-		##### Build table contents #####
-		result += tablewrap # Add the first wrapper of the value table
-		for row in tabledata: # For each row (dict) in the tabledata input
-			columnqty = len(columnorder) # Set a column counter so we can detect the last entry in this row
-			for column in columnorder: # For each value in this row, but using the correct order from column order
-				spacing = {"before": 0, "after": 0} # Initialize the before and after spacing for that header value before the columnsep
-				spacing["before"] = int((datalengthdict[column] - len(re.sub(r'\x1b[^m]*m', "",  str(row[column])))) / 2) # Calculate the before spacing
-				spacing["after"] = int((datalengthdict[column] - len(re.sub(r'\x1b[^m]*m', "",  str(row[column])))) - spacing["before"]) # Calculate the after spacing
-				result += columnspace + spacing["before"] * " " + str(row[column]) + spacing["after"] * " " + columnspace # Add the entry to the row with spacing
-				if columnqty == 1: # If this is the last entry in this row
-					result += tablewrap + "\n" + tablewrap # Add the wrapper, a line break, and start the next row
-				else: # If this is not the last entry in the row
-					result += columnsep # Add a column seperator
-				del spacing # Remove the spacing settings for this entry
-				columnqty -= 1 # Keep count of how many row values are left so we know when we hit the last one
-		result += tablewrap * (totalwidth - 1) # When all rows are complete, wrap the table with a trailer
-		return result
 	def show_downloads(self, args):
 		data = []
 		d = self.store.recall()
@@ -2192,7 +2278,7 @@ class tracking_class:
 		dlist.sort()
 		for dload in dlist:
 			data.append(d[dload])
-		return self.make_table([u'time', u'ipaddr', u'filename', u'filesize', u'bytessent', u'percent', u'rate', u'active'], data)
+		return make_table([u'time', u'ipaddr', u'filename', u'filesize', u'bytessent', u'percent', u'rate', u'active'], data)
 	class screen:
 		def __init__(self):
 			self.win = curses.initscr()
@@ -2282,7 +2368,7 @@ class tracking_class:
 		dlist.sort()
 		for dload in dlist:
 			data.append(d[dload])
-		return self.make_table([u'time', u'ipaddr', u'filename', u'filesize', u'bytessent', u'percent', u'rate', u'active'], data)
+		return make_table([u'time', u'ipaddr', u'filename', u'filesize', u'bytessent', u'percent', u'rate', u'active'], data)
 	def show_downloads_live(self, args):
 		s = self.screen()
 		ani = self._gen_animation()
@@ -2304,7 +2390,7 @@ class tracking_class:
 		data = []
 		for lease in leases:
 			data.append(leases[lease])
-		return self.make_table(['ethernet', 'ip', 'start', 'end', 'state', 'uid'], data)
+		return make_table(['ethernet', 'ip', 'start', 'end', 'state', 'uid'], data)
 	def provision(self, data):
 		current = self.provdb.recall()
 		for tstamp in current:  # For each ID in provdb
@@ -2357,7 +2443,7 @@ class tracking_class:
 							real += "," + data[each]["Real IDs"][id]
 				data[each]["Real IDs"] = real
 			tabledata.append(data[each])
-		return self.make_table(["Timestamp", "IP Address", "Temp ID", "MAC Address", "Real IDs", "Matched Keystore", "Status"], tabledata)
+		return make_table(["Timestamp", "IP Address", "Temp ID", "MAC Address", "Real IDs", "Matched Keystore", "Status"], tabledata)
 	def prov_get_mac(self, ip):
 		dleases = self.dhcplease_class()
 		leases = dleases.get("current")
@@ -2419,20 +2505,23 @@ class persistent_store:
 
 
 class integration_spark:
-	def __init__(self, api_key):
+	name = "spark"
+	options = ["api-key", "roomId", "toPersonEmail", "toPersonId"]
+	def __init__(self, cfg, setup=False):
 		global requests
 		global MultipartEncoder
 		import requests
 		from requests_toolbelt import MultipartEncoder
-		self._api_key = api_key
-		self.me = self._get("https://api.ciscospark.com/v1/people/me")
+		self.config = cfg
+		if not setup:
+			self.me = self._get("https://api.ciscospark.com/v1/people/me")
 	def _get(self, url, payload=None):
-		headers = {'Authorization': "Bearer "+self._api_key, 'Content-Type': 'application/json'}
+		headers = {'Authorization': "Bearer "+self.config["api-key"], 'Content-Type': 'application/json'}
 		response = requests.get(url=url, headers=headers, params=payload)
 		return(self._decode(response))
 	def _post(self, url, payload):
 		payload = MultipartEncoder(fields=payload)
-		headers = {'Authorization': "Bearer "+self._api_key, 'Content-Type': payload.content_type}
+		headers = {'Authorization': "Bearer "+self.config["api-key"], 'Content-Type': payload.content_type}
 		response = requests.post(url=url, headers=headers, data=payload)
 		return(self._decode(response))
 	def _decode(self, response):
@@ -2444,12 +2533,136 @@ class integration_spark:
 				return None
 		else:
 			raise ValueError("Invalid Server Response Status Code: (%s)\n(%s)" % (str(response.status_code), response.text))
-	def rooms(self):
+	def _rooms(self):
 		return self._get("https://api.ciscospark.com/v1/rooms")
-	def people(self, query):
-		return self._get("https://api.ciscospark.com/v1/people", payload=query)
-	def send(self, data):
+	#def _people(self, query):
+	#	return self._get("https://api.ciscospark.com/v1/people", payload=query)
+	def _get_destination(self):
+		for option in self.options[1:]:
+			if option in self.config:
+				return {option: self.config[option]}
+	def send(self, message):
+		data = self._get_destination()
+		if not data:
+			raise ValueError("Invalid or Unknown Integration Destination")
+		data.update({"text": message.ip})
 		return self._post("https://api.ciscospark.com/v1/messages", data)
+	def setup(self):
+		console("""
+		Spark Integration Wizard Overview:
+		-----------------------------------------------------------------------
+			You must provide an API key (api-key). Once that is provided, you can select
+			one of the below destinations for your update messages:
+				- roomId
+				- toPersonEmail
+				- toPersonId""")
+		akey = raw_input("Enter your Cisco Spark API Key > ")
+		self.config.update({"api-key": akey})  # Update API key entry
+		console("Testing API Key:")
+		console(make_table(["displayName", "emails"], [self._get("https://api.ciscospark.com/v1/people/me")])+"\n\n")
+		opts = [{"destination type": entry} for entry in self.options[1:]]
+		dtype = integrations.table_select(["destination type"], opts, "Select a Destination Type")
+		if dtype["destination type"] == "roomId":
+			rooms = self._rooms()["items"]
+			selection = integrations.table_select(["title"], rooms, "Select a Room")
+			value = selection["id"]
+		elif dtype["destination type"] == "toPersonEmail":
+			value = raw_input("Enter the %s value > " % dtype["destination type"])
+		elif dtype["destination type"] == "toPersonId":
+			value = raw_input("Enter the %s value > " % dtype["destination type"])
+		self.config.update({dtype["destination type"]: value})
+		return self.config
+
+
+class integration_gsheet:
+	name = "gsheet"
+	options = ["api-key", "sheetId"]
+	def setup(self):
+		print("gsheet setup")
+
+
+class integration_testing:
+	name = "testing"
+	options = ["api-key", "othertest"]
+	def setup(self):
+		print("testing setup")
+
+
+class integration_message:
+	def __init__(self, data={}):
+		self.timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+		self.ip = None  # String
+		self.tempid = None  # String
+		self.mac = None  # String
+		self.realid = None  # String
+		self.keystore = None  # String
+		self.status = None  # String
+		self.file = None  # File-like object
+		self.update(data)
+	def update(self, data):
+		for key in data:
+			if key in self.__dict__:
+				self.__dict__[key] = data[key]
+
+
+class integration_main:
+	def __init__(self, setup=False):
+		self.mods = {
+			integration_spark.name: integration_spark,
+			integration_gsheet.name: integration_gsheet,
+			integration_testing.name: integration_testing
+		}
+	def table_select(self, columnorder, tabdata, message):
+		index = 1
+		lookup = {}
+		for option in tabdata:
+			option.update({"#": str(index)})
+			lookup.update({str(index): option})
+			index += 1
+		columnorder = ["#"] + columnorder
+		console(make_table(columnorder, tabdata))
+		selection = raw_input(message+" [1] ")
+		if not selection:
+			selection = "1"
+		elif selection not in lookup:
+			console("Invalid selection (%s)" % selection)
+			sys.exit()
+		del lookup[selection]["#"]
+		return lookup[selection]
+	def setup(self, objname):
+		try:
+			typ = config.running["integrations"][objname]["type"]
+		except KeyError:
+			modtab = [{"name": mod} for mod in self.mods]
+			typ = self.table_select(["name"], modtab, "Select an integration type")["name"]
+		cfg = {"type": typ}
+		new_integration = self.mods[typ](cfg, setup=True)
+		newintcfg = new_integration.setup()
+		config.running["integrations"].update({objname: newintcfg})
+		config.save()
+		console("New Integration Config Saved!")
+	def test(self, objname):
+		if objname not in config.running["integrations"]:
+			console("Integration object (%s) does not exist!" % objname)
+		else:
+			typ = config.running["integrations"][objname]["type"]
+			cfg = {"objname": objname}
+			cfg.update(config.running["integrations"][objname])
+			intgobj = self.mods[typ](cfg)
+			#testfile = ztp_dyn_file("testconfig", "127.0.0.1", "65000",
+			#	data="This is a\ntest configuration")
+			message = integration_message({
+				"ip": "127.0.0.1",
+				"tempid": "ZTP-TESTING123",
+				"mac": "aa:bb:cc:dd:ee",
+				"realid": "SERIAL12345",
+				"keystore": "NO_KEYSTORE",
+				"status": "testing",
+				"file": None
+				})
+			intgobj.send(message)
+
+
 
 
 ##### TFTP Server main entry. Starts the TFTP server listener and is the  #####
@@ -2494,9 +2707,11 @@ def interpreter():
 	#global cfact
 	global logger
 	global osd
+	global integrations
 	osd = os_detect()
 	logger = log_management()
 	config = config_manager()
+	integrations = integration_main()
 	##### TEST #####
 	if arguments == "test":
 		pass
@@ -2576,6 +2791,7 @@ def interpreter():
 		console(" - hidden show imagefiles                         |  Show a list of candidate imagefiles in the TFTP root directory")
 		console(" - hidden show dhcpd-scopes                       |  Show a list of configured DHCPD scopes")
 		console(" - hidden show integrations                       |  Show a list of external integrations")
+		console(" - hidden show integration-types                  |  Show a list of available integration types")
 		console(" - hidden show integration-opts <svc_name>        |  Show a external integration key options")
 		console(" - hidden show integration-keys <svc_name>        |  Show a list of keys configured on an integration")
 	elif arguments == "hidden show keystores":
@@ -2600,6 +2816,8 @@ def interpreter():
 		config.hidden_list_dhcpd_scopes()
 	elif arguments == "hidden show integrations":
 		config.hidden_list_integrations()
+	elif arguments == "hidden show integration-types":
+		config.hidden_list_integration_types()
 	elif arguments[:28] == "hidden show integration-keys" and len(sys.argv) >= 4:
 		config.hidden_show_integration_keys(sys.argv[4])
 	elif arguments[:28] == "hidden show integration-opts" and len(sys.argv) >= 4:
@@ -2617,6 +2835,8 @@ def interpreter():
 		os.system("more /etc/ztp/ztp.cfg")
 	elif arguments == "show config" or arguments == "show run":
 		config.show_config()
+	elif arguments[:11] == "show config" and len(sys.argv) > 3:
+		console(config.show_config_section(sys.argv[3]))
 	elif arguments == "show status":
 		console("\n")
 		osd.service_control("status", "ztp")
@@ -2723,6 +2943,7 @@ def interpreter():
 	##### CLEAR #####
 	elif arguments == "clear":
 		console(" - clear snmpoid <name>                           |  Delete an SNMP OID from the configuration")
+		console(" - clear integration <svc_name> (all|<key>)       |  Delete an individual integration key or the whole object")
 		console(" - clear template <template_name>                 |  Delete a named configuration template")
 		console(" - clear keystore <id> (all|<keyword>)            |  Delete an individual key or a whole keystore ID from the configuration")
 		console(" - clear idarray <arrayname>                      |  Delete an ID array from the configuration")
@@ -2733,6 +2954,8 @@ def interpreter():
 		console(" - clear provisioning                             |  Delete the list of provisioned devices")
 	elif (arguments[:13] == "clear snmpoid" and len(sys.argv) < 4) or arguments == "clear snmpoid":
 		console(" - clear snmpoid <name>                           |  Delete an SNMP OID from the configuration")
+	elif (arguments[:17] == "clear integration" and len(sys.argv) < 5) or arguments == "clear integration":
+		console(" - clear integration <svc_name> (all|<key>)       |  Delete an individual key or a whole keystore ID from the configuration")
 	elif (arguments[:14] == "clear template" and len(sys.argv) < 4) or arguments == "clear template":
 		console(" - clear template <template_name>                 |  Delete a named configuration template")
 	elif (arguments[:14] == "clear keystore" and len(sys.argv) < 5) or arguments == "clear keystore":
@@ -2744,6 +2967,8 @@ def interpreter():
 	elif (arguments[:11] == "clear dhcpd" and len(sys.argv) < 4) or arguments == "clear dhcpd":
 		console(" - clear dhcpd <scope-name>                       |  Delete a DHCP scope")
 	elif arguments[:13] == "clear snmpoid" and len(sys.argv) >= 4:
+		config.clear(sys.argv)
+	elif arguments[:17] == "clear integration" and len(sys.argv) >= 5:
 		config.clear(sys.argv)
 	elif arguments[:14] == "clear template" and len(sys.argv) >= 4:
 		config.clear(sys.argv)
@@ -2776,10 +3001,16 @@ def interpreter():
 		console(" - request dhcpd-commit                           |  Compile the DHCP config, write to config file, and restart the DHCP service")
 		console(" - request auto-dhcpd                             |  Automatically detect local interfaces and build DHCP scopes accordingly")
 		console(" - request ipc-console                            |  Connect to the IPC console to run commands (be careful)")
+		console(" - request integration-setup <svc_name>           |  Run the setup wizard for the module type configured on the object")
+		console(" - request integration-test <svc_name>            |  Perform a test message push to a target integration object")
 	elif arguments == "request merge-test":
 		console(" - request merge-test <id>                        |  Perform a test jinja2 merge of the final template with a keystore ID")
 	elif arguments == "request dhcp-option-125":
 		console(" - request dhcp-option-125 (windows|cisco)        |  Show the DHCP Option 125 Hex value to use on the DHCP server for OS upgrades")
+	elif arguments == "request integration-setup":
+		console(" - request integration-setup <svc_name>           |  Run the setup wizard for the module type configured on the object")
+	elif arguments == "request integration-test":
+		console(" - request integration-test <svc_name>            |  Perform a test message push to a target integration object")
 	elif arguments == "request initial-merge":
 		cfact = config_factory()
 		tracking = tracking_class(client=True)
@@ -2810,6 +3041,10 @@ def interpreter():
 		config.auto_dhcpd()
 	elif arguments == "request ipc-console":
 		os.system('telnet localhost 10000')
+	elif arguments[:25] == "request integration-setup" and len(sys.argv) >= 4:
+		integrations.setup(sys.argv[3])
+	elif arguments[:24] == "request integration-test" and len(sys.argv) >= 4:
+		integrations.test(sys.argv[3])
 	##### SERVICE #####
 	elif arguments == "service":
 		console(" - service (start|stop|restart|status)            |  Start, Stop, or Restart the installed ZTP service")
@@ -2897,6 +3132,8 @@ def interpreter():
 		console(" - request dhcpd-commit                                        |  Compile the DHCP config, write to config file, and restart the DHCP service")
 		console(" - request auto-dhcpd                                          |  Automatically detect local interfaces and build DHCP scopes accordingly")
 		console(" - request ipc-console                                         |  Connect to the IPC console to run commands (be careful)")
+		console(" - request integration-setup <svc_name>                        |  Run the setup wizard for the module type configured on the object")
+		console(" - request integration-test <svc_name>                         |  Perform a test message push to a target integration object")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console(" - service (start|stop|restart|status)                         |  Start, Stop, or Restart the installed ZTP service")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
