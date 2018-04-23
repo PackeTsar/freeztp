@@ -167,18 +167,25 @@ class file_cache:
 class ztp_dyn_file:
 	closed = False
 	position = 0
-	def __init__(self, afile, raddress, rport, data=None):
+	def __init__(self, afile, raddress, rport, data=None, track=True):
 		self.filename = afile
 		self.ipaddr = raddress
 		self.port = rport
+		self.track = track
 		log("ztp_dyn_file: Instantiated as (%s)" % str(self))
 		if not data:
 			self.data = cfact.request(afile, raddress)
+		else:
+			self.data = data
+		self.__len__ = self.len
 		log("ztp_dyn_file: File size is %s bytes" % len(self.data))
-		pass
 	def tell(self):
 		log("ztp_dyn_file.tell: Called. Returning (%s)" % str(self.position))
 		return self.position
+	def len(self):
+		if len(self.data)-self.position < 1:
+			return 0
+		return len(self.data)-self.position
 	def read(self, size):
 		start = self.position
 		end = self.position + size
@@ -188,16 +195,16 @@ class ztp_dyn_file:
 		if not self.closed:
 			log("ztp_dyn_file.read: Returning position %s to %s" % (str(start), str(end)))
 		self.position = end
-		tracking.report({
-			"ipaddr": self.ipaddr,
-			"filename": self.filename,
-			"port": self.port,
-			"position": self.position,
-			"source": "ztp_dyn_file"})
+		if self.track:
+			tracking.report({
+				"ipaddr": self.ipaddr,
+				"filename": self.filename,
+				"port": self.port,
+				"position": self.position,
+				"source": "ztp_dyn_file"})
 		return result
 	def seek(self, arg1, arg2):
 		log("ztp_dyn_file.seek: Called with args (%s) and (%s)" % (str(arg1), str(arg1)))
-		pass
 	def close(self):
 		if not self.closed:
 			log("ztp_dyn_file.close: Called. File closing.")
@@ -2391,6 +2398,17 @@ class tracking_class:
 		for lease in leases:
 			data.append(leases[lease])
 		return make_table(['ethernet', 'ip', 'start', 'end', 'state', 'uid'], data)
+	def check_integrations(self, ):
+		pass
+		#message = integration_message({
+		#	"ip": ipaddr,
+		#	"tempid": tempid,
+		#	"mac": "aa:bb:cc:dd:ee",
+		#	"realid": "SERIAL12345",
+		#	"keystore": keystoreid,
+		#	"status": "Complete",
+		#	"file": testfile
+		#	})
 	def provision(self, data):
 		current = self.provdb.recall()
 		for tstamp in current:  # For each ID in provdb
@@ -2545,7 +2563,19 @@ class integration_spark:
 		data = self._get_destination()
 		if not data:
 			raise ValueError("Invalid or Unknown Integration Destination")
-		data.update({"text": message.ip})
+		if message.file != None:
+			data.update({'files': ('config.txt', message.file, "text/plain")})
+		txtmsg = """------------------------------
+## **FreeZTP Provisioning (%s)**
+- Timestamp: **%s**
+- IP: **%s**
+- Temp ID: **%s**
+- MAC Address: **%s**
+- Real ID: **%s**
+- Matched Keystore: **%s**
+
+------------------------------""" % (self.config["objname"], message.timestamp, message.ip, message.tempid, message.mac, message.realid, message.keystore)
+		data.update({"markdown": txtmsg})
 		return self._post("https://api.ciscospark.com/v1/messages", data)
 	def setup(self):
 		console("""
@@ -2606,12 +2636,31 @@ class integration_message:
 
 
 class integration_main:
-	def __init__(self, setup=False):
+	def __init__(self):
 		self.mods = {
 			integration_spark.name: integration_spark,
 			integration_gsheet.name: integration_gsheet,
 			integration_testing.name: integration_testing
 		}
+		self.loaded = False
+		self.targets = {}
+		self._load()
+	def _load(self):
+		for target in config.running["integrations"]:
+			if "type" in config.running["integrations"][target]:
+				typ = config.running["integrations"][target]["type"]
+				if typ in self.mods:
+					cfg = {target:{"objname": target}}
+					cfg.update(config.running["integrations"][target])
+					self.targets.update({target: self.mods[typ](cfg)})
+					log("integration_main._load: Integration object (%s) loaded to targets successfully" % target)
+				else:
+					log("integration_main._load: Integration object (%s) has unrecognized type (%s)! Cannot load object" % (target, typ))
+			else:
+				log("integration_main._load: Integration object (%s) has no type! Cannot load object" % target)
+	def send(self, message):
+		for target in self.targets:
+			self.targets[target].send(message)
 	def table_select(self, columnorder, tabdata, message):
 		index = 1
 		lookup = {}
@@ -2642,6 +2691,7 @@ class integration_main:
 		config.save()
 		console("New Integration Config Saved!")
 	def test(self, objname):
+		import io
 		if objname not in config.running["integrations"]:
 			console("Integration object (%s) does not exist!" % objname)
 		else:
@@ -2649,8 +2699,10 @@ class integration_main:
 			cfg = {"objname": objname}
 			cfg.update(config.running["integrations"][objname])
 			intgobj = self.mods[typ](cfg)
-			#testfile = ztp_dyn_file("testconfig", "127.0.0.1", "65000",
-			#	data="This is a\ntest configuration")
+			testfile = ztp_dyn_file("testconfig", "127.0.0.1", "65000",
+				data="This is a\ntest configuration", track=False)
+			#testfile = open("README.md", "r")
+			#testfile = io.StringIO(u"This is a\ntest configuration")
 			message = integration_message({
 				"ip": "127.0.0.1",
 				"tempid": "ZTP-TESTING123",
@@ -2658,7 +2710,7 @@ class integration_main:
 				"realid": "SERIAL12345",
 				"keystore": "NO_KEYSTORE",
 				"status": "testing",
-				"file": None
+				"file": testfile
 				})
 			intgobj.send(message)
 
@@ -2711,7 +2763,6 @@ def interpreter():
 	osd = os_detect()
 	logger = log_management()
 	config = config_manager()
-	integrations = integration_main()
 	##### TEST #####
 	if arguments == "test":
 		pass
@@ -2721,6 +2772,7 @@ def interpreter():
 		global cache
 		cfact = config_factory()
 		cache = file_cache()
+		integrations = integration_main()
 		log("interpreter: Command to run received. Calling start_tftp")
 		global tracking
 		tracking = tracking_class()
@@ -2757,28 +2809,6 @@ def interpreter():
 			console("\nInstall complete! Logout and log back into SSH to activate auto-complete\n")
 		else:
 			console("Install/upgrade cancelled")
-	##### HIDDEN SHOW #####
-	#elif arguments == "show ids":
-	#	config.hidden_list_ids()
-	#elif arguments[:9] == "show keys" and len(sys.argv) >= 4:
-	#	config.hidden_list_keys(sys.argv[3])
-	#elif arguments == "show arrays":
-	#	config.hidden_list_arrays()
-	#elif arguments == "show array members":
-	#	config.hidden_list_array_members()
-	#elif arguments == "show snmpoids":
-	#	config.hidden_list_snmpoid()
-	#elif arguments == "show templates":
-	#	config.hidden_list_templates()
-	#elif arguments == "show associations":
-	#	config.hidden_list_associations()
-	#elif arguments == "show all_ids":
-	#	config.hidden_list_all_ids()
-	#elif arguments == "show imagefiles":
-	#	config.hidden_list_image_files()
-	#elif arguments == "show dhcpd-scopes":
-	#	config.hidden_list_dhcpd_scopes()
-	##### HIDDEN SHOW #####
 	elif arguments == "hidden" or arguments == "hidden show":
 		console(" - hidden show keystores                          |  Show a list of configured keystores")
 		console(" - hidden show keys <keystore>                    |  Show a list of configured keys under a keystore")
@@ -2836,7 +2866,11 @@ def interpreter():
 	elif arguments == "show config" or arguments == "show run":
 		config.show_config()
 	elif arguments[:11] == "show config" and len(sys.argv) > 3:
-		console(config.show_config_section(sys.argv[3]))
+		cfglist = config.show_config_section(sys.argv[3])
+		console("#######################################################\n#\n#\n#")
+		for line in cfglist:
+			console(line)
+		console("#\n#\n#\n#######################################################")
 	elif arguments == "show status":
 		console("\n")
 		osd.service_control("status", "ztp")
@@ -3042,8 +3076,10 @@ def interpreter():
 	elif arguments == "request ipc-console":
 		os.system('telnet localhost 10000')
 	elif arguments[:25] == "request integration-setup" and len(sys.argv) >= 4:
+		integrations = integration_main()
 		integrations.setup(sys.argv[3])
 	elif arguments[:24] == "request integration-test" and len(sys.argv) >= 4:
+		integrations = integration_main()
 		integrations.test(sys.argv[3])
 	##### SERVICE #####
 	elif arguments == "service":
