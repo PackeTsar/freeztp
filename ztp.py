@@ -172,6 +172,8 @@ class ztp_dyn_file:
 		self.ipaddr = raddress
 		self.port = rport
 		self.track = track
+		if self.track:
+			tracking.files.append(self)
 		log("ztp_dyn_file: Instantiated as (%s)" % str(self))
 		if not data:
 			self.data = cfact.request(afile, raddress)
@@ -180,7 +182,7 @@ class ztp_dyn_file:
 		self.__len__ = self.len
 		log("ztp_dyn_file: File size is %s bytes" % len(self.data))
 	def tell(self):
-		log("ztp_dyn_file.tell: Called. Returning (%s)" % str(self.position))
+		#log("ztp_dyn_file.tell: Called. Returning (%s)" % str(self.position))
 		return self.position
 	def len(self):
 		if len(self.data)-self.position < 1:
@@ -189,11 +191,11 @@ class ztp_dyn_file:
 	def read(self, size):
 		start = self.position
 		end = self.position + size
-		if not self.closed:
-			log("ztp_dyn_file.read: Called with size (%s)" % str(size))
+		#if not self.closed:
+		#	log("ztp_dyn_file.read: Called with size (%s)" % str(size))
 		result = str(self.data[start:end])
-		if not self.closed:
-			log("ztp_dyn_file.read: Returning position %s to %s" % (str(start), str(end)))
+		#if not self.closed:
+		#	log("ztp_dyn_file.read: Returning position %s to %s" % (str(start), str(end)))
 		self.position = end
 		if self.track:
 			tracking.report({
@@ -201,7 +203,8 @@ class ztp_dyn_file:
 				"filename": self.filename,
 				"port": self.port,
 				"position": self.position,
-				"source": "ztp_dyn_file"})
+				"source": "ztp_dyn_file",
+				"file": self})
 		return result
 	def seek(self, arg1, arg2):
 		log("ztp_dyn_file.seek: Called with args (%s) and (%s)" % (str(arg1), str(arg1)))
@@ -261,8 +264,6 @@ class config_factory:
 			return True
 		elif filename == self.imagediscoveryfile:
 			log("cfact.lookup: Requested filename matches the imagediscoveryfile")
-			#if self._check_supression(ipaddr):
-			#	return False
 			log("cfact.lookup: #############IOS UPGRADE ABOUT TO BEGIN!!!#############")
 			return True
 		elif self.uniquesuffix in filename and tempid in list(self.snmprequests):  # If the filname contains the suffix and it has an entry in the snmp request list
@@ -756,7 +757,7 @@ class config_manager:
 		return result[0:len(result)-1]
 	def set_integration(self, iden, key, value):
 		if key == "type":
-			if value not in integrations.mods:
+			if value not in integration_main.mods:
 				console("Integration type (%s) not recognized or allowed" % value)
 				sys.exit()
 		if iden in list(self.running["integrations"]):
@@ -1082,7 +1083,7 @@ class config_manager:
 		for scope in self.running["integrations"]:
 			console(scope)
 	def hidden_list_integration_types(self):
-		for typ in integrations.mods:
+		for typ in integration_main.mods:
 			console(typ)
 	def hidden_show_integration_keys(self, iden):
 		try:
@@ -1093,7 +1094,7 @@ class config_manager:
 	def hidden_show_integration_opts(self, iden):
 		try:
 			typ = self.running["integrations"][iden]["type"]
-			options = integrations.mods[typ].options
+			options = integration_main.mods[typ].options
 			for option in options:
 				console(option)
 		except KeyError:
@@ -1318,29 +1319,6 @@ class log_management:
 #####   installation scripts used to install/upgrade the ZTP server       #####
 class installer:
 	defaultconfig = '''{\n    "associations": {\n        "SERIAL100": "SHORT_TEMPLATE", \n        "STACK1": "LONG_TEMPLATE"\n    }, \n    "community": "secretcommunity", \n    "default-keystore": "DEFAULT_VALUES", \n    "default-template": "LONG_TEMPLATE", \n    "delay-keystore": 1000, \n    "dhcpd": {}, \n    "file-cache-timeout": 10, \n    "idarrays": {\n        "STACK1": [\n            "SERIAL1", \n            "SERIAL2", \n            "SERIAL3"\n        ]\n    }, \n    "image-supression": 3600, \n    "imagediscoveryfile": "freeztp_ios_upgrade", \n    "imagefile": "cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin", \n    "initialfilename": "network-confg", \n    "keyvalstore": {\n        "DEFAULT_VALUES": {\n            "hostname": "UNKNOWN_HOST", \n            "vl1_ip_address": "dhcp"\n        }, \n        "SERIAL100": {\n            "hostname": "SOMEDEVICE", \n            "vl1_ip_address": "10.0.0.201"\n        }, \n        "STACK1": {\n            "hostname": "CORESWITCH", \n            "vl1_ip_address": "10.0.0.200", \n            "vl1_netmask": "255.255.255.0"\n        }\n    }, \n    "snmpoid": {\n        "WS-C2960_SERIAL_NUMBER": "1.3.6.1.2.1.47.1.1.1.1.11.1001", \n        "WS-C3850_SERIAL_NUMBER": "1.3.6.1.2.1.47.1.1.1.1.11.1000"\n    }, \n    "starttemplate": {\n        "delineator": "^", \n        "value": "hostname {{ autohostname }}\\n!\\nsnmp-server community {{ community }} RO\\n!\\nend"\n    }, \n    "suffix": "-confg", \n    "templates": {\n        "LONG_TEMPLATE": {\n            "delineator": "^", \n            "value": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} {{ vl1_netmask }}\\n no shut\\n!\\n!{% for interface in range(1,49) %}\\ninterface GigabitEthernet1/0/{{interface}}\\n description User Port (VLAN 1)\\n switchport access vlan 1\\n switchport mode access\\n no shutdown\\n!{% endfor %}\\n!\\nip domain-name test.com\\n!\\nusername admin privilege 15 secret password123\\n!\\naaa new-model\\n!\\n!\\naaa authentication login CONSOLE local\\naaa authorization console\\naaa authorization exec default local if-authenticated\\n!\\ncrypto key generate rsa modulus 2048\\n!\\nip ssh version 2\\n!\\nline vty 0 15\\nlogin authentication default\\ntransport input ssh\\nline console 0\\nlogin authentication CONSOLE\\nend"\n        }, \n        "SHORT_TEMPLATE": {\n            "delineator": "^", \n            "value": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} 255.255.255.0\\n no shut\\n!\\nend"\n        }\n    }, \n    "tftproot": "/etc/ztp/tftproot/"\n}'''
-	#def beta_minor_update_script(self):
-	#	os.system('mkdir -p ' + "/etc/ztp/tftproot/")  # Create new tftproot dir
-	#	newconfigkeys = {
-	#	"imagediscoveryfile": "autoinstall_dhcp",
-	#	"imagefile": "cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin",
-	#	"tftproot": "/etc/ztp/tftproot/",
-	#	"default-template": None,
-	#	"delay-keystore": None
-	#	}
-	#	for key in newconfigkeys:
-	#		if key not in list(config.running):
-	#			console("Adding (%s) to config schema" % key)
-	#			config.running.update({key: newconfigkeys[key]})
-	#	config.save()
-	#	try:
-	#		import netifaces
-	#	except ImportError:
-	#		#### DHCPD Install Process
-	#		console("\n\nInstalling some new dependencies...\n")
-	#		os.system("pip install netaddr")
-	#		os.system("pip install netifaces")
-	#		osd.install_pkg("telnet")
-	#		self.dhcp_setup()
 	def minor_update_script(self):
 		newconfigkeys = {
 		"integrations": {}
@@ -2094,6 +2072,7 @@ class tracking_class:
 		self._master = {}
 		self.store = persistent_store("tracking")
 		self.provdb = persistent_store("provisioning")
+		self.files = []
 		if not client:
 			self.status = self.store.recall()
 			self.mthread = threading.Thread(target=self._maintenance)
@@ -2168,6 +2147,7 @@ class tracking_class:
 			self.active = True
 			self.threads = []
 			self.filesize = None
+			self.file = None
 			self.percent = None
 			self.rate = 0
 			self.creation = time.time()
@@ -2192,6 +2172,8 @@ class tracking_class:
 						self.position = args[arg]
 					elif arg == "filesize":
 						self.filesize = args[arg]
+					elif arg == "file":
+						self.file = args[arg]
 		def _inactivity_timeout(self, seconds, thread=False):
 			if not thread:  #If not started in a thread, restart in a thread
 				thread = threading.Thread(target=self._inactivity_timeout,
@@ -2366,7 +2348,6 @@ class tracking_class:
 				index += 1
 	def get_live_status(self, client):
 		data = []
-		#d = self.store.recall()
 		client.send("get downloads\n")
 		time.sleep(0.1)
 		d = client.recv(100000)
@@ -2398,17 +2379,18 @@ class tracking_class:
 		for lease in leases:
 			data.append(leases[lease])
 		return make_table(['ethernet', 'ip', 'start', 'end', 'state', 'uid'], data)
-	def check_integrations(self, ):
-		pass
-		#message = integration_message({
-		#	"ip": ipaddr,
-		#	"tempid": tempid,
-		#	"mac": "aa:bb:cc:dd:ee",
-		#	"realid": "SERIAL12345",
-		#	"keystore": keystoreid,
-		#	"status": "Complete",
-		#	"file": testfile
-		#	})
+	def check_integrations(self, provdata):
+		if provdata["Status"] == "Complete":
+			message = integration_message({
+				"ip": provdata["IP Address"],
+				"tempid": provdata["Temp ID"],
+				"mac": provdata["MAC Address"],
+				"realid": provdata["Real IDs"],
+				"keystore": provdata["Matched Keystore"],
+				"status": "Complete",
+				"file": None
+				})
+			integrations.send(message)
 	def provision(self, data):
 		current = self.provdb.recall()
 		for tstamp in current:  # For each ID in provdb
@@ -2417,6 +2399,7 @@ class tracking_class:
 					if data[attrib]:  # If the attribute has a value
 						current[tstamp][attrib] = data[attrib]  # Update the provdb
 				self.provdb(current)
+				self.check_integrations(current[tstamp])
 				return None  # Return to prevent further execution
 		# To prevent multiple provdb entries when multiple requests
 		for tstamp in current:
@@ -2427,6 +2410,7 @@ class tracking_class:
 							if data[attrib]:  # If the attribute has a value
 								current[tstamp][attrib] = data[attrib]  # Update the provdb
 						self.provdb(current)
+						self.check_integrations(current[tstamp])
 						return None  # Return to prevent further execution
 		# If the tempid was not in provdb
 		dhcpinfo = self.prov_get_mac(data["IP Address"])
@@ -2471,6 +2455,7 @@ class tracking_class:
 				uid = leases[lease]["uid"]
 				return [mac, uid]
 		return None
+
 
 class persistent_store:
 	def __init__(self, dbid):
@@ -2547,24 +2532,25 @@ class integration_spark:
 			try:
 				return json.loads(response.text)
 			except Exception as e:
-				print(e)
+				console(e)
 				return None
 		else:
 			raise ValueError("Invalid Server Response Status Code: (%s)\n(%s)" % (str(response.status_code), response.text))
 	def _rooms(self):
 		return self._get("https://api.ciscospark.com/v1/rooms")
-	#def _people(self, query):
-	#	return self._get("https://api.ciscospark.com/v1/people", payload=query)
 	def _get_destination(self):
 		for option in self.options[1:]:
 			if option in self.config:
 				return {option: self.config[option]}
 	def send(self, message):
+		import io
+		log("integration_spark.send: Processing message for object (%s)" % self.config["objname"])
 		data = self._get_destination()
 		if not data:
 			raise ValueError("Invalid or Unknown Integration Destination")
 		if message.file != None:
-			data.update({'files': ('config.txt', message.file, "text/plain")})
+			sendfile = io.StringIO(message.file.data)
+			data.update({'files': (message.file.filename, sendfile, "text/plain")})
 		txtmsg = """------------------------------
 ## **FreeZTP Provisioning (%s)**
 - Timestamp: **%s**
@@ -2576,7 +2562,8 @@ class integration_spark:
 
 ------------------------------""" % (self.config["objname"], message.timestamp, message.ip, message.tempid, message.mac, message.realid, message.keystore)
 		data.update({"markdown": txtmsg})
-		return self._post("https://api.ciscospark.com/v1/messages", data)
+		result = self._post("https://api.ciscospark.com/v1/messages", data)
+		log("integration_spark.send: Message delivery for (%s) complete" % self.config["objname"])
 	def setup(self):
 		console("""
 		Spark Integration Wizard Overview:
@@ -2636,31 +2623,51 @@ class integration_message:
 
 
 class integration_main:
+	mods = {
+		integration_spark.name: integration_spark,
+		integration_gsheet.name: integration_gsheet,
+		integration_testing.name: integration_testing
+	}
 	def __init__(self):
-		self.mods = {
-			integration_spark.name: integration_spark,
-			integration_gsheet.name: integration_gsheet,
-			integration_testing.name: integration_testing
-		}
 		self.loaded = False
 		self.targets = {}
 		self._load()
 	def _load(self):
+		log("integration_main._load: Beginning load of integration objects. Make sure your internet connection is working properly.")
 		for target in config.running["integrations"]:
-			if "type" in config.running["integrations"][target]:
-				typ = config.running["integrations"][target]["type"]
-				if typ in self.mods:
-					cfg = {target:{"objname": target}}
-					cfg.update(config.running["integrations"][target])
-					self.targets.update({target: self.mods[typ](cfg)})
-					log("integration_main._load: Integration object (%s) loaded to targets successfully" % target)
+			try:
+				if "type" in config.running["integrations"][target]:
+					typ = config.running["integrations"][target]["type"]
+					if typ in self.mods:
+						cfg = {"objname":target}
+						cfg.update(config.running["integrations"][target])
+						self.targets.update({target: self.mods[typ](cfg)})
+						log("integration_main._load: Integration object (%s) loaded to targets successfully" % target)
+					else:
+						log("integration_main._load: Integration object (%s) has unrecognized type (%s)! Cannot load object" % (target, typ))
 				else:
-					log("integration_main._load: Integration object (%s) has unrecognized type (%s)! Cannot load object" % (target, typ))
-			else:
-				log("integration_main._load: Integration object (%s) has no type! Cannot load object" % target)
-	def send(self, message):
-		for target in self.targets:
-			self.targets[target].send(message)
+					log("integration_main._load: Integration object (%s) has no type! Cannot load object" % target)
+			except Exception as e:
+				log("integration_main._load: Error loading object (%s): %s" % (target, e))
+	def send(self, message, thread=False):
+		if not thread:
+			log("integration_main.send: Starting initialization thread to wait for files")
+			t = threading.Thread(target=self.send, args=(message,True))
+			t.daemon = True
+			t.start()
+		else:
+			found = False
+			while not found:
+				for file in tracking.files:
+					if message.tempid in file.filename:
+						message.file = file
+						found = True
+				time.sleep(1)
+			for target in self.targets:
+				log("integration_main.send: Kicking off thread for integration (%s)" % target)
+				thread = threading.Thread(target=self.targets[target].send, args=(message,))
+				thread.daemon = True
+				thread.start()
 	def table_select(self, columnorder, tabdata, message):
 		index = 1
 		lookup = {}
@@ -2691,7 +2698,6 @@ class integration_main:
 		config.save()
 		console("New Integration Config Saved!")
 	def test(self, objname):
-		import io
 		if objname not in config.running["integrations"]:
 			console("Integration object (%s) does not exist!" % objname)
 		else:
@@ -2700,7 +2706,7 @@ class integration_main:
 			cfg.update(config.running["integrations"][objname])
 			intgobj = self.mods[typ](cfg)
 			testfile = ztp_dyn_file("testconfig", "127.0.0.1", "65000",
-				data="This is a\ntest configuration", track=False)
+				data=u"This is a\ntest configuration", track=False)
 			#testfile = open("README.md", "r")
 			#testfile = io.StringIO(u"This is a\ntest configuration")
 			message = integration_message({
