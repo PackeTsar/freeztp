@@ -539,6 +539,13 @@ class snmp_query:
 					alldead = False
 			if alldead:
 				loop = False
+	def _encode_response(self, response):
+		codecs = ["utf-8", "hex"]
+		for codec in codecs:
+			try:
+				return str(response).encode(codec)
+			except Exception as e:
+				log("snmp_query._decode_response: Query decode failed with (%s)" % (codec,))
 	def _query_worker(self, oidname, oid):
 		starttime = time.time()
 		self.status = "running"
@@ -546,6 +553,7 @@ class snmp_query:
 			try:
 				log("snmp_query._query_worker: Attempting SNMP Query")
 				response = self._get_oid(oid)
+				response = self._encode_response(response)
 				self.responses.update({oidname: response})
 				self.status = "success"
 				self.complete = True
