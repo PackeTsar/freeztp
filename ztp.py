@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "dev1.1.0a"
+version = "dev1.1.0b"
 
 
 # NEXT: Finish clear integration
@@ -2241,6 +2241,10 @@ class tracking_class:
 					index += 1
 				return result
 		def _format_lease(self, lease):
+			try:
+				uid = lease.data["uid"]
+			except KeyError:
+				uid = None
 			result = {
 				"ip": lease.ip,
 				"ethernet": lease.ethernet,
@@ -2248,7 +2252,7 @@ class tracking_class:
 				"state": lease.binding_state,
 				"start": self.utc_to_local(lease.start).strftime("%Y-%m-%d %H:%M:%S"),
 				"end": self.utc_to_local(lease.end).strftime("%Y-%m-%d %H:%M:%S"),
-				"uid": lease.data["uid"]
+				"uid": uid
 			}
 			return result
 	########################################################################
