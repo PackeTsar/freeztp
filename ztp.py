@@ -13,22 +13,6 @@ version = "dev1.1.0c"
 # NEXT: Finish clear integration
 # NEXT: Fully test inputs to integrations and helpers
 # NEXT: Get spark integration working
-#
-#
-# NEXT: CSV External Keystore
-#   ztp set external-keystore TEST type csv
-#   ztp set external-keystore TEST file "/home/user/mycsv.csv"
-#   ztp set external-keystore TEST mode offline
-#
-#
-#
-#
-#
-#
-#
-#
-#
-
 
 
 ##### Import native modules #####
@@ -323,7 +307,17 @@ class config_factory:
 			if serial in arraykeys:
 				return True
 			else:
-				return False
+				if serial in list(external_keystores.data["keyvalstore"]):
+					return True
+				else:
+					arraykeys = []
+					for array in external_keystores.data["idarrays"]:
+						for iden in external_keystores.data["idarrays"][array]:
+							arraykeys.append(iden)
+					if serial in arraykeys:
+						return True
+					else:
+						return False
 	def request(self, filename, ipaddr, test=False):
 		log("cfact.request: Called with filename (%s) and IP (%s)" % (filename, ipaddr))
 		if filename == self.basefilename:
@@ -458,9 +452,13 @@ class config_factory:
 		template = j2.Template(self.baseconfig)
 		return template.render(autohostname=tempid, community=self.basesnmpcom)
 	def merge_final_config(self, keystoreid):
+		if keystoreid in config.running["keyvalstore"]:
+			path = config.running
+		else:
+			path = external_keystores.data
 		templatedata = self.get_template(keystoreid)
 		template = j2.Template(templatedata)
-		vals = config.running["keyvalstore"][keystoreid]
+		vals = path["keyvalstore"][keystoreid]
 		return template.render(vals)
 	def get_keystore_id(self, idens, silent=False):
 		for identifier in idens:
@@ -472,11 +470,19 @@ class config_factory:
 					log("cfact.get_keystore_id: ID (%s) resolved directly to a keystore" % identifier)
 				return identifier
 			else:
-				identity = False
 				for arrayname in list(config.running["idarrays"]):
 					if identifier in config.running["idarrays"][arrayname]:
 						if not silent:
 							log("cfact.get_keystore_id: ID '%s' resolved to arrayname '%s'" % (identifier, arrayname))
+						return arrayname
+				if identifier in list(external_keystores.data["keyvalstore"]):
+					if not silent:
+						log("cfact.get_keystore_id: ID (%s) resolved directly to an external-keystore" % identifier)
+					return identifier
+				for arrayname in list(external_keystores.data["idarrays"]):
+					if identifier in external_keystores.data["idarrays"][arrayname]:
+						if not silent:
+							log("cfact.get_keystore_id: ID '%s' resolved to arrayname '%s' in an external-keystore" % (identifier, arrayname))
 						return arrayname
 	def get_template(self, identity):
 		log("cfact.get_template: Looking up association for identity (%s)" % identity)
@@ -504,6 +510,10 @@ class config_factory:
 		return response
 	def merge_test(self, iden, template):
 		identity = self.get_keystore_id({"Merge Test":iden})
+		if identity in config.running["keyvalstore"]:
+			path = config.running
+		else:
+			path = external_keystores.data
 		if not identity:
 			log("ID '%s' does not exist in keystore!" % iden)
 		else:
@@ -523,7 +533,7 @@ class config_factory:
 			varsmissing = False
 			missingvarlist = []
 			for var in templatevarlist:
-				if var not in config.running["keyvalstore"][identity]:
+				if var not in path["keyvalstore"][identity]:
 					varsmissing = True
 					missingvarlist.append(var)
 			if varsmissing:
@@ -532,7 +542,7 @@ class config_factory:
 					console("\t-"+var)
 				console("\n")
 			console("##############################")
-			console(j2template.render(config.running["keyvalstore"][identity]))
+			console(j2template.render(path["keyvalstore"][identity]))
 			console("##############################")
 
 
@@ -2718,18 +2728,11 @@ class integration_spark:
 		return self.config
 
 
-class integration_gsheet:
-	name = "gsheet"
-	options = ["api-key", "sheetId"]
-	def setup(self):
-		print("gsheet setup")
-
-
-class integration_testing:
-	name = "testing"
-	options = ["api-key", "othertest"]
-	def setup(self):
-		print("testing setup")
+#class integration_gsheet:
+#	name = "gsheet"
+#	options = ["api-key", "sheetId"]
+#	def setup(self):
+#		print("gsheet setup")
 
 
 class integration_message:
@@ -2751,9 +2754,7 @@ class integration_message:
 
 class integration_main:
 	mods = {
-		integration_spark.name: integration_spark,
-		integration_gsheet.name: integration_gsheet,
-		integration_testing.name: integration_testing
+		integration_spark.name: integration_spark
 	}
 	def __init__(self):
 		self.loaded = False
@@ -2934,26 +2935,30 @@ class external_keystore_main:
 			if array_keys:
 				idarray_commands.append("ztp set idarray %s %s" % (id, " ".join(array_keys)))
 			keystore_commands.append("#")
-		print("#\n#\n#")
+		console("#\n#\n#")
 		for cmd in keystore_commands:
-			print(cmd)
-		print("#\n#")
+			console(cmd)
+		console("#\n#")
 		for cmd in idarray_commands:
-			print(cmd)
-		print("#\n#\n#")
+			console(cmd)
+		console("#\n#\n#")
 		for cmd in association_commands:
-			print(cmd)
-		print("#\n#\n#")
+			console(cmd)
+		console("#\n#\n#")
 		self.load()
 	def load(self):
 		keyvalstore = {}
 		idarrays = {}
 		associations = {}
+		# log("external_keystore_main.load: Starting load of external-keystores")
 		for objname in config.running["external-keystores"]:
+			# log("external_keystore_main.load: Loading external-keystore (%s)" % objname)
 			if "file" not in config.running["external-keystores"][objname]:
-				log("external_keystore_main.load: ERROR: External-keystore (%s) has no file defined!" % objname)
+				# log("external_keystore_main.load: ERROR: External-keystore (%s) has no file defined!" % objname)
+				pass
 			elif not os.path.isfile(config.running["external-keystores"][objname]["file"]):
-				log("external_keystore_main.load: ERROR: Cannot fine file (%s)" % config.running["external-keystores"][objname]["file"])
+				# log("external_keystore_main.load: ERROR: Cannot fine file (%s)" % config.running["external-keystores"][objname]["file"])
+				pass
 			else:
 				csvfile = open(config.running["external-keystores"][objname]["file"], "r")
 				reader = csv.DictReader(csvfile)
@@ -2980,7 +2985,6 @@ class external_keystore_main:
 			"idarrays": idarrays,
 			"associations": associations,
 		}
-		print(json.dumps(self.data, indent=4))
 
 
 
@@ -3029,9 +3033,12 @@ def interpreter():
 	global logger
 	global osd
 	global integrations
+	global external_keystores
 	osd = os_detect()
 	logger = log_management()
 	config = config_manager()
+	external_keystores = external_keystore_main()
+	external_keystores.load()
 	##### TEST #####
 	if arguments == "test":
 		pass
@@ -3042,7 +3049,6 @@ def interpreter():
 		cfact = config_factory()
 		cache = file_cache()
 		integrations = integration_main()
-		external_keystores = external_keystore_main()
 		log("interpreter: Command to run received. Calling start_tftp")
 		global tracking
 		tracking = tracking_class()
@@ -3278,7 +3284,7 @@ def interpreter():
 		console(" - clear snmpoid <name>                           |  Delete an SNMP OID from the configuration")
 	elif (arguments[:17] == "clear integration" and len(sys.argv) < 5) or arguments == "clear integration":
 		console(" - clear integration <svc_name> (all|<key>)       |  Delete an individual key or a whole keystore ID from the configuration")
-	elif (arguments[:17] == "clear integration" and len(sys.argv) < 5) or arguments == "clear integration":
+	elif (arguments[:23] == "clear external-keystore" and len(sys.argv) < 5) or arguments == "clear external-keystore":
 		console(" - clear external-keystore <name> (all|<key>)     |  Delete an individual external-keystore key or the whole object")
 	elif (arguments[:14] == "clear template" and len(sys.argv) < 4) or arguments == "clear template":
 		console(" - clear template <template_name>                 |  Delete a named configuration template")
