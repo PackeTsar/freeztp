@@ -7,12 +7,27 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "dev1.1.0b"
+version = "dev1.1.0c"
 
 
 # NEXT: Finish clear integration
 # NEXT: Fully test inputs to integrations and helpers
 # NEXT: Get spark integration working
+#
+#
+# NEXT: CSV External Keystore
+#   ztp set external-keystore TEST type csv
+#   ztp set external-keystore TEST file "/home/user/mycsv.csv"
+#   ztp set external-keystore TEST mode offline
+#
+#
+#
+#
+#
+#
+#
+#
+#
 
 
 
@@ -20,6 +35,7 @@ version = "dev1.1.0b"
 import os
 import re
 import sys
+import csv
 import time
 import json
 import curses
@@ -642,6 +658,8 @@ class config_manager:
 			self.save()
 		elif setting == "integration":
 			self.set_integration(args[3], args[4], args[5])
+		elif setting == "external-keystore":
+			self.set_external_keystore(args[3], args[4], args[5])
 		elif setting == "template" or setting == "initial-template":
 			if setting == "initial-template":
 				console("Enter each line of the template ending with '%s' on a line by itself" % args[3])
@@ -714,6 +732,20 @@ class config_manager:
 						del self.running["integrations"][iden][key]
 						if self.running["integrations"][iden] == {}: # No keys left
 							del self.running["integrations"][iden]
+		elif setting == "external-keystore":
+			key = args[4]
+			if iden not in list(self.running["external-keystores"]):
+				console("External-keystore (%s) does not exist!" % iden)
+			else:
+				if key == "all":
+					del self.running["external-keystores"][iden]
+				else:
+					if key not in list(self.running["external-keystores"][iden]):
+						console("Key (%s) does not exist under external-keystore (%s)" % (iden, key))
+					else:
+						del self.running["external-keystores"][iden][key]
+						if self.running["external-keystores"][iden] == {}: # No keys left
+							del self.running["external-keystores"][iden]
 		elif setting == "idarray":
 			if iden not in list(self.running["idarrays"]):
 				console("ID does not exist in the idarrays: %s" % iden)
@@ -764,6 +796,17 @@ class config_manager:
 			self.running["integrations"][iden].update({key: value})
 		else:
 			self.running["integrations"].update({iden: {key: value}})
+		self.save()
+	def set_external_keystore(self, iden, key, value):
+		if key == "type":
+			if value not in external_keystore_main.mods:
+				console("External-keystore type (%s) not recognized or allowed" % value)
+				sys.exit()
+		if iden in list(self.running["external-keystores"]):
+			self.running["external-keystores"][iden].update({key: value})
+		else:
+			self.running["external-keystores"].update({iden: {key: value}})
+			self.running["external-keystores"][iden].update({"mode": "offline"})
 		self.save()
 	def set_keystore(self, iden, keyword, value):
 		try:
@@ -889,6 +932,15 @@ class config_manager:
 				intglist.append("ztp set integration %s %s %s" % (iden, key, value))
 			intglist.append("#")
 		############
+		exkeystlist = []
+		for iden in self.running["external-keystores"]:
+			for key in self.running["external-keystores"][iden]:
+				value = self.running["external-keystores"][iden][key]
+				if key == "file":
+					value = "'%s'" % value
+				exkeystlist.append("ztp set external-keystore %s %s %s" % (iden, key, value))
+			exkeystlist.append("#")
+		############
 		associationlist = []
 		for association in self.running["associations"]:
 			template = self.running["associations"][association]
@@ -946,6 +998,8 @@ class config_manager:
 		configtext += delaykey
 		configtext += "\n#\n#\n#\n"
 		for cmd in intglist:
+			configtext += cmd + "\n"
+		for cmd in exkeystlist:
 			configtext += cmd + "\n"
 		configtext += "#\n#\n#\n#######################################################"
 		###########
@@ -1082,8 +1136,14 @@ class config_manager:
 	def hidden_list_integrations(self):
 		for scope in self.running["integrations"]:
 			console(scope)
+	def hidden_list_external_keystores(self):
+		for scope in self.running["external-keystores"]:
+			console(scope)
 	def hidden_list_integration_types(self):
 		for typ in integration_main.mods:
+			console(typ)
+	def hidden_list_external_keystore_types(self):
+		for typ in external_keystore_main.mods:
 			console(typ)
 	def hidden_show_integration_keys(self, iden):
 		try:
@@ -1091,10 +1151,24 @@ class config_manager:
 				console(key)
 		except KeyError:
 			pass
+	def hidden_show_external_keystore_keys(self, iden):
+		try:
+			for key in list(self.running["external-keystores"][iden]):
+				console(key)
+		except KeyError:
+			pass
 	def hidden_show_integration_opts(self, iden):
 		try:
 			typ = self.running["integrations"][iden]["type"]
 			options = integration_main.mods[typ].options
+			for option in options:
+				console(option)
+		except KeyError:
+			pass
+	def hidden_show_external_keystore_opts(self, iden):
+		try:
+			typ = self.running["external-keystores"][iden]["type"]
+			options = external_keystore_main.mods[typ].options
 			for option in options:
 				console(option)
 		except KeyError:
@@ -1321,7 +1395,8 @@ class installer:
 	defaultconfig = '''{\n    "associations": {\n        "SERIAL100": "SHORT_TEMPLATE", \n        "STACK1": "LONG_TEMPLATE"\n    }, \n    "community": "secretcommunity", \n    "default-keystore": "DEFAULT_VALUES", \n    "default-template": "LONG_TEMPLATE", \n    "delay-keystore": 1000, \n    "dhcpd": {}, \n    "file-cache-timeout": 10, \n    "idarrays": {\n        "STACK1": [\n            "SERIAL1", \n            "SERIAL2", \n            "SERIAL3"\n        ]\n    }, \n    "image-supression": 3600, \n    "imagediscoveryfile": "freeztp_ios_upgrade", \n    "imagefile": "cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin", \n    "initialfilename": "network-confg", \n    "keyvalstore": {\n        "DEFAULT_VALUES": {\n            "hostname": "UNKNOWN_HOST", \n            "vl1_ip_address": "dhcp"\n        }, \n        "SERIAL100": {\n            "hostname": "SOMEDEVICE", \n            "vl1_ip_address": "10.0.0.201"\n        }, \n        "STACK1": {\n            "hostname": "CORESWITCH", \n            "vl1_ip_address": "10.0.0.200", \n            "vl1_netmask": "255.255.255.0"\n        }\n    }, \n    "snmpoid": {\n        "WS-C2960_SERIAL_NUMBER": "1.3.6.1.2.1.47.1.1.1.1.11.1001", \n        "WS-C3850_SERIAL_NUMBER": "1.3.6.1.2.1.47.1.1.1.1.11.1000"\n    }, \n    "starttemplate": {\n        "delineator": "^", \n        "value": "hostname {{ autohostname }}\\n!\\nsnmp-server community {{ community }} RO\\n!\\nend"\n    }, \n    "suffix": "-confg", \n    "templates": {\n        "LONG_TEMPLATE": {\n            "delineator": "^", \n            "value": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} {{ vl1_netmask }}\\n no shut\\n!\\n!{% for interface in range(1,49) %}\\ninterface GigabitEthernet1/0/{{interface}}\\n description User Port (VLAN 1)\\n switchport access vlan 1\\n switchport mode access\\n no shutdown\\n!{% endfor %}\\n!\\nip domain-name test.com\\n!\\nusername admin privilege 15 secret password123\\n!\\naaa new-model\\n!\\n!\\naaa authentication login CONSOLE local\\naaa authorization console\\naaa authorization exec default local if-authenticated\\n!\\ncrypto key generate rsa modulus 2048\\n!\\nip ssh version 2\\n!\\nline vty 0 15\\nlogin authentication default\\ntransport input ssh\\nline console 0\\nlogin authentication CONSOLE\\nend"\n        }, \n        "SHORT_TEMPLATE": {\n            "delineator": "^", \n            "value": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} 255.255.255.0\\n no shut\\n!\\nend"\n        }\n    }, \n    "tftproot": "/etc/ztp/tftproot/"\n}'''
 	def minor_update_script(self):
 		newconfigkeys = {
-		"integrations": {}
+		"integrations": {},
+		"external-keystores": {},
 		}
 		for key in newconfigkeys:
 			if key not in list(config.running):
@@ -1524,13 +1599,13 @@ _ztp_complete()
 		COMPREPLY=( $(compgen -W "show" -- $cur) )
 		;;
 	  "set")
-		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile file-cache-timeout integration template keystore idarray association default-keystore default-template imagefile image-supression delay-keystore dhcpd" -- $cur) )
+		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile file-cache-timeout integration external-keystore template keystore idarray association default-keystore default-template imagefile image-supression delay-keystore dhcpd" -- $cur) )
 		;;
 	  "clear")
-		COMPREPLY=( $(compgen -W "keystore idarray snmpoid integration template association dhcpd log downloads provisioning" -- $cur) )
+		COMPREPLY=( $(compgen -W "keystore idarray snmpoid integration external-keystore template association dhcpd log downloads provisioning" -- $cur) )
 		;;
 	  "request")
-		COMPREPLY=( $(compgen -W "merge-test initial-merge default-keystore-test snmp-test dhcp-option-125 dhcpd-commit auto-dhcpd ipc-console integration-setup integration-test" -- $cur) )
+		COMPREPLY=( $(compgen -W "merge-test initial-merge default-keystore-test snmp-test dhcp-option-125 dhcpd-commit auto-dhcpd ipc-console integration-setup integration-test external-keystore-test keystore-csv-export" -- $cur) )
 		;;
 	  "service")
 		COMPREPLY=( $(compgen -W "start stop restart status" -- $cur) )
@@ -1542,7 +1617,7 @@ _ztp_complete()
 	case "$prev" in
 	  show)
 		if [ "$prev2" == "hidden" ]; then
-		  COMPREPLY=( $(compgen -W "keystores keys idarrays idarray snmpoids templates associations all_ids imagefiles dhcpd-scopes integrations integration-types integration-opts integration-keys" -- $cur) )
+		  COMPREPLY=( $(compgen -W "keystores keys idarrays idarray snmpoids templates associations all_ids imagefiles dhcpd-scopes integrations integration-types integration-opts integration-keys external-keystores external-keystore-types external-keystore-opts external-keystore-keys" -- $cur) )
 		fi
 		;;
 	  config)
@@ -1621,6 +1696,15 @@ _ztp_complete()
 		fi
 		if [ "$prev2" == "clear" ]; then
 		  COMPREPLY=( $(compgen -W "${integrations}" -- $cur) )
+		fi
+		;;
+	  external-keystore)
+		local exkeystores=$(for k in `ztp hidden show external-keystores`; do echo $k ; done)
+		if [ "$prev2" == "set" ]; then
+		  COMPREPLY=( $(compgen -W "${exkeystores} <store_name> -" -- $cur) )
+		fi
+		if [ "$prev2" == "clear" ]; then
+		  COMPREPLY=( $(compgen -W "${exkeystores}" -- $cur) )
 		fi
 		;;
 	  template)
@@ -1729,6 +1813,17 @@ _ztp_complete()
 		  COMPREPLY=( $(compgen -W "${objs} <svc_name> -" -- $cur) )
 		fi
 		;;
+	  external-keystore-test)
+		if [ "$prev2" == "request" ]; then
+		  local objs=$(for id in `ztp hidden show external-keystores`; do echo $id ; done)
+		  COMPREPLY=( $(compgen -W "${objs} <store_name> -" -- $cur) )
+		fi
+		;;
+	  keystore-csv-export)
+		if [ "$prev2" == "request" ]; then
+		  COMPREPLY=( $(compgen -W "<file_name> -" -- $cur) )
+		fi
+		;;
 	  *)
 		;;
 	esac
@@ -1760,12 +1855,30 @@ _ztp_complete()
 		  local integrations=$(for k in `ztp hidden show integrations`; do echo $k ; done)
 		  COMPREPLY=( $(compgen -W "${integrations} <svc_name> -" -- $cur) )
 		fi
+		if [ "$prev" == "external-keystore-opts" ]; then
+		  local exkeystores=$(for k in `ztp hidden show exkeystores`; do echo $k ; done)
+		  COMPREPLY=( $(compgen -W "${exkeystores} <store_name> -" -- $cur) )
+		fi
+		if [ "$prev" == "external-keystore-keys" ]; then
+		  local integrations=$(for k in `ztp hidden show external-keystores`; do echo $k ; done)
+		  COMPREPLY=( $(compgen -W "${external-keystores} <store_name> -" -- $cur) )
+		fi
 	  fi
 	fi
 	if [ "$prev2" == "integration" ]; then
 	  local keys=$(for k in `ztp hidden show integration-keys $prev`; do echo $k ; done)
 	  if [ "$prev3" == "set" ]; then
 		local opts=$(for k in `ztp hidden show integration-opts $prev`; do echo $k ; done)
+		COMPREPLY=( $(compgen -W "${opts} ${keys} type" -- $cur) )
+	  fi
+	  if [ "$prev3" == "clear" ]; then
+		COMPREPLY=( $(compgen -W "${keys} all -" -- $cur) )
+	  fi
+	fi
+	if [ "$prev2" == "external-keystore" ]; then
+	  local keys=$(for k in `ztp hidden show external-keystore-keys $prev`; do echo $k ; done)
+	  if [ "$prev3" == "set" ]; then
+		local opts=$(for k in `ztp hidden show external-keystore-opts $prev`; do echo $k ; done)
 		COMPREPLY=( $(compgen -W "${opts} ${keys} type" -- $cur) )
 	  fi
 	  if [ "$prev3" == "clear" ]; then
@@ -1818,6 +1931,16 @@ _ztp_complete()
 	  if [ "$prev3" == "integration" ]; then
 		if [ "$prev" == "type" ]; then
 		  local types=$(for k in `ztp hidden show integration-types`; do echo $k ; done)
+		  COMPREPLY=( $(compgen -W "${types}" -- $cur) )
+		else
+		  COMPREPLY=( $(compgen -W "<value> -" -- $cur) )
+		fi
+	  fi
+	fi
+	if [ "$prev4" == "set" ]; then
+	  if [ "$prev3" == "external-keystore" ]; then
+		if [ "$prev" == "type" ]; then
+		  local types=$(for k in `ztp hidden show external-keystore-types`; do echo $k ; done)
 		  COMPREPLY=( $(compgen -W "${types}" -- $cur) )
 		else
 		  COMPREPLY=( $(compgen -W "<value> -" -- $cur) )
@@ -2727,6 +2850,142 @@ class integration_main:
 
 
 
+class external_keystore_csv:
+	name = "csv"
+	options = ["file", "mode"]
+	def setup(self):
+		print("testing setup")
+
+
+class external_keystore_main:
+	mods = {
+		external_keystore_csv.name: external_keystore_csv
+	}
+	def __init__(self):
+		self.data = {}
+	def export(self, filename):
+		headers = [
+			"keystore_id",
+			"association"
+		]
+		idarray_count = 1
+		for idarray in config.running["idarrays"]:
+			if len(config.running["idarrays"][idarray]) > idarray_count:
+				idarray_count = len(config.running["idarrays"][idarray])
+		for each in range(1, idarray_count+1):
+			headers.append("idarray_"+str(each))
+		for keystore_id in config.running["keyvalstore"]:
+			for key in config.running["keyvalstore"][keystore_id]:
+				if key not in headers:
+					headers.append(key)
+		tabledata = []
+		for keystore_id in config.running["keyvalstore"]:
+			rowdata = {"keystore_id": keystore_id}
+			if keystore_id in config.running["associations"]:
+				rowdata.update({"association": config.running["associations"][keystore_id]})
+			if keystore_id in config.running["idarrays"]:
+				array_num = 1
+				for value in config.running["idarrays"][keystore_id]:
+					rowdata.update({"idarray_"+str(array_num): value})
+					array_num += 1
+			for key in config.running["keyvalstore"][keystore_id]:
+				rowdata.update({key: config.running["keyvalstore"][keystore_id][key]})
+			tabledata.append(rowdata)
+		csvfile = open(filename, "w")
+		writer = csv.DictWriter(csvfile, fieldnames=headers)
+		writer.writeheader()
+		for row in tabledata:
+			writer.writerow(row)
+		csvfile.close()
+	def test(self, objname):
+		if objname not in config.running["external-keystores"]:
+			console("External-keystore object (%s) does not exist!" % objname)
+			sys.exit()
+		if "file" not in config.running["external-keystores"][objname]:
+			console("External-keystore object (%s) has no file defined!" % objname)
+			sys.exit()
+		filename = config.running["external-keystores"][objname]["file"]
+		if not os.path.isfile(filename):
+			console("Cannot find file (%s)" % filename)
+			sys.exit()
+		csvfile = open(filename, "r")
+		reader = csv.DictReader(csvfile)
+		keystore_commands = []
+		idarray_commands = []
+		association_commands = []
+		for row in reader:
+			if "keystore_id" not in row:
+				console("ERROR: Cannot find required header (keystore_id)")
+				sys.exit()
+			id = row["keystore_id"]
+			array_keys = []
+			for key in row:
+				if row[key]:
+					if key == "association":
+						association_commands.append("ztp set association id %s template %s" % (id, row[key]))
+					if key[:7] == "idarray":
+						array_keys.append(row[key])
+					else:
+						if " " in key:
+							key = '%s' % key
+						if " " in row[key]:
+							row[key] = '%s' % row[key]
+						keystore_commands.append("ztp set keystore %s %s %s" % (id, key, row[key]))
+			if array_keys:
+				idarray_commands.append("ztp set idarray %s %s" % (id, " ".join(array_keys)))
+			keystore_commands.append("#")
+		print("#\n#\n#")
+		for cmd in keystore_commands:
+			print(cmd)
+		print("#\n#")
+		for cmd in idarray_commands:
+			print(cmd)
+		print("#\n#\n#")
+		for cmd in association_commands:
+			print(cmd)
+		print("#\n#\n#")
+		self.load()
+	def load(self):
+		keyvalstore = {}
+		idarrays = {}
+		associations = {}
+		for objname in config.running["external-keystores"]:
+			if "file" not in config.running["external-keystores"][objname]:
+				log("external_keystore_main.load: ERROR: External-keystore (%s) has no file defined!" % objname)
+			elif not os.path.isfile(config.running["external-keystores"][objname]["file"]):
+				log("external_keystore_main.load: ERROR: Cannot fine file (%s)" % config.running["external-keystores"][objname]["file"])
+			else:
+				csvfile = open(config.running["external-keystores"][objname]["file"], "r")
+				reader = csv.DictReader(csvfile)
+				for row in reader:
+					if "keystore_id" not in row:
+						log("ERROR: Cannot find required header (keystore_id)")
+						break
+					id = row["keystore_id"]
+					array_keys = []
+					for key in row:
+						if row[key]:
+							if key == "association":
+								associations.update({id: row[key]})
+							if key[:7] == "idarray":
+								array_keys.append(row[key])
+							else:
+								if id not in keyvalstore:
+									keyvalstore.update({id:{}})
+								keyvalstore[id].update({key: row[key]})
+					if array_keys:
+						idarrays.update({id:array_keys})
+		self.data = {
+			"keyvalstore": keyvalstore,
+			"idarrays": idarrays,
+			"associations": associations,
+		}
+		print(json.dumps(self.data, indent=4))
+
+
+
+
+
 ##### TFTP Server main entry. Starts the TFTP server listener and is the  #####
 #####   main program loop. It is started with the ztp_dyn_file class      #####
 #####   passed in as the dynamic file function.                           #####
@@ -2783,6 +3042,7 @@ def interpreter():
 		cfact = config_factory()
 		cache = file_cache()
 		integrations = integration_main()
+		external_keystores = external_keystore_main()
 		log("interpreter: Command to run received. Calling start_tftp")
 		global tracking
 		tracking = tracking_class()
@@ -2834,6 +3094,8 @@ def interpreter():
 		console(" - hidden show integration-types                  |  Show a list of available integration types")
 		console(" - hidden show integration-opts <svc_name>        |  Show a external integration key options")
 		console(" - hidden show integration-keys <svc_name>        |  Show a list of keys configured on an integration")
+		console(" - hidden show external-keystores                 |  Show a list of keys configured for external-keystores")
+		console(" - hidden show external-keystore-types            |  Show a list of available external-keystore types")
 	elif arguments == "hidden show keystores":
 		config.hidden_list_ids()
 	elif arguments[:16] == "hidden show keys" and len(sys.argv) >= 4:
@@ -2856,12 +3118,20 @@ def interpreter():
 		config.hidden_list_dhcpd_scopes()
 	elif arguments == "hidden show integrations":
 		config.hidden_list_integrations()
+	elif arguments == "hidden show external-keystores":
+		config.hidden_list_external_keystores()
 	elif arguments == "hidden show integration-types":
 		config.hidden_list_integration_types()
+	elif arguments == "hidden show external-keystore-types":
+		config.hidden_list_external_keystore_types()
 	elif arguments[:28] == "hidden show integration-keys" and len(sys.argv) >= 4:
 		config.hidden_show_integration_keys(sys.argv[4])
+	elif arguments[:34] == "hidden show external-keystore-keys" and len(sys.argv) >= 4:
+		config.hidden_show_external_keystore_keys(sys.argv[4])
 	elif arguments[:28] == "hidden show integration-opts" and len(sys.argv) >= 4:
 		config.hidden_show_integration_opts(sys.argv[4])
+	elif arguments[:34] == "hidden show external-keystore-opts" and len(sys.argv) >= 4:
+		config.hidden_show_external_keystore_opts(sys.argv[4])
 	##### SHOW #####
 	elif arguments == "show":
 		console(" - show (config|run) (raw)                        |  Show the current ZTP configuration")
@@ -2926,6 +3196,7 @@ def interpreter():
 		console(" - set file-cache-timeout <timeout>                            |  Set the timeout for cacheing of files. '0' disables caching.")
 		console("--------------------------------------------------------- SETTINGS YOU SHOULD CHANGE ---------------------------------------------------------")
 		console(" - set integration <svc_name> [parameters]                     |  Configure external integrations")
+		console(" - set external-keystore <store_name> [parameters]             |  Configure an external keystore")
 		console(" - set template <template_name> <end_char>                     |  Create/Modify a named J2 tempate which is used for the final config push")
 		console(" - set keystore <id/arrayname> <keyword> <value>               |  Create a keystore entry to be used when merging final configurations")
 		console(" - set idarray <arrayname> <id's>                              |  Create an ID array to allow multiple real ids to match one keystore id")
@@ -2957,11 +3228,17 @@ def interpreter():
 		console("                                                                    Examples:")
 		console("                                                                         - set integration ADMINSROOM type spark")
 		console("                                                                         - set integration ADMINSROOM api-key $ucH@ran60mk3y")
-		console("                                                                           set integration ADMINSROOM roomId SOMEROOMID")
+		console("                                                                         - set integration ADMINSROOM roomId SOMEROOMID")
 		console("                                                                         ")
 		console("                                                                         - set integration DIRECTMSG type spark")
 		console("                                                                         - set integration DIRECTMSG api-key $ucH@ran60mk3y")
-		console("                                                                           set integration DIRECTMSG toPersonEmail admin@company.com")
+		console("                                                                         - set integration DIRECTMSG toPersonEmail admin@company.com")
+	elif (arguments[:21] == "set external-keystore" and len(sys.argv) < 6) or arguments == "set external-keystore":
+		console(" - set external-keystore <store_name> [parameters]             |  Configure an external keystore")
+		console("                                                                    Examples:")
+		console("                                                                         - set external-keystore MYCSV type csv")
+		console("                                                                         - set external-keystore MYCSV file '/home/user/mycsv.csv'")
+		console("                                                                         - set external-keystore MYCSV mode offline")
 	elif (arguments[:12] == "set template" and len(sys.argv) < 5) or arguments == "set template":
 		console(" - set template <template_name> <end_char>        |  Set the final configuration j2 template pushed to host after discovery/identification")
 	elif (arguments[:12] == "set keystore" and len(sys.argv) < 6) or arguments == "set keystore":
@@ -2988,6 +3265,7 @@ def interpreter():
 	elif arguments == "clear":
 		console(" - clear snmpoid <name>                           |  Delete an SNMP OID from the configuration")
 		console(" - clear integration <svc_name> (all|<key>)       |  Delete an individual integration key or the whole object")
+		console(" - clear external-keystore <name> (all|<key>)     |  Delete an individual external-keystore key or the whole object")
 		console(" - clear template <template_name>                 |  Delete a named configuration template")
 		console(" - clear keystore <id> (all|<keyword>)            |  Delete an individual key or a whole keystore ID from the configuration")
 		console(" - clear idarray <arrayname>                      |  Delete an ID array from the configuration")
@@ -3000,6 +3278,8 @@ def interpreter():
 		console(" - clear snmpoid <name>                           |  Delete an SNMP OID from the configuration")
 	elif (arguments[:17] == "clear integration" and len(sys.argv) < 5) or arguments == "clear integration":
 		console(" - clear integration <svc_name> (all|<key>)       |  Delete an individual key or a whole keystore ID from the configuration")
+	elif (arguments[:17] == "clear integration" and len(sys.argv) < 5) or arguments == "clear integration":
+		console(" - clear external-keystore <name> (all|<key>)     |  Delete an individual external-keystore key or the whole object")
 	elif (arguments[:14] == "clear template" and len(sys.argv) < 4) or arguments == "clear template":
 		console(" - clear template <template_name>                 |  Delete a named configuration template")
 	elif (arguments[:14] == "clear keystore" and len(sys.argv) < 5) or arguments == "clear keystore":
@@ -3013,6 +3293,8 @@ def interpreter():
 	elif arguments[:13] == "clear snmpoid" and len(sys.argv) >= 4:
 		config.clear(sys.argv)
 	elif arguments[:17] == "clear integration" and len(sys.argv) >= 5:
+		config.clear(sys.argv)
+	elif arguments[:23] == "clear external-keystore" and len(sys.argv) >= 5:
 		config.clear(sys.argv)
 	elif arguments[:14] == "clear template" and len(sys.argv) >= 4:
 		config.clear(sys.argv)
@@ -3047,6 +3329,8 @@ def interpreter():
 		console(" - request ipc-console                            |  Connect to the IPC console to run commands (be careful)")
 		console(" - request integration-setup <svc_name>           |  Run the setup wizard for the module type configured on the object")
 		console(" - request integration-test <svc_name>            |  Perform a test message push to a target integration object")
+		console(" - request external-keystore-test <store_name>    |  Perform a test import of external-keystore data and print as set keystore config")
+		console(" - request keystore-csv-export <file_name>        |  Export the current keystore, idarray, and association config as CSV")
 	elif arguments == "request merge-test":
 		console(" - request merge-test <id>                        |  Perform a test jinja2 merge of the final template with a keystore ID")
 	elif arguments == "request dhcp-option-125":
@@ -3055,6 +3339,10 @@ def interpreter():
 		console(" - request integration-setup <svc_name>           |  Run the setup wizard for the module type configured on the object")
 	elif arguments == "request integration-test":
 		console(" - request integration-test <svc_name>            |  Perform a test message push to a target integration object")
+	elif arguments == "request external-keystore-test":
+		console(" - request external-keystore-test <store_name>    |  Perform a test import of external-keystore data and print as set keystore config")
+	elif arguments == "request keystore-csv-export":
+		console(" - request keystore-csv-export <file_name>        |  Export the current keystore, idarray, and association config as CSV")
 	elif arguments == "request initial-merge":
 		cfact = config_factory()
 		tracking = tracking_class(client=True)
@@ -3091,6 +3379,12 @@ def interpreter():
 	elif arguments[:24] == "request integration-test" and len(sys.argv) >= 4:
 		integrations = integration_main()
 		integrations.test(sys.argv[3])
+	elif arguments[:30] == "request external-keystore-test" and len(sys.argv) >= 4:
+		external_keystores = external_keystore_main()
+		external_keystores.test(sys.argv[3])
+	elif arguments[:27] == "request keystore-csv-export" and len(sys.argv) >= 4:
+		external_keystores = external_keystore_main()
+		external_keystores.export(sys.argv[3])
 	##### SERVICE #####
 	elif arguments == "service":
 		console(" - service (start|stop|restart|status)            |  Start, Stop, or Restart the installed ZTP service")
@@ -3146,7 +3440,8 @@ def interpreter():
 		console(" - set imagediscoveryfile <filename>                           |  Set the name of the IOS image discovery file used for IOS upgrades")
 		console(" - set file-cache-timeout <timeout>                            |  Set the timeout for cacheing of files. '0' disables caching.")
 		console("--------------------------------------------------------- SETTINGS YOU SHOULD CHANGE ---------------------------------------------------------")
-		console(" - set integration <svc_name> [parameters]                     |  Configure external integrations")
+		console(" - set integration <svc_name> [parameters]                     |  Configure external integrations (experimental)")
+		console(" - set external-keystore <store_name> [parameters]             |  Configure an external keystore")
 		console(" - set template <template_name> <end_char>                     |  Create/Modify a named J2 tempate which is used for the final config push")
 		console(" - set keystore <id/arrayname> <keyword> <value>               |  Create a keystore entry to be used when merging final configurations")
 		console(" - set idarray <arrayname> <id_#1> <id_#2> ...                 |  Create an ID array to allow multiple real ids to match one keystore id")
@@ -3180,6 +3475,8 @@ def interpreter():
 		console(" - request ipc-console                                         |  Connect to the IPC console to run commands (be careful)")
 		console(" - request integration-setup <svc_name>                        |  Run the setup wizard for the module type configured on the object")
 		console(" - request integration-test <svc_name>                         |  Perform a test message push to a target integration object")
+		console(" - request external-keystore-test <store_name>                 |  Perform a test import of external-keystore data and print as set keystore config")
+		console(" - request keystore-csv-export <file_name>                     |  Export the current keystore, idarray, and association config as CSV")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console(" - service (start|stop|restart|status)                         |  Start, Stop, or Restart the installed ZTP service")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
@@ -3189,3 +3486,6 @@ def interpreter():
 
 if __name__ == "__main__":
 	interpreter()
+#   ztp set external-keystore TEST type csv
+#   ztp set external-keystore TEST file "/home/user/mycsv.csv"
+#   ztp set external-keystore TEST mode offline
