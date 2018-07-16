@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "dev1.1.0d"
+version = "dev1.1.0e"
 
 
 # NEXT: Finish clear integration
@@ -652,6 +652,10 @@ class config_manager:
 			self.associations = self.running["associations"]
 		else:
 			console("No Config File Found! Please install app!")
+	def load_external(self):
+		if self.configfile:
+			if "external-keystores" in self.running:
+				external_keystores.load()
 	def save(self):
 		self.rawconfig = self.json = json.dumps(self.running, indent=4, sort_keys=True)
 		f = open(self.configfile, "w")
@@ -2860,7 +2864,11 @@ class external_keystore_main:
 		external_keystore_csv.name: external_keystore_csv
 	}
 	def __init__(self):
-		self.data = {}
+		self.data = {
+			"keyvalstore": {},
+			"idarrays": {},
+			"associations": {}
+		}
 	def export(self, filename):
 		headers = [
 			"keystore_id",
@@ -2947,39 +2955,36 @@ class external_keystore_main:
 		keyvalstore = {}
 		idarrays = {}
 		associations = {}
-		if "external-keystores" not in config.running:
-			console("Cannot load external keystores. May not be installed.")
-		else:
-			# log("external_keystore_main.load: Starting load of external-keystores")
-			for objname in config.running["external-keystores"]:
-				# log("external_keystore_main.load: Loading external-keystore (%s)" % objname)
-				if "file" not in config.running["external-keystores"][objname]:
-					# log("external_keystore_main.load: ERROR: External-keystore (%s) has no file defined!" % objname)
-					pass
-				elif not os.path.isfile(config.running["external-keystores"][objname]["file"]):
-					# log("external_keystore_main.load: ERROR: Cannot fine file (%s)" % config.running["external-keystores"][objname]["file"])
-					pass
-				else:
-					csvfile = open(config.running["external-keystores"][objname]["file"], "r")
-					reader = csv.DictReader(csvfile)
-					for row in reader:
-						if "keystore_id" not in row:
-							log("ERROR: Cannot find required header (keystore_id)")
-							break
-						id = row["keystore_id"]
-						array_keys = []
-						for key in row:
-							if row[key]:
-								if key == "association":
-									associations.update({id: row[key]})
-								if key[:7] == "idarray":
-									array_keys.append(row[key])
-								else:
-									if id not in keyvalstore:
-										keyvalstore.update({id:{}})
-									keyvalstore[id].update({key: row[key]})
-						if array_keys:
-							idarrays.update({id:array_keys})
+		# log("external_keystore_main.load: Starting load of external-keystores")
+		for objname in config.running["external-keystores"]:
+			# log("external_keystore_main.load: Loading external-keystore (%s)" % objname)
+			if "file" not in config.running["external-keystores"][objname]:
+				# log("external_keystore_main.load: ERROR: External-keystore (%s) has no file defined!" % objname)
+				pass
+			elif not os.path.isfile(config.running["external-keystores"][objname]["file"]):
+				# log("external_keystore_main.load: ERROR: Cannot fine file (%s)" % config.running["external-keystores"][objname]["file"])
+				pass
+			else:
+				csvfile = open(config.running["external-keystores"][objname]["file"], "r")
+				reader = csv.DictReader(csvfile)
+				for row in reader:
+					if "keystore_id" not in row:
+						log("ERROR: Cannot find required header (keystore_id)")
+						break
+					id = row["keystore_id"]
+					array_keys = []
+					for key in row:
+						if row[key]:
+							if key == "association":
+								associations.update({id: row[key]})
+							if key[:7] == "idarray":
+								array_keys.append(row[key])
+							else:
+								if id not in keyvalstore:
+									keyvalstore.update({id:{}})
+								keyvalstore[id].update({key: row[key]})
+					if array_keys:
+						idarrays.update({id:array_keys})
 		self.data = {
 			"keyvalstore": keyvalstore,
 			"idarrays": idarrays,
@@ -3036,9 +3041,9 @@ def interpreter():
 	global external_keystores
 	osd = os_detect()
 	logger = log_management()
-	config = config_manager()
 	external_keystores = external_keystore_main()
-	external_keystores.load()
+	config = config_manager()
+	config.load_external()
 	##### TEST #####
 	if arguments == "test":
 		pass
