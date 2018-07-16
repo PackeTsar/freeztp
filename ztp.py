@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "dev1.1.0e"
+version = "dev1.1.0f"
 
 
 # NEXT: Finish clear integration
@@ -496,6 +496,16 @@ class config_factory:
 					response = self.templates[templatename]["value"]
 				else:
 					log("cfact.get_template: Template (%s) does not exist. Checking for default-template" % templatename)
+		if not response:
+			for association in external_keystores.data["associations"]:
+				if identity == association:
+					templatename = external_keystores.data["associations"][association]
+					log("cfact.get_template: Found associated template (%s) in an external keystore" % templatename)
+					if templatename in self.templates:
+						log("cfact.get_template: Template (%s) exists. Returning" % templatename)
+						response = self.templates[templatename]["value"]
+					else:
+						log("cfact.get_template: Template (%s) does not exist. Checking for default-template" % templatename)
 		if not response:
 			if config.running["default-template"]:
 				log("cfact.get_template: Default-template is pointing to (%s)" % config.running["default-template"])
