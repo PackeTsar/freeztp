@@ -5,7 +5,7 @@ A Zero-Touch Provisioning system built for Cisco Catalyst switches.
 
 -----------------------------------------
 ##   VERSION   ##
-The version of FreeZTP documented here is: **v1.0.0**
+The version of FreeZTP documented here is: **v1.1.0**
 
 
 -----------------------------------------
@@ -19,7 +19,8 @@ The version of FreeZTP documented here is: **v1.0.0**
 7. [Command Interface](#command-interface)
 8. [DHCP Functionality](#dhcp-functionality)
 9. [Advanced Usage](#advanced-usage)
-10. [Contributing](#contributing)
+10. [External Keystores](#external-keystores)
+11. [Contributing](#contributing)
 
 
 -----------------------------------------
@@ -474,6 +475,26 @@ It is possible to use an external DHCP server instead of the FreeZTP one, but yo
 		- A flat keystore value entry looks like `ztp set keystore STACK1 hostname CORESWITCH`
 		- A JSON value looks like `ztp set keystore STACK1 settings '{"hostname": "CORESWITCH", "ip_address": "192.168.1.1"}'`
 	- You can tell if ZTP accepted the entry as a JSON entry by using `ztp show config raw` and looking to see if the value of the `settings` key is complex instead of flat.
+
+
+-----------------------------------------
+##   EXTERNAL KEYSTORES   ##
+FreeZTP v1.1.0 introduces the concept of external keystores. An external keystore is a data source which supplements or replaces the `set keystore`, `set idarray`, and `set association` commands in the native FreeZTP config. The only supported external data source, at this time, is CSV files. The CSV file format has some reserved and required headers which pass special information on to FreeZTP:
+
+  - `keystore_id` (Required) - This header/column is required in the CSV file as it defines the Keystore ID for ZTP to use to search for matching Real ID's
+  - `association` (Optional) - This header/column specifies which template will be used when the Keystore ID is matched. If it is left blank, FreeZTP will use the default template
+  - `idarray_xxx` (Optional) - Any header beginning with `idarray` will add the values in that column into an IDArray for the `keystore_id` specified in its row.
+
+The easiest way to get started with external keystores is to use an example CSV file. Use the command `ztp request keystore-csv-export <file_name>` to generate one out of your current Keystore, IDArray, and Association data. You can then configure the external keystore; an example is provided below. 
+
+```
+ztp set external-keystore MYCSVFILE type csv
+ztp set external-keystore MYCSVFILE file '/home/user/mycsv.csv'
+```
+
+After you are finished, you can test the CSV file by converting it into native FreeZTP commands using the command `ztp request external-keystore-test <store_name>`. This test will translate the CSV and show you the equivalent native FreeZTP set commands which would configure all this data into FreeZTP. There is no need to enter the shown commands into ZTP, they are there just for your reference and to see if your CSV is formatted properly.
+
+After your CSV is built and the external keystore is configured in the ZTP config, you will need to restart the service to let ZTP grab the CSV data and have it ready for any switches coming online.
 
 
 -----------------------------------------
