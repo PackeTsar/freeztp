@@ -20,8 +20,9 @@ The version of FreeZTP documented here is: **v1.1.0**
 8. [DHCP Functionality](#dhcp-functionality)
 9. [Advanced Usage](#advanced-usage)
 10. [External Keystores](#external-keystores)
-11. [Integrations](#Integrations)
-12. [Contributing](#contributing)
+11. [Integrations](#integrations)
+12. [Versions](#versions)
+13. [Contributing](#contributing)
 
 
 -----------------------------------------
@@ -480,7 +481,7 @@ It is possible to use an external DHCP server instead of the FreeZTP one, but yo
 
 -----------------------------------------
 ##   EXTERNAL KEYSTORES   ##
-FreeZTP v1.1.0 introduces the concept of external keystores. An external keystore is a data source which supplements or replaces the `set keystore`, `set idarray`, and `set association` commands in the native FreeZTP config. The only supported external data source, at this time, is CSV files. The CSV file format has some reserved and required headers which pass special information on to FreeZTP:
+FreeZTP v1.1.0 introduced the concept of external keystores. An external keystore is a data source which supplements or replaces the `set keystore`, `set idarray`, and `set association` commands in the native FreeZTP config. The only supported external data source, at this time, is CSV files. The CSV file format has some reserved and required headers which pass special information on to FreeZTP:
 
   - `keystore_id` (Required) - This header/column is required in the CSV file as it defines the Keystore ID for ZTP to use to search for matching Real ID's
   - `association` (Optional) - This header/column specifies which template will be used when the Keystore ID is matched. If it is left blank, FreeZTP will use the default template
@@ -500,7 +501,7 @@ After your CSV is built and the external keystore is configured in the ZTP confi
 
 -----------------------------------------
 ##   INTEGRATIONS   ##
-FreeZTP v1.1.0 also introduces some integration features with 3rd parties. The only supported integration at this time is with Cisco Spark (now called Webex Teams). The Spark integration will allow FreeZTP to send provisioning notifications to a Spark room or to a specific account.
+FreeZTP v1.1.0 introduced some integration features with 3rd parties. The only supported integration at this time is with Cisco Spark (now called Webex Teams). The Spark integration will allow FreeZTP to send provisioning notifications to a Spark room or to a specific account.
 
 The easiest way to set up the integration is to use the command `ztp request integration-setup <svc_name>` (the `<svc_name>` is the name of the configuration object FreeZTP will use once the configuration is generated, its name doesnt matter). This command will start a wizard which will walk you through setting up the integration. You can also use the below configuration example to set up the integration yourself.
 
@@ -511,6 +512,18 @@ ztp set integration MY_SPARK_ROOM api-key MyaP1k3y
 ```
 
 Once setup, you can send a test message to the integration destination using the command `ztp request integration-test <svc_name>`.
+
+
+-----------------------------------------
+##   VERSIONS   ##
+
+**Bug Fixes in V1.0.0 --> V1.0.1:**
+- *ISSUE #20*: The command `ztp show ztp dhcpd leases` would throw an exception is the `uid` key is not present in the DHCP lease reader.
+
+
+**Added Features in V1.0.1 --> V1.1.0:**
+- *External Keystores*: A respository of FreeZTP Keystore, IDArray, and Association data which can be stored and accessed from an external data source. See the [External Keystores](#external-keystores) section for more information.
+- *Integrations*: 3rd party hooks which can be leveraged for notifications, etc. See the [Integrations](#integrations) section for more information.
 
 
 -----------------------------------------
