@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "dev1.1.0f"
+version = "dev1.1.0g"
 
 
 # NEXT: Finish clear integration
@@ -2935,17 +2935,19 @@ class external_keystore_main:
 				sys.exit()
 			id = row["keystore_id"]
 			array_keys = []
-			for key in row:
+			for key in reader.fieldnames:
 				if row[key]:
 					if key == "association":
+						print(key)
 						association_commands.append("ztp set association id %s template %s" % (id, row[key]))
-					if key[:7] == "idarray":
+					elif key[:7] == "idarray":
 						array_keys.append(row[key])
 					else:
 						if " " in key:
 							key = '%s' % key
 						if " " in row[key]:
 							row[key] = '%s' % row[key]
+						print(key)
 						keystore_commands.append("ztp set keystore %s %s %s" % (id, key, row[key]))
 			if array_keys:
 				idarray_commands.append("ztp set idarray %s %s" % (id, " ".join(array_keys)))
