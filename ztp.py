@@ -2947,36 +2947,39 @@ class external_keystore_main:
 		keyvalstore = {}
 		idarrays = {}
 		associations = {}
-		# log("external_keystore_main.load: Starting load of external-keystores")
-		for objname in config.running["external-keystores"]:
-			# log("external_keystore_main.load: Loading external-keystore (%s)" % objname)
-			if "file" not in config.running["external-keystores"][objname]:
-				# log("external_keystore_main.load: ERROR: External-keystore (%s) has no file defined!" % objname)
-				pass
-			elif not os.path.isfile(config.running["external-keystores"][objname]["file"]):
-				# log("external_keystore_main.load: ERROR: Cannot fine file (%s)" % config.running["external-keystores"][objname]["file"])
-				pass
-			else:
-				csvfile = open(config.running["external-keystores"][objname]["file"], "r")
-				reader = csv.DictReader(csvfile)
-				for row in reader:
-					if "keystore_id" not in row:
-						log("ERROR: Cannot find required header (keystore_id)")
-						break
-					id = row["keystore_id"]
-					array_keys = []
-					for key in row:
-						if row[key]:
-							if key == "association":
-								associations.update({id: row[key]})
-							if key[:7] == "idarray":
-								array_keys.append(row[key])
-							else:
-								if id not in keyvalstore:
-									keyvalstore.update({id:{}})
-								keyvalstore[id].update({key: row[key]})
-					if array_keys:
-						idarrays.update({id:array_keys})
+		if "external-keystores" not in config.running:
+			console("Cannot load external keystores. May not be installed.")
+		else:
+			# log("external_keystore_main.load: Starting load of external-keystores")
+			for objname in config.running["external-keystores"]:
+				# log("external_keystore_main.load: Loading external-keystore (%s)" % objname)
+				if "file" not in config.running["external-keystores"][objname]:
+					# log("external_keystore_main.load: ERROR: External-keystore (%s) has no file defined!" % objname)
+					pass
+				elif not os.path.isfile(config.running["external-keystores"][objname]["file"]):
+					# log("external_keystore_main.load: ERROR: Cannot fine file (%s)" % config.running["external-keystores"][objname]["file"])
+					pass
+				else:
+					csvfile = open(config.running["external-keystores"][objname]["file"], "r")
+					reader = csv.DictReader(csvfile)
+					for row in reader:
+						if "keystore_id" not in row:
+							log("ERROR: Cannot find required header (keystore_id)")
+							break
+						id = row["keystore_id"]
+						array_keys = []
+						for key in row:
+							if row[key]:
+								if key == "association":
+									associations.update({id: row[key]})
+								if key[:7] == "idarray":
+									array_keys.append(row[key])
+								else:
+									if id not in keyvalstore:
+										keyvalstore.update({id:{}})
+									keyvalstore[id].update({key: row[key]})
+						if array_keys:
+							idarrays.update({id:array_keys})
 		self.data = {
 			"keyvalstore": keyvalstore,
 			"idarrays": idarrays,
