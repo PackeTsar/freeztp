@@ -19,10 +19,11 @@ The version of FreeZTP documented here is: **v1.1.0**
 7. [Command Interface](#command-interface)
 8. [DHCP Functionality](#dhcp-functionality)
 9. [Advanced Usage](#advanced-usage)
-10. [External Keystores](#external-keystores)
-11. [Integrations](#integrations)
-12. [Versions](#versions)
-13. [Contributing](#contributing)
+10. [Upgrading](#upgrading)
+11. [External Keystores](#external-keystores)
+12. [Integrations](#integrations)
+13. [Versions](#versions)
+14. [Contributing](#contributing)
 
 
 -----------------------------------------
@@ -477,6 +478,22 @@ It is possible to use an external DHCP server instead of the FreeZTP one, but yo
 		- A flat keystore value entry looks like `ztp set keystore STACK1 hostname CORESWITCH`
 		- A JSON value looks like `ztp set keystore STACK1 settings '{"hostname": "CORESWITCH", "ip_address": "192.168.1.1"}'`
 	- You can tell if ZTP accepted the entry as a JSON entry by using `ztp show config raw` and looking to see if the value of the `settings` key is complex instead of flat.
+
+
+-----------------------------------------
+##   UPGRADING   ##
+1. Perform a `ztp show config` command and save the `set` commands displayed in a safe place (just in case)
+2. Download the code from the GitHub repo by using `git clone https://github.com/PackeTsar/freeztp.git`
+    - If the "freeztp" folder already exists, you can use git to update the clone `cd freeztp/; git pull`
+3. Move to the freeztp folder created by git using the `cd freeztp/` command
+4. (Optional) change to a different branch using the command `git checkout vX.X.X`
+5. Perform an upgrade of FreeZTP using the command `python ztp.py upgrade`
+6. Type in CONFIRM and hit ENTER to confirm you want to perform the upgrade
+7. Once the installer exits, you should run `ztp show config` and see your configuration from before
+8. Check that you are running the new version by issuing `ztp version`
+9. Perform a `ztp service restart` command to restart FreeZTP to use the new app version
+	- *NOTE: The FreeZTP service will continue running in the background throughout the upgrade process. It is not until you restart/stop the service that the new version and configuration will take effect.*
+10. You may also want to log out of the shell and back in to activate any new auto-complete functions.
 
 
 -----------------------------------------
