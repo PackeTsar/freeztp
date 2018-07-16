@@ -20,7 +20,8 @@ The version of FreeZTP documented here is: **v1.1.0**
 8. [DHCP Functionality](#dhcp-functionality)
 9. [Advanced Usage](#advanced-usage)
 10. [External Keystores](#external-keystores)
-11. [Contributing](#contributing)
+11. [Integrations](#Integrations)
+12. [Contributing](#contributing)
 
 
 -----------------------------------------
@@ -495,6 +496,21 @@ ztp set external-keystore MYCSVFILE file '/home/user/mycsv.csv'
 After you are finished, you can test the CSV file by converting it into native FreeZTP commands using the command `ztp request external-keystore-test <store_name>`. This test will translate the CSV and show you the equivalent native FreeZTP set commands which would configure all this data into FreeZTP. There is no need to enter the shown commands into ZTP, they are there just for your reference and to see if your CSV is formatted properly.
 
 After your CSV is built and the external keystore is configured in the ZTP config, you will need to restart the service to let ZTP grab the CSV data and have it ready for any switches coming online.
+
+
+-----------------------------------------
+##   INTEGRATIONS   ##
+FreeZTP v1.1.0 also introduces some integration features with 3rd parties. The only supported integration at this time is with Cisco Spark (now called Webex Teams). The Spark integration will allow FreeZTP to send provisioning notifications to a Spark room or to a specific account.
+
+The easiest way to set up the integration is to use the command `ztp request integration-setup <svc_name>` (the `<svc_name>` is the name of the configuration object FreeZTP will use once the configuration is generated, its name doesnt matter). This command will start a wizard which will walk you through setting up the integration. You can also use the below configuration example to set up the integration yourself.
+
+```
+ztp set integration MY_SPARK_ROOM type spark
+ztp set integration MY_SPARK_ROOM roomId R00m1dsTr1ng
+ztp set integration MY_SPARK_ROOM api-key MyaP1k3y
+```
+
+Once setup, you can send a test message to the integration destination using the command `ztp request integration-test <svc_name>`.
 
 
 -----------------------------------------

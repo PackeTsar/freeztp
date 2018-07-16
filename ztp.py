@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "dev1.1.0c"
+version = "dev1.1.0d"
 
 
 # NEXT: Finish clear integration
@@ -816,7 +816,6 @@ class config_manager:
 			self.running["external-keystores"][iden].update({key: value})
 		else:
 			self.running["external-keystores"].update({iden: {key: value}})
-			self.running["external-keystores"][iden].update({"mode": "offline"})
 		self.save()
 	def set_keystore(self, iden, keyword, value):
 		try:
@@ -2853,9 +2852,7 @@ class integration_main:
 
 class external_keystore_csv:
 	name = "csv"
-	options = ["file", "mode"]
-	def setup(self):
-		print("testing setup")
+	options = ["file"]
 
 
 class external_keystore_main:
