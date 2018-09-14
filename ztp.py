@@ -379,7 +379,10 @@ class config_factory:
 					log("cfact.request: Keystore ID Lookup returned (%s)" % keystoreid)
 					if keystoreid:
 						result = self.merge_final_config(keystoreid)
-						log("#"*25, "\n\n\ncfact.request: Sending config for (%s) using template (%s) to TFTPy.\n\n\n" % (identity, templatename), "#"*25)
+						mcfg = open(("/srv/ztp/tftproot/merged/" + identity + "_" + templatename + ".cfg"), "w") #This location should be configurable.
+						mcfg.write(result)
+						mcfg.close()
+						log("cfact.request: Final config merged, saved and returned to TFTPy:\n%s\n# ID: %s\n# Template: %s\n# File: %s\n%s" % ("#"*25, identity, templatename, mcfg.name, "#"*25))
 						self.send_tracking_update(ipaddr, filename, len(result))
 						if not test:
 							tracking.provision({
