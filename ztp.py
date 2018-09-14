@@ -382,7 +382,7 @@ class config_factory:
 						mcfg = open(("/srv/ztp/tftproot/merged/" + identity + "_" + templatename + ".cfg"), "w") #This location should be configurable.
 						mcfg.write(result)
 						mcfg.close()
-						log("cfact.request: Final config merged, saved and returned to TFTPy:\n%s\n# ID: %s\n# Template: %s\n# File: %s\n%s" % ("#"*25, identity, templatename, mcfg.name, "#"*25))
+						log("cfact.request: Final config merged, saved, and returned to TFTPy:\n%s\n# ID: %s\n# Template: %s\n# File: %s\n%s" % ("#"*50, identity, templatename, mcfg.name, "#"*50))
 						self.send_tracking_update(ipaddr, filename, len(result))
 						if not test:
 							tracking.provision({
