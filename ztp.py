@@ -379,7 +379,7 @@ class config_factory:
 					log("cfact.request: Keystore ID Lookup returned (%s)" % keystoreid)
 					if keystoreid:
 						result = self.merge_final_config(keystoreid)
-						log("cfact.request: Returning the below config to TFTPy:\n%s\n%s\n%s" % ("#"*25, result, "#"*25))
+						log("#"*25, "\n\n\ncfact.request: Sending config for (%s) using template (%s) to TFTPy.\n\n\n" % (identity, templatename), "#"*25)
 						self.send_tracking_update(ipaddr, filename, len(result))
 						if not test:
 							tracking.provision({
