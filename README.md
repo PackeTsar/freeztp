@@ -546,6 +546,7 @@ Once setup, you can send a test message to the integration destination using the
 
 **Added Features in V1.0.1 --> V1.1.0:**
 - *External Keystores*: A repository of FreeZTP Keystore, IDArray, and Association data which can be stored and accessed from an external data source. See the [External Keystores](#external-keystores) section for more information.
+- *External Templates*: Jinja2 templates can now be saved as files and referenced from the FreeZTP config in the form of `set external-template <template_name> file <filepath>`. External-templates are loaded when the ZTP service is started and kept in memory. The service must be restarted for any file changes to take effect
 - *Integrations*: 3rd party hooks which can be leveraged for notifications, etc. See the [Integrations](#integrations) section for more information.
 - *IDArray Values for Merging*: You can now insert IDArray values into your templates one of two ways (seen below). You can now also see the list of values available for merging in a log message right before the merge happens (use `ztp request merge-test` to test and see this).
   - Using the variables `{{ idarray_1 }}`, `{{ idarray_2 }}`, etc... will present the string values of the idarray entries for Jinja2 merging
