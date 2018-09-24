@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "dev1.1.0g"
+version = "dev1.1.0h"
 
 
 # NEXT: Finish clear integration
@@ -458,7 +458,8 @@ class config_factory:
 			path = external_keystores.data
 		templatedata = self.get_template(keystoreid)
 		template = j2.Template(templatedata)
-		vals = path["keyvalstore"][keystoreid]
+		vals = self.pull_keystore_values(path, keystoreid)
+		log("cfact.merge_final_config: Merging with values: {}".format(vals))
 		return template.render(vals)
 	def get_keystore_id(self, idens, silent=False):
 		for identifier in idens:
@@ -551,9 +552,25 @@ class config_factory:
 				for var in missingvarlist:
 					console("\t-"+var)
 				console("\n")
+			kvalues = self.pull_keystore_values(path, identity)
+			log("cfact.merge_final_config: Merging with values: {}".format(kvalues))
 			console("##############################")
-			console(j2template.render(path["keyvalstore"][identity]))
+			console(j2template.render(kvalues))
 			console("##############################")
+	def pull_keystore_values(self, path, keystore_id):
+		if keystore_id not in path["idarrays"]:
+			return path["keyvalstore"][keystore_id]
+		else:
+			log("cfact.pull_keystore_values: Inserting IDArray keys")
+			base_vals = dict(path["keyvalstore"][keystore_id])
+			ida_vals = path["idarrays"][keystore_id]
+			base_vals.update({"idarray": ida_vals})
+			index = 1
+			for value in ida_vals:
+				key = "idarray_{}".format(index)
+				base_vals.update({key: value})
+				index += 1
+			return base_vals
 
 
 ##### SNMP Querying object: It is instantiated by the config_factory      #####
@@ -1470,6 +1487,8 @@ class installer:
 		osd.install_pkg("gcc gmp python-devel")
 		osd.install_pkg("telnet")
 		os.system("pip install pysnmp")
+		os.system("pip install requests")
+		os.system("pip install requests_toolbelt")
 		os.system("pip install jinja2")
 		os.system("pip install netaddr")
 		os.system("pip install netifaces")
@@ -2938,7 +2957,6 @@ class external_keystore_main:
 			for key in reader.fieldnames:
 				if row[key]:
 					if key == "association":
-						print(key)
 						association_commands.append("ztp set association id %s template %s" % (id, row[key]))
 					elif key[:7] == "idarray":
 						array_keys.append(row[key])
@@ -2947,7 +2965,6 @@ class external_keystore_main:
 							key = '%s' % key
 						if " " in row[key]:
 							row[key] = '%s' % row[key]
-						print(key)
 						keystore_commands.append("ztp set keystore %s %s %s" % (id, key, row[key]))
 			if array_keys:
 				idarray_commands.append("ztp set idarray %s %s" % (id, " ".join(array_keys)))
