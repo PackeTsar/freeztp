@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "dev1.1.0k"
+version = "dev1.1.0l"
 
 
 # NEXT: Finish clear integration
@@ -573,7 +573,8 @@ class config_factory:
 			log("cfact.pull_keystore_values: Inserting IDArray keys")
 			base_vals = dict(path["keyvalstore"][keystore_id])
 			ida_vals = path["idarrays"][keystore_id]
-			base_vals.update({"idarray": ida_vals})
+			if "idarray" not in base_vals:
+				base_vals.update({"idarray": ida_vals})
 			index = 1
 			for value in ida_vals:
 				key = "idarray_{}".format(index)
@@ -3063,22 +3064,31 @@ class external_keystore_main:
 						log("ERROR: Cannot find required header (keystore_id)")
 						break
 					id = row["keystore_id"]
-					array_keys = []
+					array_values = []
+					unordered_arrays = {}
+					ordered_keys = []
 					for key in row:
 						if row[key]:
 							if key == "association":
 								associations.update({id: row[key]})
 							if key[:7] == "idarray":
-								array_keys.append(row[key])
+								array_values.append(row[key])
 								if id not in keyvalstore:
 									keyvalstore.update({id:{}})
 								keyvalstore[id].update({key: row[key]})
+								unordered_arrays.update({key: row[key]})
 							else:
 								if id not in keyvalstore:
 									keyvalstore.update({id:{}})
 								keyvalstore[id].update({key: row[key]})
-					if array_keys:
-						idarrays.update({id:array_keys})
+					if array_values:
+						idarrays.update({id:array_values})
+					if unordered_arrays:
+						ordered_array_keys = list(unordered_arrays)
+						ordered_array_keys.sort()
+						for key in ordered_array_keys:
+							ordered_keys.append(unordered_arrays[key])
+					keyvalstore[id].update({"idarray": ordered_keys})
 		self.data = {
 			"keyvalstore": keyvalstore,
 			"idarrays": idarrays,
