@@ -5,7 +5,7 @@ A Zero-Touch Provisioning system built for Cisco Catalyst switches.
 
 -----------------------------------------
 ##   VERSION   ##
-The version of FreeZTP documented here is: **v1.1.0**
+The version of FreeZTP documented here is: **dev1.1.0i**
 
 
 -----------------------------------------
@@ -504,7 +504,7 @@ FreeZTP v1.1.0 introduced the concept of external keystores. An external keystor
   - `association` (Optional) - This header/column specifies which template will be used when the Keystore ID is matched. If it is left blank, FreeZTP will use the default template
   - `idarray_xxx` (Optional) - Any header beginning with `idarray` will add the values in that column into an IDArray for the `keystore_id` specified in its row.
 
-The easiest way to get started with external keystores is to use an example CSV file. Use the command `ztp request keystore-csv-export <file_name>` to generate one out of your current Keystore, IDArray, and Association data. You can then configure the external keystore; an example is provided below. 
+The easiest way to get started with external keystores is to use an example CSV file. Use the command `ztp request keystore-csv-export <file_name>` to generate one out of your current Keystore, IDArray, and Association data. You can then configure the external keystore; an example is provided below.
 
 ```
 ztp set external-keystore MYCSVFILE type csv
@@ -534,13 +534,22 @@ Once setup, you can send a test message to the integration destination using the
 -----------------------------------------
 ##   VERSIONS   ##
 
+### v1.0.1
 **Bug Fixes in V1.0.0 --> V1.0.1:**
 - *ISSUE #20*: The command `ztp show ztp dhcpd leases` would throw an exception is the `uid` key is not present in the DHCP lease reader.
 
 
+### v1.1.0
+**Bug Fixes in V1.0.0 --> V1.1.0:**
+- *ISSUE #27*: The command `ztp request external-keystore-test` shows some extraneous data at the top. Removed an unneeded print statement.
+- *ISSUE #32*: The command `ztp show provisioning` would show epoch time. Now it will show local time.
+
 **Added Features in V1.0.1 --> V1.1.0:**
-- *External Keystores*: A respository of FreeZTP Keystore, IDArray, and Association data which can be stored and accessed from an external data source. See the [External Keystores](#external-keystores) section for more information.
+- *External Keystores*: A repository of FreeZTP Keystore, IDArray, and Association data which can be stored and accessed from an external data source. See the [External Keystores](#external-keystores) section for more information.
 - *Integrations*: 3rd party hooks which can be leveraged for notifications, etc. See the [Integrations](#integrations) section for more information.
+- *IDArray Values for Merging*: You can now insert IDArray values into your templates one of two ways:
+  - Using the variables `{{ idarray_1 }}`, `{{ idarray_2 }}`, etc... will present the string values of the idarray entries for Jinja2 merging
+  - Using the variable `{{ idarray }}` will present a list of IDArray values to the Jinja2 merge
 
 
 -----------------------------------------
