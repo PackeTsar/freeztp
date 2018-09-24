@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "dev1.1.0j"
+version = "dev1.1.0k"
 
 
 # NEXT: Finish clear integration
@@ -577,7 +577,8 @@ class config_factory:
 			index = 1
 			for value in ida_vals:
 				key = "idarray_{}".format(index)
-				base_vals.update({key: value})
+				if key not in base_vals:
+					base_vals.update({key: value})
 				index += 1
 			return base_vals
 
@@ -3069,6 +3070,9 @@ class external_keystore_main:
 								associations.update({id: row[key]})
 							if key[:7] == "idarray":
 								array_keys.append(row[key])
+								if id not in keyvalstore:
+									keyvalstore.update({id:{}})
+								keyvalstore[id].update({key: row[key]})
 							else:
 								if id not in keyvalstore:
 									keyvalstore.update({id:{}})
