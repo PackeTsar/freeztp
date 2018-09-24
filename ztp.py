@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "dev1.1.0h"
+version = "dev1.1.0i"
 
 
 # NEXT: Finish clear integration
@@ -2613,6 +2613,7 @@ class tracking_class:
 						else:
 							real += "," + data[each]["Real IDs"][id]
 				data[each]["Real IDs"] = real
+			data[each]["Timestamp"] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(data[each]["Timestamp"]))
 			tabledata.append(data[each])
 		return make_table(["Timestamp", "IP Address", "Temp ID", "MAC Address", "Real IDs", "Matched Keystore", "Status"], tabledata)
 	def prov_get_mac(self, ip):
