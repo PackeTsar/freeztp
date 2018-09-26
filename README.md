@@ -5,7 +5,7 @@ A Zero-Touch Provisioning system built for Cisco Catalyst switches.
 
 -----------------------------------------
 ##   VERSION   ##
-The version of FreeZTP documented here is: **dev1.1.0l**
+The version of FreeZTP documented here is: **dev1.1.0m**
 
 
 -----------------------------------------
