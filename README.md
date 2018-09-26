@@ -554,7 +554,7 @@ Once setup, you can send a test message to the integration destination using the
 - *Custom Logging*: There are new logging functions available:
   - Logging of merged configs to the main log file can be enabled or disabled using `ztp set logging merged-config-to-mainlog (enable|disable)`
   - You can enable logging of merged configs to a custom filename/path using `ztp set logging merged-config-to-custom-file '<filepath>'`
-    - This filepath can be dynamically generated using the Jinja2 format. And example of this is `ztp set logging merged-config-to-custom-file '/etc/ztp/merged-logs/{{ temp_id }}'`
+    - This filepath can be dynamically generated using the Jinja2 format. And example of this is `ztp set logging merged-config-to-custom-file '/etc/ztp/merged-logs/{{ temp_id }}'`. You can also use the variables in the folder names and ZTP will create the appropriate directories.
       - Several variables are available to the Jinja2 filepath merge including the below
         - All variables pulled from the matched keystore
         - `keystore_id` - The matched keystore ID variable
@@ -563,7 +563,14 @@ Once setup, you can send a test message to the integration destination using the
         - `ipaddr` - The IP address of the switch requesting the config
         - `temp_id` - The temporary ID assigned to the switch (ie: ZTP-23CF03062D)
         - `epoch_timestamp` - A timestamp in epoch time
-        - `local_timestamp` - A friendly timestamp in the machine's local timezone
+        - `local_timestamp` - A file-name friendly timestamp in the machine's local timezone (format: %Y-%m-%d-%H:%M:%S)
+        - Local time elements (to be used to piece together your own format):
+          - `local_year`
+          - `local_month`
+          - `local_day`
+          - `local_hour`
+          - `local_minute`
+          - `local_second`
 
 
 -----------------------------------------

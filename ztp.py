@@ -388,6 +388,12 @@ class config_factory:
 							"ipaddr": ipaddr,
 							"epoch_timestamp": time.time(),
 							"local_timestamp": time.strftime('%Y-%m-%d-%H:%M:%S', time.localtime(time.time())),
+							"local_year": time.strftime('%Y', time.localtime(time.time())),
+							"local_month": time.strftime('%m', time.localtime(time.time())),
+							"local_day": time.strftime('%d', time.localtime(time.time())),
+							"local_hour": time.strftime('%H', time.localtime(time.time())),
+							"local_minute": time.strftime('%M', time.localtime(time.time())),
+							"local_second": time.strftime('%S', time.localtime(time.time())),
 							"temp_id": tempid
 						})
 						self.send_tracking_update(ipaddr, filename, len(result))
@@ -417,6 +423,12 @@ class config_factory:
 								"ipaddr": ipaddr,
 								"epoch_timestamp": time.time(),
 								"local_timestamp": time.strftime('%Y-%m-%d-%H:%M:%S', time.localtime(time.time())),
+								"local_year": time.strftime('%Y', time.localtime(time.time())),
+								"local_month": time.strftime('%m', time.localtime(time.time())),
+								"local_day": time.strftime('%d', time.localtime(time.time())),
+								"local_hour": time.strftime('%H', time.localtime(time.time())),
+								"local_minute": time.strftime('%M', time.localtime(time.time())),
+								"local_second": time.strftime('%S', time.localtime(time.time())),
 								"temp_id": tempid
 							})
 							self.send_tracking_update(ipaddr, filename, len(result))
@@ -446,6 +458,12 @@ class config_factory:
 							"ipaddr": ipaddr,
 							"epoch_timestamp": time.time(),
 							"local_timestamp": time.strftime('%Y-%m-%d-%H:%M:%S', time.localtime(time.time())),
+							"local_year": time.strftime('%Y', time.localtime(time.time())),
+							"local_month": time.strftime('%m', time.localtime(time.time())),
+							"local_day": time.strftime('%d', time.localtime(time.time())),
+							"local_hour": time.strftime('%H', time.localtime(time.time())),
+							"local_minute": time.strftime('%M', time.localtime(time.time())),
+							"local_second": time.strftime('%S', time.localtime(time.time())),
 							"temp_id": tempid
 						})
 						self.send_tracking_update(ipaddr, filename, len(result))
