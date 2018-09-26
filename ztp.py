@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "dev1.1.0g"
+version = "dev1.1.0l"
 
 
 # NEXT: Finish clear integration
@@ -379,10 +379,7 @@ class config_factory:
 					log("cfact.request: Keystore ID Lookup returned (%s)" % keystoreid)
 					if keystoreid:
 						result = self.merge_final_config(keystoreid)
-						mcfg = open("/srv/ztp/tftproot/merged/%s_%s.cfg" % (identity, templatename), "w") #This location should be configurable.
-						mcfg.write(result)
-						mcfg.close()
-						log("cfact.request: Final config merged, saved, and returned to TFTPy:\n%s\n# ID: %s\n# Template: %s\n# File: %s\n%s" % ("#"*50, identity, templatename, mcfg.name, "#"*50))
+						log("cfact.request: Returning the below config to TFTPy:\n%s\n%s\n%s" % ("#"*25, result, "#"*25))
 						self.send_tracking_update(ipaddr, filename, len(result))
 						if not test:
 							tracking.provision({
@@ -461,7 +458,8 @@ class config_factory:
 			path = external_keystores.data
 		templatedata = self.get_template(keystoreid)
 		template = j2.Template(templatedata)
-		vals = path["keyvalstore"][keystoreid]
+		vals = self.pull_keystore_values(path, keystoreid)
+		log("cfact.merge_final_config: Merging with values: {}".format(vals))
 		return template.render(vals)
 	def get_keystore_id(self, idens, silent=False):
 		for identifier in idens:
@@ -495,8 +493,11 @@ class config_factory:
 				templatename = self.associations[association]
 				log("cfact.get_template: Found associated template (%s)" % templatename)
 				if templatename in self.templates:
-					log("cfact.get_template: Template (%s) exists. Returning" % templatename)
+					log("cfact.get_template: Template (%s) exists in local config. Returning" % templatename)
 					response = self.templates[templatename]["value"]
+				elif templatename in external_templates.templates:
+					log("cfact.get_template: Template (%s) exists as an external-template. Returning" % templatename)
+					response = external_templates.templates[templatename]
 				else:
 					log("cfact.get_template: Template (%s) does not exist. Checking for default-template" % templatename)
 		if not response:
@@ -505,8 +506,11 @@ class config_factory:
 					templatename = external_keystores.data["associations"][association]
 					log("cfact.get_template: Found associated template (%s) in an external keystore" % templatename)
 					if templatename in self.templates:
-						log("cfact.get_template: Template (%s) exists. Returning" % templatename)
+						log("cfact.get_template: Template (%s) exists in local config. Returning" % templatename)
 						response = self.templates[templatename]["value"]
+					elif templatename in external_templates.templates:
+						log("cfact.get_template: Template (%s) exists as an external-template. Returning" % templatename)
+						response = external_templates.templates[templatename]
 					else:
 						log("cfact.get_template: Template (%s) does not exist. Checking for default-template" % templatename)
 		if not response:
@@ -514,8 +518,11 @@ class config_factory:
 				log("cfact.get_template: Default-template is pointing to (%s)" % config.running["default-template"])
 				templatename = config.running["default-template"]
 				if templatename in self.templates:
-					log("cfact.get_template: Template (%s) exists. Returning" % templatename)
+					log("cfact.get_template: Template (%s) exists in local config. Returning" % templatename)
 					response = self.templates[templatename]["value"]
+				elif templatename in external_templates.templates:
+					log("cfact.get_template: Template (%s) exists as an external-template. Returning" % templatename)
+					response = external_templates.templates[templatename]
 				else:
 					log("cfact.get_template: Template (%s) does not exist. Checking for default-template" % templatename)
 			else:
@@ -554,9 +561,27 @@ class config_factory:
 				for var in missingvarlist:
 					console("\t-"+var)
 				console("\n")
+			kvalues = self.pull_keystore_values(path, identity)
+			log("cfact.merge_final_config: Merging with values: {}".format(kvalues))
 			console("##############################")
-			console(j2template.render(path["keyvalstore"][identity]))
+			console(j2template.render(kvalues))
 			console("##############################")
+	def pull_keystore_values(self, path, keystore_id):
+		if keystore_id not in path["idarrays"]:
+			return path["keyvalstore"][keystore_id]
+		else:
+			log("cfact.pull_keystore_values: Inserting IDArray keys")
+			base_vals = dict(path["keyvalstore"][keystore_id])
+			ida_vals = path["idarrays"][keystore_id]
+			if "idarray" not in base_vals:
+				base_vals.update({"idarray": ida_vals})
+			index = 1
+			for value in ida_vals:
+				key = "idarray_{}".format(index)
+				if key not in base_vals:
+					base_vals.update({key: value})
+				index += 1
+			return base_vals
 
 
 ##### SNMP Querying object: It is instantiated by the config_factory      #####
@@ -669,6 +694,8 @@ class config_manager:
 		if self.configfile:
 			if "external-keystores" in self.running:
 				external_keystores.load()
+			if "external-templates" in self.running:
+				external_templates.load()
 	def save(self):
 		self.rawconfig = self.json = json.dumps(self.running, indent=4, sort_keys=True)
 		f = open(self.configfile, "w")
@@ -701,6 +728,8 @@ class config_manager:
 				self.running["templates"][value]["value"] = newtemplate
 				self.running["templates"][value]["delineator"] = args[4]
 			self.save()
+		elif setting == "external-template":
+			self.set_external_template(args[3], args[4], args[5])
 		elif setting == "keystore":
 			self.set_keystore(args[3], args[4], args[5] )
 		elif setting == "idarray":
@@ -792,6 +821,11 @@ class config_manager:
 				console("Template '%s' is not currently configured" % iden)
 			else:
 				del self.running["templates"][iden]
+		elif setting == "external-template":
+			if iden not in self.running["external-templates"]:
+				console("External-template '%s' is not currently configured" % iden)
+			else:
+				del self.running["external-templates"][iden]
 		elif setting == "association":
 			if "associations" not in list(self.running):
 				console("No associations are currently configured")
@@ -833,6 +867,13 @@ class config_manager:
 			self.running["external-keystores"][iden].update({key: value})
 		else:
 			self.running["external-keystores"].update({iden: {key: value}})
+		self.save()
+	def set_external_template(self, iden, setting, value):
+		if setting == "file":
+			if iden in list(self.running["external-templates"]):
+				self.running["external-templates"][iden].update({"file": value})
+			else:
+				self.running["external-templates"].update({iden: {"file": value}})
 		self.save()
 	def set_keystore(self, iden, keyword, value):
 		try:
@@ -967,6 +1008,15 @@ class config_manager:
 				exkeystlist.append("ztp set external-keystore %s %s %s" % (iden, key, value))
 			exkeystlist.append("#")
 		############
+		extemplist = []
+		for iden in self.running["external-templates"]:
+			for key in self.running["external-templates"][iden]:
+				value = self.running["external-templates"][iden][key]
+				if key == "file":
+					value = "'%s'" % value
+				extemplist.append("ztp set external-template %s %s %s" % (iden, key, value))
+			extemplist.append("#")
+		############
 		associationlist = []
 		for association in self.running["associations"]:
 			template = self.running["associations"][association]
@@ -1026,6 +1076,9 @@ class config_manager:
 		for cmd in intglist:
 			configtext += cmd + "\n"
 		for cmd in exkeystlist:
+			configtext += cmd + "\n"
+		configtext += "#\n#\n"
+		for cmd in extemplist:
 			configtext += cmd + "\n"
 		configtext += "#\n#\n#\n#######################################################"
 		###########
@@ -1139,6 +1192,9 @@ class config_manager:
 			console(oid)
 	def hidden_list_templates(self):
 		for template in self.running["templates"]:
+			console(template)
+	def hidden_list_external_templates(self):
+		for template in self.running["external-templates"]:
 			console(template)
 	def hidden_list_associations(self):
 		for association in self.running["associations"]:
@@ -1423,6 +1479,7 @@ class installer:
 		newconfigkeys = {
 		"integrations": {},
 		"external-keystores": {},
+		"external-templates": {},
 		}
 		for key in newconfigkeys:
 			if key not in list(config.running):
@@ -1473,6 +1530,8 @@ class installer:
 		osd.install_pkg("gcc gmp python-devel")
 		osd.install_pkg("telnet")
 		os.system("pip install pysnmp")
+		os.system("pip install requests")
+		os.system("pip install requests_toolbelt")
 		os.system("pip install jinja2")
 		os.system("pip install netaddr")
 		os.system("pip install netifaces")
@@ -1625,10 +1684,10 @@ _ztp_complete()
 		COMPREPLY=( $(compgen -W "show" -- $cur) )
 		;;
 	  "set")
-		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile file-cache-timeout integration external-keystore template keystore idarray association default-keystore default-template imagefile image-supression delay-keystore dhcpd" -- $cur) )
+		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile file-cache-timeout integration external-keystore template external-template keystore idarray association default-keystore default-template imagefile image-supression delay-keystore dhcpd" -- $cur) )
 		;;
 	  "clear")
-		COMPREPLY=( $(compgen -W "keystore idarray snmpoid integration external-keystore template association dhcpd log downloads provisioning" -- $cur) )
+		COMPREPLY=( $(compgen -W "keystore idarray snmpoid integration external-keystore template external-template association dhcpd log downloads provisioning" -- $cur) )
 		;;
 	  "request")
 		COMPREPLY=( $(compgen -W "merge-test initial-merge default-keystore-test snmp-test dhcp-option-125 dhcpd-commit auto-dhcpd ipc-console integration-setup integration-test external-keystore-test keystore-csv-export" -- $cur) )
@@ -1643,7 +1702,7 @@ _ztp_complete()
 	case "$prev" in
 	  show)
 		if [ "$prev2" == "hidden" ]; then
-		  COMPREPLY=( $(compgen -W "keystores keys idarrays idarray snmpoids templates associations all_ids imagefiles dhcpd-scopes integrations integration-types integration-opts integration-keys external-keystores external-keystore-types external-keystore-opts external-keystore-keys" -- $cur) )
+		  COMPREPLY=( $(compgen -W "keystores keys idarrays idarray snmpoids templates external-templates associations all_ids imagefiles dhcpd-scopes integrations integration-types integration-opts integration-keys external-keystores external-keystore-types external-keystore-opts external-keystore-keys" -- $cur) )
 		fi
 		;;
 	  config)
@@ -1735,6 +1794,15 @@ _ztp_complete()
 		;;
 	  template)
 		local templates=$(for k in `ztp hidden show templates`; do echo $k ; done)
+		if [ "$prev2" == "set" ]; then
+		  COMPREPLY=( $(compgen -W "${templates} <template_name> -" -- $cur) )
+		fi
+		if [ "$prev2" == "clear" ]; then
+		  COMPREPLY=( $(compgen -W "${templates}" -- $cur) )
+		fi
+		;;
+	  external-template)
+		local templates=$(for k in `ztp hidden show external-templates`; do echo $k ; done)
 		if [ "$prev2" == "set" ]; then
 		  COMPREPLY=( $(compgen -W "${templates} <template_name> -" -- $cur) )
 		fi
@@ -1931,6 +1999,11 @@ _ztp_complete()
 		COMPREPLY=( $(compgen -W "<end_char> -" -- $cur) )
 	  fi
 	fi
+	if [ "$prev2" == "external-template" ]; then
+	  if [ "$prev3" == "set" ]; then
+		COMPREPLY=( $(compgen -W "file" -- $cur) )
+	  fi
+	fi
 	if [ "$prev2" == "association" ]; then
 	  if [ "$prev3" == "set" ]; then
 		local allids=$(for k in `ztp hidden show all_ids`; do echo $k ; done)
@@ -1976,6 +2049,11 @@ _ztp_complete()
 	if [ "$prev4" == "set" ]; then
 	  if [ "$prev3" == "association" ]; then
 		COMPREPLY=( $(compgen -W "template" -- $cur) )
+	  fi
+	fi
+	if [ "$prev4" == "set" ]; then
+	  if [ "$prev3" == "external-template" ]; then
+		COMPREPLY=( $(compgen -W "<filepath> -" -- $cur) )
 	  fi
 	fi
 	if [ "$prev4" == "set" ]; then
@@ -2597,6 +2675,7 @@ class tracking_class:
 						else:
 							real += "," + data[each]["Real IDs"][id]
 				data[each]["Real IDs"] = real
+			data[each]["Timestamp"] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(data[each]["Timestamp"]))
 			tabledata.append(data[each])
 		return make_table(["Timestamp", "IP Address", "Temp ID", "MAC Address", "Real IDs", "Matched Keystore", "Status"], tabledata)
 	def prov_get_mac(self, ip):
@@ -2941,7 +3020,6 @@ class external_keystore_main:
 			for key in reader.fieldnames:
 				if row[key]:
 					if key == "association":
-						print(key)
 						association_commands.append("ztp set association id %s template %s" % (id, row[key]))
 					elif key[:7] == "idarray":
 						array_keys.append(row[key])
@@ -2950,7 +3028,6 @@ class external_keystore_main:
 							key = '%s' % key
 						if " " in row[key]:
 							row[key] = '%s' % row[key]
-						print(key)
 						keystore_commands.append("ztp set keystore %s %s %s" % (id, key, row[key]))
 			if array_keys:
 				idarray_commands.append("ztp set idarray %s %s" % (id, " ".join(array_keys)))
@@ -2987,25 +3064,53 @@ class external_keystore_main:
 						log("ERROR: Cannot find required header (keystore_id)")
 						break
 					id = row["keystore_id"]
-					array_keys = []
+					array_values = []
+					unordered_arrays = {}
+					ordered_keys = []
 					for key in row:
 						if row[key]:
 							if key == "association":
 								associations.update({id: row[key]})
 							if key[:7] == "idarray":
-								array_keys.append(row[key])
+								array_values.append(row[key])
+								if id not in keyvalstore:
+									keyvalstore.update({id:{}})
+								keyvalstore[id].update({key: row[key]})
+								unordered_arrays.update({key: row[key]})
 							else:
 								if id not in keyvalstore:
 									keyvalstore.update({id:{}})
 								keyvalstore[id].update({key: row[key]})
-					if array_keys:
-						idarrays.update({id:array_keys})
+					if array_values:
+						idarrays.update({id:array_values})
+					if unordered_arrays:
+						ordered_array_keys = list(unordered_arrays)
+						ordered_array_keys.sort()
+						for key in ordered_array_keys:
+							ordered_keys.append(unordered_arrays[key])
+					keyvalstore[id].update({"idarray": ordered_keys})
 		self.data = {
 			"keyvalstore": keyvalstore,
 			"idarrays": idarrays,
 			"associations": associations,
 		}
 
+
+class external_templates_main:
+	def __init__(self):
+		self.templates = {}
+	def load(self):
+		for template_name in config.running["external-templates"]:
+			filepath = config.running["external-templates"][template_name]["file"]
+			if os.path.isfile(filepath):
+				# log("Loading template ({}) from file ({})".format(template_name, filepath))
+				f = open(filepath)
+				data = f.read()
+				f.close()
+				self.templates.update({template_name: data})
+			else:
+				# log("ERROR: Cannot find template file ({})".format(filepath))
+				pass
 
 
 
@@ -3054,9 +3159,11 @@ def interpreter():
 	global osd
 	global integrations
 	global external_keystores
+	global external_templates
 	osd = os_detect()
 	logger = log_management()
 	external_keystores = external_keystore_main()
+	external_templates = external_templates_main()
 	config = config_manager()
 	config.load_external()
 	##### TEST #####
@@ -3112,6 +3219,7 @@ def interpreter():
 		console(" - hidden show idarray members                    |  Show a list of members in an IDArray")
 		console(" - hidden show snmpoids                           |  Show a list of configured SNMP OIDs")
 		console(" - hidden show templates                          |  Show a list of configured templates")
+		console(" - hidden show external-templates                 |  Show a list of configured external-templates")
 		console(" - hidden show associations                       |  Show a list of configured template associations")
 		console(" - hidden show all_ids                            |  Show a list of all configured IDs (Keystores and IDArrays)")
 		console(" - hidden show imagefiles                         |  Show a list of candidate imagefiles in the TFTP root directory")
@@ -3134,6 +3242,8 @@ def interpreter():
 		config.hidden_list_snmpoid()
 	elif arguments == "hidden show templates":
 		config.hidden_list_templates()
+	elif arguments == "hidden show external-templates":
+		config.hidden_list_external_templates()
 	elif arguments == "hidden show associations":
 		config.hidden_list_associations()
 	elif arguments == "hidden show all_ids":
@@ -3224,6 +3334,7 @@ def interpreter():
 		console(" - set integration <svc_name> [parameters]                     |  Configure external integrations")
 		console(" - set external-keystore <store_name> [parameters]             |  Configure an external keystore")
 		console(" - set template <template_name> <end_char>                     |  Create/Modify a named J2 tempate which is used for the final config push")
+		console(" - set external-template <template_name> [parameters]          |  Configure an external template")
 		console(" - set keystore <id/arrayname> <keyword> <value>               |  Create a keystore entry to be used when merging final configurations")
 		console(" - set idarray <arrayname> <id's>                              |  Create an ID array to allow multiple real ids to match one keystore id")
 		console(" - set association id <id/arrayname> template <template_name>  |  Associate a keystore id or an idarray to a specific named template")
@@ -3267,6 +3378,8 @@ def interpreter():
 		console("                                                                         - set external-keystore MYCSV mode offline")
 	elif (arguments[:12] == "set template" and len(sys.argv) < 5) or arguments == "set template":
 		console(" - set template <template_name> <end_char>        |  Set the final configuration j2 template pushed to host after discovery/identification")
+	elif (arguments[:21] == "set external-template" and len(sys.argv) < 6) or arguments == "set external-template":
+		console(" - set external-template <template_name> file <filepath>       |  Configure an external template")
 	elif (arguments[:12] == "set keystore" and len(sys.argv) < 6) or arguments == "set keystore":
 		console(" - set keystore <id/arrayname> <keyword> <value>  |  Create a keystore entry to be used when merging final configurations")
 	elif (arguments[:11] == "set idarray" and len(sys.argv) < 5) or arguments == "set idarray":
@@ -3293,6 +3406,7 @@ def interpreter():
 		console(" - clear integration <svc_name> (all|<key>)       |  Delete an individual integration key or the whole object")
 		console(" - clear external-keystore <name> (all|<key>)     |  Delete an individual external-keystore key or the whole object")
 		console(" - clear template <template_name>                 |  Delete a named configuration template")
+		console(" - clear external-template <template_name>        |  Delete a named external-template")
 		console(" - clear keystore <id> (all|<keyword>)            |  Delete an individual key or a whole keystore ID from the configuration")
 		console(" - clear idarray <arrayname>                      |  Delete an ID array from the configuration")
 		console(" - clear association <id/arrayname>               |  Delete an association from the configuration")
@@ -3308,6 +3422,8 @@ def interpreter():
 		console(" - clear external-keystore <name> (all|<key>)     |  Delete an individual external-keystore key or the whole object")
 	elif (arguments[:14] == "clear template" and len(sys.argv) < 4) or arguments == "clear template":
 		console(" - clear template <template_name>                 |  Delete a named configuration template")
+	elif (arguments[:23] == "clear external-template" and len(sys.argv) < 4) or arguments == "clear external-template":
+		console(" - clear external-template <template_name>        |  Delete a named external-template")
 	elif (arguments[:14] == "clear keystore" and len(sys.argv) < 5) or arguments == "clear keystore":
 		console(" - clear keystore <id> (all|<keyword>)            |  Delete an individual key or a whole keystore ID from the configuration")
 	elif (arguments[:13] == "clear idarray" and len(sys.argv) < 4) or arguments == "clear idarray":
@@ -3323,6 +3439,8 @@ def interpreter():
 	elif arguments[:23] == "clear external-keystore" and len(sys.argv) >= 5:
 		config.clear(sys.argv)
 	elif arguments[:14] == "clear template" and len(sys.argv) >= 4:
+		config.clear(sys.argv)
+	elif arguments[:23] == "clear external-template" and len(sys.argv) >= 4:
 		config.clear(sys.argv)
 	elif arguments[:14] == "clear keystore" and len(sys.argv) >= 5:
 		config.clear(sys.argv)
@@ -3469,6 +3587,7 @@ def interpreter():
 		console(" - set integration <svc_name> [parameters]                     |  Configure external integrations (experimental)")
 		console(" - set external-keystore <store_name> [parameters]             |  Configure an external keystore")
 		console(" - set template <template_name> <end_char>                     |  Create/Modify a named J2 tempate which is used for the final config push")
+		console(" - set external-template <template_name> [parameters]          |  Configure an external template")
 		console(" - set keystore <id/arrayname> <keyword> <value>               |  Create a keystore entry to be used when merging final configurations")
 		console(" - set idarray <arrayname> <id_#1> <id_#2> ...                 |  Create an ID array to allow multiple real ids to match one keystore id")
 		console(" - set association id <id/arrayname> template <template_name>  |  Associate a keystore id or an idarray to a specific named template")
@@ -3483,7 +3602,9 @@ def interpreter():
 		console(" - clear snmpoid <name>                                        |  Delete an SNMP OID from the configuration")
 		console(" - clear integration <svc_name> (all|<key>)                    |  Delete an individual integration key or the whole object")
 		console(" - clear template <template_name>                              |  Delete a named configuration template")
+		console(" - clear external-template <template_name>                     |  Delete a named external-template")
 		console(" - clear keystore <id> (all|<keyword>)                         |  Delete an individual key or a whole keystore ID from the configuration")
+		console(" - clear external-keystore <name> (all|<key>)                  |  Delete an individual external-keystore key or the whole object")
 		console(" - clear idarray <arrayname>                                   |  Delete an ID array from the configuration")
 		console(" - clear association <id/arrayname>                            |  Delete an association from the configuration")
 		console(" - clear dhcpd <scope-name>                                    |  Delete a DHCP scope")
