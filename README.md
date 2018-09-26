@@ -551,6 +551,19 @@ Once setup, you can send a test message to the integration destination using the
 - *IDArray Values for Merging*: You can now insert IDArray values into your templates one of two ways (seen below). You can now also see the list of values available for merging in a log message right before the merge happens (use `ztp request merge-test` to test and see this).
   - Using the variables `{{ idarray_1 }}`, `{{ idarray_2 }}`, etc... will present the string values of the idarray entries for Jinja2 merging
   - Using the variable `{{ idarray }}` will present a list of IDArray values to the Jinja2 merge
+- *Custom Logging*: There are new logging functions available:
+  - Logging of merged configs to the main log file can be enabled or disabled using `ztp set logging merged-config-to-mainlog (enable|disable)`
+  - You can enable logging of merged configs to a custom filename/path using `ztp set logging merged-config-to-custom-file '<filepath>'`
+    - This filepath can be dynamically generated using the Jinja2 format. And example of this is `ztp set logging merged-config-to-custom-file '/etc/ztp/merged-logs/{{ temp_id }}'`
+      - Several variables are available to the Jinja2 filepath merge including the below
+        - All variables pulled from the matched keystore
+        - `keystore_id` - The matched keystore ID variable
+        - `idarray_#` - Each IDArray value string with a sequence number appended
+        - `idarray` - The list of IDArray values
+        - `ipaddr` - The IP address of the switch requesting the config
+        - `temp_id` - The temporary ID assigned to the switch (ie: ZTP-23CF03062D)
+        - `epoch_timestamp` - A timestamp in epoch time
+        - `local_timestamp` - A friendly timestamp in the machine's local timezone
 
 
 -----------------------------------------

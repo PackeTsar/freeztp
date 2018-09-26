@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "dev1.1.0l"
+version = "dev1.1.0m"
 
 
 # NEXT: Finish clear integration
@@ -337,7 +337,7 @@ class config_factory:
 					})
 			log("cfact.request: Generated a SNMP Request with TempID (%s) and IP (%s)" % (tempid, ipaddr))
 			result = self.merge_base_config(tempid)
-			log("cfact.request: Returning the below config to TFTPy:\n%s\n%s\n%s" % ("#"*25, result, "#"*25))
+			log("cfact.request: Returning the below initial config to TFTPy:\n%s\n%s\n%s" % ("#"*25, result, "#"*25))
 			self.send_tracking_update(ipaddr, filename, len(result))
 			return result
 		elif filename == self.imagediscoveryfile:
@@ -378,8 +378,18 @@ class config_factory:
 					keystoreid = self.get_keystore_id(identifiers)
 					log("cfact.request: Keystore ID Lookup returned (%s)" % keystoreid)
 					if keystoreid:
-						result = self.merge_final_config(keystoreid)
-						log("cfact.request: Returning the below config to TFTPy:\n%s\n%s\n%s" % ("#"*25, result, "#"*25))
+						result, kvals = self.merge_final_config(keystoreid)
+						if config.running["logging"]["merged-config-to-mainlog"] == "enable":
+							log("cfact.request: Returning the below config to TFTPy:\n%s\n%s\n%s" % ("#"*25, result, "#"*25))
+						else:
+							log("cfact.request: Returning merged config to TFTPy")
+						self.log_merged_config_file(result, kvals, {
+							"keystore_id": keystoreid,
+							"ipaddr": ipaddr,
+							"epoch_timestamp": time.time(),
+							"local_timestamp": time.strftime('%Y-%m-%d-%H:%M:%S', time.localtime(time.time())),
+							"temp_id": tempid
+						})
 						self.send_tracking_update(ipaddr, filename, len(result))
 						if not test:
 							tracking.provision({
@@ -397,8 +407,18 @@ class config_factory:
 						default = self._default_lookup()
 						if default:
 							log("cfact.request: default-keystore is configured. Returning default")
-							result = self.merge_final_config(default)
-							log("cfact.request: Returning the below config to TFTPy:\n%s\n%s\n%s" % ("#"*25, result, "#"*25))
+							result, kvals = self.merge_final_config(default)
+							if config.running["logging"]["merged-config-to-mainlog"] == "enable":
+								log("cfact.request: Returning the below config to TFTPy:\n%s\n%s\n%s" % ("#"*25, result, "#"*25))
+							else:
+								log("cfact.request: Returning merged config to TFTPy")
+							self.log_merged_config_file(result, kvals, {
+								"keystore_id": default,
+								"ipaddr": ipaddr,
+								"epoch_timestamp": time.time(),
+								"local_timestamp": time.strftime('%Y-%m-%d-%H:%M:%S', time.localtime(time.time())),
+								"temp_id": tempid
+							})
 							self.send_tracking_update(ipaddr, filename, len(result))
 							if not test:
 								tracking.provision({
@@ -416,8 +436,18 @@ class config_factory:
 					default = self._default_lookup()
 					if default:
 						log("cfact.request: default-keystore is configured. Returning default")
-						result = self.merge_final_config(default)
-						log("cfact.request: Returning the below config to TFTPy:\n%s" % result)
+						result, kvals = self.merge_final_config(default)
+						if config.running["logging"]["merged-config-to-mainlog"] == "enable":
+							log("cfact.request: Returning the below config to TFTPy:\n%s\n%s\n%s" % ("#"*25, result, "#"*25))
+						else:
+							log("cfact.request: Returning merged config to TFTPy")
+						self.log_merged_config_file(result, kvals, {
+							"keystore_id": default,
+							"ipaddr": ipaddr,
+							"epoch_timestamp": time.time(),
+							"local_timestamp": time.strftime('%Y-%m-%d-%H:%M:%S', time.localtime(time.time())),
+							"temp_id": tempid
+						})
 						self.send_tracking_update(ipaddr, filename, len(result))
 						if not test:
 							tracking.provision({
@@ -432,6 +462,37 @@ class config_factory:
 						return result
 		log("cfact.request: Nothing else caught. Returning None")
 		return None
+	def log_merged_config_file(self, filedata, keystore_data, other_args):
+		if config.running["logging"]["merged-config-to-custom-file"] != "disable":
+			###########
+			newdict = dict(keystore_data)
+			newdict.update(other_args)
+			log("cfact.log_merged_config_file: Creating custom log file name from variables:\n{}".format(json.dumps(newdict, indent=4)))
+			template = j2.Template(config.running["logging"]["merged-config-to-custom-file"])
+			newfile = template.render(newdict)
+			log("cfact.log_merged_config_file: Final merge log file is ({})".format(newfile))
+			###########
+			dir, filename = os.path.split(newfile)
+			if not dir or not filename:
+				log("cfact.log_merged_config_file: ERROR: Directory or Filename not present (dir={}), (filename={})".format(dir, filename))
+			elif os.path.isfile(newfile):
+				log("cfact.log_merged_config_file: File ({}) already exists. Appending".format(newfile))
+				f = open(newfile, "a")
+				f.write("\n\n{}\n\n".format(filedata))
+				f.close()
+			elif not os.path.isdir(dir):
+				log("cfact.log_merged_config_file: Creating new directory ({})".format(dir))
+				os.makedirs(dir) 
+				log("cfact.log_merged_config_file: Writing to file ({})".format(newfile))
+				f = open(newfile, "w")
+				f.write("\n\n{}\n\n".format(filedata))
+				f.close()
+			else:
+				log("cfact.log_merged_config_file: Directory ({}) already exists".format(dir))
+				log("cfact.log_merged_config_file: Writing to file ({})".format(newfile))
+				f = open(newfile, "w")
+				f.write("\n\n{}\n\n".format(filedata))
+				f.close()
 	def send_tracking_update(self, ipaddr, filename, filesize):
 		tracking.report({
 			"ipaddr": ipaddr,
@@ -459,8 +520,8 @@ class config_factory:
 		templatedata = self.get_template(keystoreid)
 		template = j2.Template(templatedata)
 		vals = self.pull_keystore_values(path, keystoreid)
-		log("cfact.merge_final_config: Merging with values: {}".format(vals))
-		return template.render(vals)
+		log("cfact.merge_final_config: Merging with values:\n{}".format(json.dumps(vals, indent=4)))
+		return (template.render(vals), vals)
 	def get_keystore_id(self, idens, silent=False):
 		for identifier in idens:
 			identifier = idens[identifier]
@@ -562,7 +623,7 @@ class config_factory:
 					console("\t-"+var)
 				console("\n")
 			kvalues = self.pull_keystore_values(path, identity)
-			log("cfact.merge_final_config: Merging with values: {}".format(kvalues))
+			log("cfact.merge_final_config: Merging with values:\n{}".format(json.dumps(kvalues, indent=4)))
 			console("##############################")
 			console(j2template.render(kvalues))
 			console("##############################")
@@ -751,6 +812,8 @@ class config_manager:
 				console("Must be an integer!")
 		elif setting == "dhcpd":
 			self.set_dhcpd(args)
+		elif setting == "logging":
+			self.set_logging(args[3], args[4])
 		else:
 			if setting in list(self.running):
 				self.running[setting] = value
@@ -947,6 +1010,17 @@ class config_manager:
 			return "Must be a number!"
 	def make_true(self, data):
 		return True
+	def set_logging(self, setting, value):
+		endis = ["enable", "disable"]
+		if setting == "merged-config-to-mainlog":
+			if value not in endis:
+				console("ERROR: Only (enable|disable) are allowed")
+			else:
+				self.running["logging"][setting] = value
+				self.save()
+		elif setting == "merged-config-to-custom-file":
+			self.running["logging"][setting] = value
+			self.save()
 	def show_config(self):
 		cmdlist = []
 		simplevals = ["suffix", "initialfilename", "community", "tftproot", "imagediscoveryfile", "file-cache-timeout"]
@@ -955,7 +1029,17 @@ class config_manager:
 		####
 		for oid in self.running["snmpoid"]:
 			cmdlist.append("ztp set snmpoid %s %s" % (oid, self.running["snmpoid"][oid]))
-		####
+		###########
+		log_merged_mainlog = "ztp set logging merged-config-to-mainlog {}".format(
+			self.running["logging"]["merged-config-to-mainlog"]
+		)
+		if self.running["logging"]["merged-config-to-custom-file"] == "disable":
+			log_merged_customfile = "ztp set logging merged-config-to-custom-file disable"
+		else:
+			log_merged_customfile = "ztp set logging merged-config-to-custom-file '{}'".format(
+				self.running["logging"]["merged-config-to-custom-file"]
+			)
+		###########
 		itempval = self.running["starttemplate"]["value"]
 		itempdel = self.running["starttemplate"]["delineator"]
 		itemp = "ztp set initial-template %s\n%s\n%s" % (itempdel, itempval, itempdel)
@@ -1041,8 +1125,11 @@ class config_manager:
 		configtext = "#######################################################\n#\n#\n#\n"
 		for cmd in cmdlist:
 			configtext += cmd + "\n"
+		configtext += log_merged_mainlog + "\n"
+		configtext += log_merged_customfile + "\n"
 		configtext += "#\n#\n"
 		configtext += itemp
+		###########
 		###########
 		###########
 		configtext += "\n#\n#\n#\n#######################################################\n"
@@ -1480,6 +1567,10 @@ class installer:
 		"integrations": {},
 		"external-keystores": {},
 		"external-templates": {},
+		"logging": {
+			"merged-config-to-mainlog": "enable",
+			"merged-config-to-custom-file": "disable"
+			}
 		}
 		for key in newconfigkeys:
 			if key not in list(config.running):
@@ -1684,7 +1775,7 @@ _ztp_complete()
 		COMPREPLY=( $(compgen -W "show" -- $cur) )
 		;;
 	  "set")
-		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile file-cache-timeout integration external-keystore template external-template keystore idarray association default-keystore default-template imagefile image-supression delay-keystore dhcpd" -- $cur) )
+		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile file-cache-timeout integration external-keystore template external-template keystore idarray association default-keystore default-template imagefile image-supression delay-keystore dhcpd logging" -- $cur) )
 		;;
 	  "clear")
 		COMPREPLY=( $(compgen -W "keystore idarray snmpoid integration external-keystore template external-template association dhcpd log downloads provisioning" -- $cur) )
@@ -1878,6 +1969,11 @@ _ztp_complete()
 		  COMPREPLY=( $(compgen -W "${ids}" -- $cur) )
 		fi
 		;;
+	  logging)
+		if [ "$prev2" == "set" ]; then
+		  COMPREPLY=( $(compgen -W "merged-config-to-mainlog merged-config-to-custom-file" -- $cur) )
+		fi
+		;;
 	  merge-test)
 		local ids=$(for id in `ztp hidden show keystores`; do echo $id ; done)
 		local mems=$(for id in `ztp hidden show idarray members`; do echo $id ; done)
@@ -2016,6 +2112,16 @@ _ztp_complete()
 	  fi
 	  if [ "$prev3" == "show" ]; then
 		COMPREPLY=( $(compgen -W "current all raw" -- $cur) )
+	  fi
+	fi
+	if [ "$prev2" == "logging" ]; then
+	  if [ "$prev3" == "set" ]; then
+		if [ "$prev" == "merged-config-to-mainlog" ]; then
+		  COMPREPLY=( $(compgen -W "enable disable" -- $cur) )
+		fi
+		if [ "$prev" == "merged-config-to-custom-file" ]; then
+		  COMPREPLY=( $(compgen -W "<filepath> disable" -- $cur) )
+		fi
 	  fi
 	fi
   elif [ $COMP_CWORD -eq 5 ]; then
@@ -3344,6 +3450,7 @@ def interpreter():
 		console(" - set image-supression <seconds-to-supress>                   |  Set the seconds to supress a second image download preventing double-upgrades")
 		console(" - set delay-keystore <msec-to-delay>                          |  Set the miliseconds to delay the processing of a keystore lookup")
 		console(" - set dhcpd <scope-name> [parameters]                         |  Configure DHCP scope(s) to serve IP addresses to ZTP clients")
+		console(" - set logging [parameters]                                    |  Set up custom logging settings")
 	elif arguments == "set suffix":
 		console(" - set suffix <value>                             |  Set the file name suffix used by target when requesting the final config")
 	elif arguments == "set initialfilename":
@@ -3398,6 +3505,12 @@ def interpreter():
 		console(" - set delay-keystore <msec-to-delay>             |  Set the miliseconds to delay the processing of a keystore lookup")
 	elif arguments == "set dhcpd":
 		console(" - set dhcpd <scope-name> [parameters]            |  Configure DHCP scope(s) to serve IP addresses to ZTP clients")
+	elif (arguments[:11] == "set logging" and len(sys.argv) < 5) or arguments == "set logging":
+		console(" - set logging merged-config-to-mainlog (enable|disable)           |  Enable or disable logging of final configs to the main log file")
+		console(" - set logging merged-config-to-custom-file (<filepath>|disable)   |  Log your merged configs to a Jinja2 rendered custom file")
+		console("                                                                    Examples:")
+		console("                                                                         - set logging merged-config-to-mainlog disable")
+		console("                                                                         - set logging merged-config-to-custom-file '/etc/ztp/merged-logs/{{ hostname }}'")
 	elif arguments[:3] == "set" and len(sys.argv) >= 4:
 		config.set(sys.argv)
 	##### CLEAR #####
@@ -3597,6 +3710,7 @@ def interpreter():
 		console(" - set image-supression <seconds-to-supress>                   |  Set the seconds to supress a second image download preventing double-upgrades")
 		console(" - set delay-keystore <msec-to-delay>                          |  Set the miliseconds to delay the processing of a keystore lookup")
 		console(" - set dhcpd <scope-name> [parameters]                         |  Configure DHCP scope(s) to serve IP addresses to ZTP clients")
+		console(" - set logging [parameters]                                    |  Set up custom logging settings")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console(" - clear snmpoid <name>                                        |  Delete an SNMP OID from the configuration")
