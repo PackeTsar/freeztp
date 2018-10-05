@@ -24,6 +24,7 @@ The version of FreeZTP documented here is: **dev1.1.0m**
 12. [Integrations](#integrations)
 13. [Versions](#versions)
 14. [Contributing](#contributing)
+15. [Usage Tips](/TIPS.md)
 
 
 -----------------------------------------
