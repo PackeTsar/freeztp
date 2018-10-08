@@ -8,12 +8,12 @@ Some usage tips and tricks from real world FreeZTP deployments.
 
 -----------------------------------------
 ## TABLE OF CONTENTS
-1. [Use-case: Provisioning without using Vlan1](#use-case:-provisioning-without-using-vlan1)
-2. [Use-case: Upgrade IOS-XE 3.7.x to 16.3.6](#use-case:-upgrade-ios-xe-3.7.x-to-16.3.6)
+1. [Use-case: Provisioning without using Vlan1](#provisioning-without-using-vlan1)
+2. [Use-case: Upgrade IOS-XE 3.7.x to 16.3.6](#upgrade-ios-xe-3.7.x-to-16.3.6)
 
 
 -----------------------------------------
-## Use-case: Provisioning without using Vlan1
+## Provisioning without using Vlan1
 
 ###### Author: [derek_shnosh](https://github.com/derek-shnosh), Rev: 1, Date: 2018.1008, FreeZTP dev1.1.0m
 
@@ -44,7 +44,7 @@ To avoid using Vlan1 for provisioning, configure the *master* provisioning switc
 
 
 -----------------------------------------
-## Use-case: Upgrade IOS-XE 3.7.x to 16.3.6
+## Upgrade IOS-XE 3.7.x to 16.3.6
 
 ###### Author: [derek_shnosh](https://github.com/derek-shnosh), Rev: 1, Date: 2018.1008, FreeZTP dev1.1.0m
 
