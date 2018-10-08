@@ -11,7 +11,7 @@ Some usage tips and tricks from real world FreeZTP deployments.
 
 ## Use-case: Upgrade IOS-XE 3.7.x to 16.3.6
 
-###### Author: [derek_shnosh](https://github.com/derek-shnosh), Rev: 1, Date: 2018.1008
+###### Author: [derek_shnosh](https://github.com/derek-shnosh), Rev: 1, Date: 2018.1008, FreeZTP dev1.1.0m
 
 ### Problem
 
@@ -129,7 +129,7 @@ This workaround uses EEM applets in the J2 switch template to download install t
 
 * Allocate a *provisioning interface*; i.e. the interface connected to the provisioning network.
 
-* Modify the variables in the config snippet below to suit network/needs, then add the whole snippet to the J2 switch template.
+* Modify the variables in the template config snippet below to suit network/needs, then add the whole snippet to the J2 switch template.
 
     * *The four variables can be defined in the keystore or left in the template.*
 
@@ -140,75 +140,77 @@ This workaround uses EEM applets in the J2 switch template to download install t
         | `prov_int`    | Interface to be used for provisioning; e.g. Te1/0/48<br>> *3850-12X48U-S interfaces 37-48 are TenGigabitEthernet.* |
         | `access_vlan` | Vlan to configure on the provisioning interface (Gi1/0/48) after upgrade/reload is complete.                       |
 
-```jinja2
-!-- Variables (keys) statically defined within the template.
-!{% set tftp_addr = "172.17.251.251" %}
-!{% set image_bin = "cat3k_caa-universalk9.16.03.06.SPA.bin"%}
-!{% set access_vlan = "501" %}
-!{% set prov_int = "Te1/0/48" %}
+* Template Config Snippet
 
-!-- Required for EEM applet to function as intended.
-logging buffered 20480 debugging
-file prompt quiet
-ip tftp blocksize 8192
+    ```jinja2
+    !-- Variables (keys) statically defined within the template.
+    !{% set tftp_addr = "172.17.251.251" %}
+    !{% set image_bin = "cat3k_caa-universalk9.16.03.06.SPA.bin"%}
+    !{% set access_vlan = "501" %}
+    !{% set prov_int = "Te1/0/48" %}
 
-!-- Required for TFTP transfers from FreeZTP (or other reachable TFTP server; i.e. `tftp_addr`).
-interface Vlan1
-  ip address dhcp
-  no shutdown
+    !-- Required for EEM applet to function as intended.
+    logging buffered 20480 debugging
+    file prompt quiet
+    ip tftp blocksize 8192
 
-!-- Interface that is connected to the provisioning network, must remain on Vlan1 for TFTP download.
-interface GigabitEthernet1/0/48
-  description TMP//PROVISION:Omit config; updated with post_ztp_2 EEM applet.
-  switchport
-  switchport mode access
-  switchport nonegotiate
-  switchport access vlan 1
-  spanning-tree portfast
-  no shutdown
+    !-- Required for TFTP transfers from FreeZTP (or other reachable TFTP server; i.e. `tftp_addr`).
+    interface Vlan1
+    ip address dhcp
+    no shutdown
 
-!-- POST_ZTP_1 EEM applet to download and install the image, clean up config, then reload.
-event manager applet post_ztp_1
-  event syslog occurs 1 pattern "%DHCP-6-ADDRESS_ASSIGN: Interface Vlan1 assigned DHCP address" maxrun 900
-  action 01.00 syslog msg "\n     ##Switch/stack is ready, downloading and installing image in 120s."
-  action 01.01 wait 120
-  action 01.02 cli command "enable"
-  action 01.03 cli command "debug event man act cli"
-  action 02.00 cli command "conf t"
-  action 03.00 cli command "no event man app post_ztp_1"
-  action 04.00 cli command "do copy tftp://{{ tftp_addr }}/{{ image_bin }} flash:"
-  action 05.00 cli command "int vlan 1"
-  action 05.01 cli command   "no ip addr"
-  action 05.02 cli command   "shut"
-  action 06.00 cli command "int {{ prov_int }}"
-  action 06.01 cli command   "no desc"
-  action 06.02 cli command   "switchp acc vl {{ access_vlan }}
-  action 07.00 cli command "end"
-  action 08.00 cli command "write mem" pattern "confirm|#"
-  action 08.01 cli command ""
-  action 09.00 cli command "software install file flash:{{ image_bin }} new force" pattern "proceed|#"
-  action 09.01 cli command "y"
-  action 10.00 syslog msg "\n     ## Installation complete, reloading for upgrade."
-  action 10.01 cli command "undebug all"
+    !-- Interface that is connected to the provisioning network, must remain on Vlan1 for TFTP download.
+    interface GigabitEthernet1/0/48
+    description TMP//PROVISION:Omit config; updated with post_ztp_2 EEM applet.
+    switchport
+    switchport mode access
+    switchport nonegotiate
+    switchport access vlan 1
+    spanning-tree portfast
+    no shutdown
 
-!-- (Optional) POST_ZTP_2 applet to run package clean and add any config commands that were previously incompatible.
-!-- (Optional) Add any desired configs between actions 03.00 and 04.00.
-event manager applet post_ztp_2
-  event syslog occurs 1 pattern "%IOSXE_REDUNDANCY-6-PEER" maxrun 600
-  action 01.00 syslog msg "\n     ## Switch/stack reloaded on new image, running 'post_ztp_2' EEM applet in 120s."
-  action 01.01 wait 120
-  action 01.02 cli command "enable"
-  action 01.03 cli command "debug event man act cli"
-  action 02.00 cli command "conf t"
-  action 03.00 cli command "no event man app post_ztp_2"
-  action 04.00 cli command "end"
-  action 05.00 cli command "write mem" pattern "confirm|#"
-  action 05.01 cli command ""
-  action 06.00 cli command "req plat soft pack clean sw all" pattern "proceed|#"
-  action 06.01 cli command "y"
-  action 07.00 syslog msg "\n     ## Any unused .bin or .pkg files have been deleted.\n     ## Switch is ready for deployment, OK to power off."
-  action 07.01 cli command "undebug all"
-```
+    !-- POST_ZTP_1 EEM applet to download and install the image, clean up config, then reload.
+    event manager applet post_ztp_1
+    event syslog occurs 1 pattern "%DHCP-6-ADDRESS_ASSIGN: Interface Vlan1 assigned DHCP address" maxrun 900
+    action 01.00 syslog msg "\n     ##Switch/stack is ready, downloading and installing image in 120s."
+    action 01.01 wait 120
+    action 01.02 cli command "enable"
+    action 01.03 cli command "debug event man act cli"
+    action 02.00 cli command "conf t"
+    action 03.00 cli command "no event man app post_ztp_1"
+    action 04.00 cli command "do copy tftp://{{ tftp_addr }}/{{ image_bin }} flash:"
+    action 05.00 cli command "int vlan 1"
+    action 05.01 cli command   "no ip addr"
+    action 05.02 cli command   "shut"
+    action 06.00 cli command "int {{ prov_int }}"
+    action 06.01 cli command   "no desc"
+    action 06.02 cli command   "switchp acc vl {{ access_vlan }}
+    action 07.00 cli command "end"
+    action 08.00 cli command "write mem" pattern "confirm|#"
+    action 08.01 cli command ""
+    action 09.00 cli command "software install file flash:{{ image_bin }} new force" pattern "proceed|#"
+    action 09.01 cli command "y"
+    action 10.00 syslog msg "\n     ## Installation complete, reloading for upgrade."
+    action 10.01 cli command "undebug all"
+
+    !-- (Optional) POST_ZTP_2 applet to run package clean and add any config commands that were previously incompatible.
+    !-- (Optional) Add any desired configs between actions 03.00 and 04.00.
+    event manager applet post_ztp_2
+    event syslog occurs 1 pattern "%IOSXE_REDUNDANCY-6-PEER" maxrun 600
+    action 01.00 syslog msg "\n     ## Switch/stack reloaded on new image, running 'post_ztp_2' EEM applet in 120s."
+    action 01.01 wait 120
+    action 01.02 cli command "enable"
+    action 01.03 cli command "debug event man act cli"
+    action 02.00 cli command "conf t"
+    action 03.00 cli command "no event man app post_ztp_2"
+    action 04.00 cli command "end"
+    action 05.00 cli command "write mem" pattern "confirm|#"
+    action 05.01 cli command ""
+    action 06.00 cli command "req plat soft pack clean sw all" pattern "proceed|#"
+    action 06.01 cli command "y"
+    action 07.00 syslog msg "\n     ## Any unused .bin or .pkg files have been deleted.\n     ## Switch is ready for deployment, OK to power off."
+    action 07.01 cli command "undebug all"
+    ```
 
 
 
