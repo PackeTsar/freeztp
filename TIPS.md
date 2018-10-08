@@ -8,8 +8,17 @@ Some usage tips and tricks from real world FreeZTP deployments.
 
 -----------------------------------------
 
+##   TABLE OF CONTENTS   ##
+1. [Use-case: Provisioning without using Vlan1](#Use-case:-Provisioning-without-using-Vlan1)
+2. [Use-case: Upgrade IOS-XE 3.7.x to 16.3.6](#Use-case:-Upgrade-IOS-XE-3.7.x-to-16.3.6)
+
+
+-----------------------------------------
+
 
 ## Use-case: Provisioning without using Vlan1
+
+###### Author: [derek_shnosh](https://github.com/derek-shnosh), Rev: 1, Date: 2018.1008, FreeZTP dev1.1.0m
 
 To avoid using Vlan1 for provisioning, configure the *master* provisioning switch interfaces as follows; *e.g. assumes the following details for the provisioning environment.* The client switch running the smart-install process will still bring up all interfaces as *dynamic desireable* (or other default behavior) on Vlan1, but disabling CDP and enabling BPDU filter will circumvent any undesirable spanning-tree behavior that would otherwise interfere with the link coming up between the master and client switches.
 
