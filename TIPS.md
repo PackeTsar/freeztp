@@ -15,7 +15,7 @@ Some usage tips and tricks from real world FreeZTP deployments.
 -----------------------------------------
 ## Use-case: Provisioning Without Vlan1
 
-###### Author: [derek_shnosh](https://github.com/derek-shnosh), Rev: 1, Date: 2018.1008, FreeZTP dev1.1.0m
+###### Author: [derek-shnosh](https://github.com/derek-shnosh), Rev: 1, Date: 2018.1008, FreeZTP dev1.1.0m
 
 The use of Vlan1 is not required for provisioning. The client switch running the smart-install process will still bring up all interfaces as *dynamic desirable* (or other default behavior) on Vlan1; however, disabling CDP and enabling BPDU filter will circumvent any undesirable spanning-tree behavior that would otherwise interfere with the link coming up between the master and client switches.
 
@@ -46,7 +46,7 @@ The use of Vlan1 is not required for provisioning. The client switch running the
 -----------------------------------------
 ## Use-case: Upgrade IOS-XE 3.7.x to 16.3.6
 
-###### Author: [derek_shnosh](https://github.com/derek-shnosh), Rev: 1, Date: 2018.1008, FreeZTP dev1.1.0m
+###### Author: [derek-shnosh](https://github.com/derek-shnosh), Rev: 1, Date: 2018.1008, FreeZTP dev1.1.0m
 
 ### Problem
 
