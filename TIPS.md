@@ -17,30 +17,30 @@ Some usage tips and tricks from real world FreeZTP deployments.
 
 ###### Author: [derek_shnosh](https://github.com/derek-shnosh), Rev: 1, Date: 2018.1008, FreeZTP dev1.1.0m
 
-To avoid using Vlan1 for provisioning, configure the *master* provisioning switch interfaces as follows; *e.g. assumes the following details for the provisioning environment.* The client switch running the smart-install process will still bring up all interfaces as *dynamic desireable* (or other default behavior) on Vlan1, but disabling CDP and enabling BPDU filter will circumvent any undesirable spanning-tree behavior that would otherwise interfere with the link coming up between the master and client switches.
+The use of Vlan1 is not required for provisioning. The client switch running the smart-install process will still bring up all interfaces as *dynamic desirable* (or other default behavior) on Vlan1; however, disabling CDP and enabling BPDU filter will circumvent any undesirable spanning-tree behavior that would otherwise interfere with the link coming up between the master and client switches.
 
 **NOTE: A client switch should only be connected to the *master* provisioning switch during provisioning**; i.e. a client switch should never be connected to the provisioning environment and production infrastructure during the provisioning process, spanning-tree loops can occur.
 
-### Provisioning Network Information
-
-| VLAN  | Subnet          | IP Allocation                                                                      |
-| :---: | :-------------: | :--------------------------------------------------------------------------------- |
-| 3967  | 172.31.255.0/24 | **.1** - Gateway (optional)<br>**.2** - FreeZTP server<br>**.5 - .254** DHCP range |
-
 ### Interface Configuration (Master Switch)
 
-* Replace `<n>` with interfaces that client switches will connect to.
+* Configure the *master* provisioning switch interfaces as follows; Replace `<n>` with interfaces that client switches will connect to.
 
     ```
     interface <n>
-    desc PROVISION
-    switchport access vlan 3967
-    switchport mode access
-    switchport nonegotiate
-    no cdp enable
-    spanning-tree portfast
-    spanning-tree bpdufilter enable
+        desc PROVISION
+        switchport access vlan 3967
+        switchport mode access
+        switchport nonegotiate
+        no cdp enable
+        spanning-tree portfast
+        spanning-tree bpdufilter enable
     ```
+
+* *Interface config assumes the following details for the provisioning environment, adjust accordingly.*
+
+    | VLAN  | Subnet          | IP Allocation                                                                      |
+    | :---: | :-------------: | :--------------------------------------------------------------------------------- |
+    | 3967  | 172.31.255.0/24 | **.1** - Gateway (optional)<br>**.2** - FreeZTP server<br>**.5 - .254** DHCP range |
 
 
 -----------------------------------------
