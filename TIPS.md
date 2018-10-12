@@ -251,7 +251,7 @@ This workaround uses EEM applets in the J2 switch template to download install t
 -----------------------------------------
 ## Use-case: IOS-XE Stack Numbering
 
-###### Author: [derek-shnosh](https://github.com/derek-shnosh), Rev: 1, Date: 2018.1008, FreeZTP dev1.1.0m
+###### Author: [derek-shnosh](https://github.com/derek-shnosh), Rev: 1, Date: 2018.1012, FreeZTP dev1.1.0m
 
 ### Preamble
 
