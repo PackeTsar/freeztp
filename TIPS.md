@@ -10,6 +10,7 @@ Some usage tips and tricks from real world FreeZTP deployments.
 ## TABLE OF CONTENTS
 1. [Use-case: Provisioning Without Vlan1](#use-case-provisioning-without-vlan1)
 2. [Use-case: Upgrade IOS-XE 3.7.x to 16.3.6](#use-case-upgrade-ios-xe-37x-to-1636)
+3. [Use-case: IOS-XE Stack Numbering](#use-case-ios-xe-stack-numbering)
 
 
 -----------------------------------------
@@ -110,7 +111,7 @@ This workaround uses EEM applets in the J2 switch template to download install t
 #### Process Order
 
 1. Switch is powered up connected to provisioning network and initiates smart-install, FreeZTP does not give an image.
-2. Switch requests config, FreeZTP gives a (merged) config, containing the [required config](#required-config).
+2. Switch requests config, FreeZTP gives a (merged) config, containing the [required config (upgrade)](#required-config-upgrade).
     * *Merged template should not contain any incompatible configuration commands for current software version (3.7.4E).*
 3. Switch applies configuration with Vlan1 configured for DHCP addressing; **`post_ztp_1` is triggered by Vlan1 obtaining a DHCP address**.
 4. [EEM Applet `post_ztp_1` loaded to memory.]
@@ -152,7 +153,7 @@ This workaround uses EEM applets in the J2 switch template to download install t
     21:56:01.735 PDT: %RF-5-RF_TERMINAL_STATE: Terminal state reached for (SSO)
     ```
 
-#### Required Config
+#### Required Config (Upgrade)
 
 * Disable FreeZTP image downloads
 
@@ -246,6 +247,330 @@ This workaround uses EEM applets in the J2 switch template to download install t
     action 07.00 syslog msg "\n     ## Any unused .bin or .pkg files have been deleted.\n     ## Switch is ready for deployment, OK to power off."
     action 07.01 cli command "undebug all"
     ```
+
+-----------------------------------------
+## Use-case: IOS-XE Stack Numbering
+
+### Preamble
+
+When the [required config (stack)](#required-config-stack) is added to a Jinja2 template for FreeZTP it will automatically build out an EEM applet that will set switch priorities and renumber all switches in the stack according to how they were allocated in the FreeZTP keystore.
+
+In this use-case, FreeZTP's `idarray` variables are being used to define stack member serial numbers (see the CSV section below). When the template is merged with the keystore, an action sequence is generated for each serial number (`idarray_#`) associated with the hostname (`keystore_id`).
+
+#### CSV
+
+Variables defined in the keystore (FreeZTP);
+
+* `keystore_id` = hostname
+* `association` = template
+* `idarray_<n>` = serial number(s)
+
+The switch serial numbers should be added to the `idarray_#` fields in accordance with how they are to be positioned in the stack.
+
+```csv
+keystore_id,association,idarray_1,idarray_2,idarray_3,idarray_4,idarray_5,idarray_6,idarray_7,idarray_8,idarray_9
+ASW-TR01-01,TEST,FOC11111111,FOC22222222,,,,,,,
+```
+
+In this example, there are two serial numbers allocated to the stack **ASW-TR01-01**;
+* **FOC11111111** (`idarray_1`) should be switch 1 in the stack, with a priority of 15.
+* **FOC22222222** (`idarray_2`) should be switch 2 in the stack, with a priority of 14.
+
+#### Explanation
+
+* The template gets a count of how many serial numbers are found in `idarray`.
+* The template generates an EEM applet and a group of action sequences for each switch found in `idarray`.
+* The configuration is pushed to the switch during the ZTP process.
+* The EEM applet (*when ran\**) will do the following;
+   * Execute the command `show module | inc ^.[1-9]` (*example output for two switches\*\**);
+      ```cisco
+      1       62     WS-C3850-12X48U-S     FOC22222222  abcd.ef01.1111  V02           16.3.6        
+      2       62     WS-C3850-12X48U-S     FOC11111111  abcd.ef02.2222  V02           16.3.6        
+      ASW-TR01-01#
+      ```
+   * For each switch, search the entire output for its serial number.
+      * If found, the applet searches the output line-by-line until it finds the serial number.
+         * If the line number does not match the allocated switch number (`idarray_#`), a syslog message will be generated, the priority will be set and the switch will be renumbered appropriately.
+         * If the line number matches the allocated switch number, as syslog message will be generated and only the priority will be set.
+      * If not found, a syslog message will be generated, no changes will take place, and the applet will move onto the next switch.
+
+*See the Validation section to view the syslog message output for this example.*
+
+*\* An event trigger can be defined to fully automate the process, or it can be left as is and triggered manually by typing `event manager run sw-stack` in an elevated command prompt.*
+
+*\*\* This output is what EEM stores for parsing. Note the last line is the switch hostname, this line is ignored when searching for the switch serial number(s). All other line numbers correlate with the stack's current switch allocation numbers.*
+
+### Merge-test
+Merged configuration that is pushed to the switch from FreeZTP (J2 templating functions do not print).
+
+```cisco
+!-- Variables (keys) parsed from CSV keystore.
+!---- IDARRAY_1 (switch 1 serial number): FOC11111111
+!---- IDARRAY_2 (switch 2 serial number): FOC22222222
+!---- IDARRAY_3 (switch 3 serial number): 
+!---- IDARRAY_4 (switch 4 serial number): 
+!---- IDARRAY_5 (switch 5 serial number): 
+!---- IDARRAY_6 (switch 6 serial number): 
+!---- IDARRAY_7 (switch 7 serial number): 
+!---- IDARRAY_8 (switch 8 serial number): 
+!---- IDARRAY_9 (switch 9 serial number): 
+!---- IDARRAY (all serials): ['FOC11111111', 'FOC22222222']
+!
+!-- Count number of serials parsed from CSV: 
+!---- SW_COUNT (count of serials found in IDARRAY): 2
+!
+!-- EEM applet to renumber switches accordingly.
+event manager applet sw-stack
+ event none
+ action 00.00 cli command "enable"
+ action 00.01 cli command "show mod | i ^.[1-9]"
+ action 00.02 set stack "$_cli_result"
+ !
+ !
+ action 01.00 set idarray_1 "FOC11111111"
+ action 01.01 set sw "1"
+ action 01.02 set pri "16"
+ action 01.03 decrement pri 1
+ action 01.04 set i "0"
+ action 01.05 regexp "FOC11111111" "$stack"
+ action 01.06 if $_regexp_result eq "1"
+ action 01.07  foreach line "$stack" "\n"
+ action 01.08   increment i
+ action 01.09   if $i le "2"
+ action 01.10    string trim "$line"
+ action 01.11    set line "$_string_result"
+ action 01.12    regexp "FOC11111111" "$line"
+ action 01.13    if $_regexp_result eq "1"
+ action 01.14     if $i ne $sw
+ action 01.15      syslog msg "\n     ## $idarray_1 is currently switch number $i, it should be switch number $sw.\n     ## Setting priority to $pri and renumbering to $sw."
+ action 01.16      cli command "switch $i priority $pri" pattern "continue|#"
+ action 01.17      cli command ""
+ action 01.18      cli command "switch $i renumber $sw" pattern "continue|#"
+ action 01.19      cli command ""
+ action 01.20     else
+ action 01.21      syslog msg "\n     ## $idarray_1 is correctly numbered ($i).\n     ## Setting priority to $pri (renumbering not needed)."
+ action 01.22      cli command "switch $i priority $pri" pattern "continue|#"
+ action 01.23      cli command ""
+ action 01.24     end
+ action 01.25    end
+ action 01.26   end
+ action 01.27  end
+ action 01.28 else
+ action 01.29  syslog msg " ## FOC11111111 (sw-1 serial number) not found in the stack, check 'show mod' output."
+ action 01.30 end
+ !
+ !
+ action 02.00 set idarray_2 "FOC22222222"
+ action 02.01 set sw "2"
+ action 02.02 set pri "16"
+ action 02.03 decrement pri 2
+ action 02.04 set i "0"
+ action 02.05 regexp "FOC22222222" "$stack"
+ action 02.06 if $_regexp_result eq "1"
+ action 02.07  foreach line "$stack" "\n"
+ action 02.08   increment i
+ action 02.09   if $i le "2"
+ action 02.10    string trim "$line"
+ action 02.11    set line "$_string_result"
+ action 02.12    regexp "FOC22222222" "$line"
+ action 02.13    if $_regexp_result eq "1"
+ action 02.14     if $i ne $sw
+ action 02.15      syslog msg "\n     ## $idarray_2 is currently switch number $i, it should be switch number $sw.\n     ## Setting priority to $pri and renumbering to $sw."
+ action 02.16      cli command "switch $i priority $pri" pattern "continue|#"
+ action 02.17      cli command ""
+ action 02.18      cli command "switch $i renumber $sw" pattern "continue|#"
+ action 02.19      cli command ""
+ action 02.20     else
+ action 02.21      syslog msg "\n     ## $idarray_2 is correctly numbered ($i).\n     ## Setting priority to $pri (renumbering not needed)."
+ action 02.22      cli command "switch $i priority $pri" pattern "continue|#"
+ action 02.23      cli command ""
+ action 02.24     end
+ action 02.25    end
+ action 02.26   end
+ action 02.27  end
+ action 02.28 else
+ action 02.29  syslog msg " ## FOC22222222 (sw-2 serial number) not found in the stack, check 'show mod' output."
+ action 02.30 end
+ !
+```
+
+### Resultant Config
+Configuration as it appears once applied to the switch.
+
+```cisco
+event manager applet sw-stack
+ event none
+ action 00.00 cli command "enable"
+ action 00.01 cli command "show mod | i ^.[1-9]"
+ action 00.02 set stack "$_cli_result"
+ action 01.00 set idarray_1 "FOC11111111"
+ action 01.01 set sw "1"
+ action 01.02 set pri "16"
+ action 01.03 decrement pri 1
+ action 01.04 set i "0"
+ action 01.05 regexp "FOC11111111" "$stack"
+ action 01.06 if $_regexp_result eq "1"
+ action 01.07  foreach line "$stack" "\n"
+ action 01.08   increment i
+ action 01.09   if $i le "2"
+ action 01.10    string trim "$line"
+ action 01.11    set line "$_string_result"
+ action 01.12    regexp "FOC11111111" "$line"
+ action 01.13    if $_regexp_result eq "1"
+ action 01.14     if $i ne "$sw"
+ action 01.15      syslog msg "\n     ## $idarray_1 is currently switch number $i, it should be switch number $sw.\n     ## Setting priority to $pri and renumbering to $sw."
+ action 01.16      cli command "switch $i priority $pri" pattern "continue|#"
+ action 01.17      cli command ""
+ action 01.18      cli command "switch $i renumber $sw" pattern "continue|#"
+ action 01.19      cli command ""
+ action 01.20     else
+ action 01.21      syslog msg "\n     ## $idarray_1 is correctly numbered ($i).\n     ## Setting priority to $pri (renumbering not needed)."
+ action 01.22      cli command "switch $i priority $pri" pattern "continue|#"
+ action 01.23      cli command ""
+ action 01.24     end
+ action 01.25    end
+ action 01.26   end
+ action 01.27  end
+ action 01.28 else
+ action 01.29  syslog msg " ## FOC11111111 (sw-1 serial number) not found in the stack, check 'show mod' output."
+ action 01.30 end
+ action 02.00 set idarray_2 "FOC22222222"
+ action 02.01 set sw "2"
+ action 02.02 set pri "16"
+ action 02.03 decrement pri 2
+ action 02.04 set i "0"
+ action 02.05 regexp "FOC22222222" "$stack"
+ action 02.06 if $_regexp_result eq "1"
+ action 02.07  foreach line "$stack" "\n"
+ action 02.08   increment i
+ action 02.09   if $i le "2"
+ action 02.10    string trim "$line"
+ action 02.11    set line "$_string_result"
+ action 02.12    regexp "FOC22222222" "$line"
+ action 02.13    if $_regexp_result eq "1"
+ action 02.14     if $i ne "$sw"
+ action 02.15      syslog msg "\n     ## $idarray_2 is currently switch number $i, it should be switch number $sw.\n     ## Setting priority to $pri and renumbering to $sw."
+ action 02.16      cli command "switch $i priority $pri" pattern "continue|#"
+ action 02.17      cli command ""
+ action 02.18      cli command "switch $i renumber $sw" pattern "continue|#"
+ action 02.19      cli command ""
+ action 02.20     else
+ action 02.21      syslog msg "\n     ## $idarray_2 is correctly numbered ($i).\n     ## Setting priority to $pri (renumbering not needed)."
+ action 02.22      cli command "switch $i priority $pri" pattern "continue|#"
+ action 02.23      cli command ""
+ action 02.24     end
+ action 02.25    end
+ action 02.26   end
+ action 02.27  end
+ action 02.28 else
+ action 02.29  syslog msg " ## FOC22222222 (sw-2 serial number) not found in the stack, check 'show mod' output."
+ action 02.30 end
+```
+
+### Validation
+
+* This template/applet has been confirmed functional on stacked C3850-12X48U-S switches running the following IOS-XE versions;
+  * IOS-XE 3.7.4E
+  * IOS-XE 16.3.6
+
+* For testing, I changed the `renumber` and `priority` action sequences to `syslog msg` (instead of `cli command`) and ran the applet manually to test output...
+  * ... when switches are not numbered correctly;
+  ```cisco
+  ASW-TR01-01#ev man run sw-stack
+  ASW-TR01-01#
+  *Oct 11 2018 17:02:22.999 PDT: %HA_EM-6-LOG: sw-stack: 
+       ## FOC11111111 is currently switch number 2, it should be switch number 1.
+       ## Setting priority to 15 and renumbering to 1.
+  *Oct 11 2018 17:02:22.999 PDT: %HA_EM-6-LOG: sw-stack: switch 2 priority 15
+  *Oct 11 2018 17:02:22.999 PDT: %HA_EM-6-LOG: sw-stack: 
+  *Oct 11 2018 17:02:22.999 PDT: %HA_EM-6-LOG: sw-stack: switch 2 renumber 1
+  *Oct 11 2018 17:02:23.000 PDT: %HA_EM-6-LOG: sw-stack: 
+       ## FOC22222222 is currently switch number 1, it should be switch number 2.
+       ## Setting priority to 14 and renumbering to 2.
+  *Oct 11 2018 17:02:23.001 PDT: %HA_EM-6-LOG: sw-stack: switch 1 priority 14
+  *Oct 11 2018 17:02:23.001 PDT: %HA_EM-6-LOG: sw-stack: 
+  *Oct 11 2018 17:02:23.001 PDT: %HA_EM-6-LOG: sw-stack: switch 1 renumber 2
+  *Oct 11 2018 17:02:23.001 PDT: %HA_EM-6-LOG: sw-stack: 
+  ```
+
+  * ...when switches are numbered correctly (manually renumbered and reloaded).
+  ```cisco
+  ASW-TR01-01(config)#do ev man run sw-stack
+  ASW-TR01-01(config)#
+  *Oct 11 2018 16:31:58.039 PDT: %HA_EM-6-LOG: sw-stack: 
+       ## FOC11111111 is correctly numbered (1).
+       ## Setting priority to 15 (renumbering not needed).
+  *Oct 11 2018 16:31:58.040 PDT: %HA_EM-6-LOG: sw-stack: switch 1 priority 15
+  *Oct 11 2018 16:31:58.041 PDT: %HA_EM-6-LOG: sw-stack: 
+       ## FOC22222222 is correctly numbered (2).
+       ## Setting priority to 14 (renumbering not needed).
+  *Oct 11 2018 16:31:58.041 PDT: %HA_EM-6-LOG: sw-stack: switch 2 priority 14
+  *Oct 11 2018 16:31:58.042 PDT: %HA_EM-6-LOG: sw-stack: 
+  ```
+
+### Required Config (Stack)
+
+* Template Config Snippet.
+
+    ```jinja2
+    !-- Variables (keys) parsed from CSV keystore.
+    !---- IDARRAY_1 (switch 1 serial number): {{idarray_1}}
+    !---- IDARRAY_2 (switch 2 serial number): {{idarray_2}}
+    !---- IDARRAY_3 (switch 3 serial number): {{idarray_3}}
+    !---- IDARRAY_4 (switch 4 serial number): {{idarray_4}}
+    !---- IDARRAY_4 (switch 5 serial number): {{idarray_5}}
+    !---- IDARRAY_4 (switch 6 serial number): {{idarray_6}}
+    !---- IDARRAY_4 (switch 7 serial number): {{idarray_7}}
+    !---- IDARRAY_4 (switch 8 serial number): {{idarray_8}}
+    !---- IDARRAY_4 (switch 9 serial number): {{idarray_9}}
+    !---- IDARRAY (all serials): {{idarray}}
+    !
+    !-- Count number of serials parsed from CSV: {% set sw_count = idarray|count %}
+    !---- SW_COUNT (count of serials found in IDARRAY): {{sw_count}}
+    !
+    !-- EEM applet to renumber switches accordingly.
+    event manager applet sw-stack
+    event none
+    action 00.00 cli command "enable"
+    action 00.01 cli command "show mod | i ^.[1-9]"
+    action 00.02 set stack "$_cli_result"
+    !{% for sw in idarray %}
+    !{% set i = loop.index %}
+    action 0{{i}}.00 set idarray_{{i}} "{{sw}}"
+    action 0{{i}}.01 set sw "{{i}}"
+    action 0{{i}}.02 set pri "16"
+    action 0{{i}}.03 decrement pri {{i}}
+    action 0{{i}}.04 set i "0"
+    action 0{{i}}.05 regexp "{{sw}}" "$stack"
+    action 0{{i}}.06 if $_regexp_result eq "1"
+    action 0{{i}}.07  foreach line "$stack" "\n"
+    action 0{{i}}.08   increment i
+    action 0{{i}}.09   if $i le "{{sw_count}}"
+    action 0{{i}}.10    string trim "$line"
+    action 0{{i}}.11    set line "$_string_result"
+    action 0{{i}}.12    regexp "{{sw}}" "$line"
+    action 0{{i}}.13    if $_regexp_result eq "1"
+    action 0{{i}}.14     if $i ne $sw
+    action 0{{i}}.15      syslog msg "\n     ## $idarray_{{i}} is currently switch number $i, it should be switch number $sw.\n     ## Setting priority to $pri and renumbering to $sw."
+    action 0{{i}}.16      cli command "switch $i priority $pri" pattern "continue|#"
+    action 0{{i}}.17      cli command ""
+    action 0{{i}}.18      cli command "switch $i renumber $sw" pattern "continue|#"
+    action 0{{i}}.19      cli command ""
+    action 0{{i}}.20     else
+    action 0{{i}}.21      syslog msg "\n     ## $idarray_{{i}} is correctly numbered ($i).\n     ## Setting priority to $pri (renumbering not needed)."
+    action 0{{i}}.22      cli command "switch $i priority $pri" pattern "continue|#"
+    action 0{{i}}.23      cli command ""
+    action 0{{i}}.24     end
+    action 0{{i}}.25    end
+    action 0{{i}}.26   end
+    action 0{{i}}.27  end
+    action 0{{i}}.28 else
+    action 0{{i}}.29  syslog msg " ## {{sw}} (sw-{{i}} serial number) not found in the stack, check 'show mod' output."
+    action 0{{i}}.30 end
+    !{% endfor %}
+    ```
+
+
 
 
 
