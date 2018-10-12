@@ -172,8 +172,8 @@ This workaround uses EEM applets in the J2 switch template to download install t
         | :-----------: | :----------------------------------------------------------------------------------------------------------------- |
         | `tftp_addr`   | Address of TFTP server, typically FreeZTP.                                                                         |
         | `image_bin`   | Name of the image file to download.                                                                                |
-        | `prov_int`    | Interface to be used for provisioning; e.g. Te1/0/48<br>> *3850-12X48U-S interfaces 37-48 are TenGigabitEthernet.* |
         | `access_vlan` | Vlan to configure on the provisioning interface (Gi1/0/48) after upgrade/reload is complete.                       |
+        | `prov_int`    | Interface to be used for provisioning; e.g. Te1/0/48<br>> *3850-12X48U-S interfaces 37-48 are TenGigabitEthernet.* |
 
 * Template Config Snippet
 
