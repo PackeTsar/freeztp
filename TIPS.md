@@ -10,7 +10,7 @@ Some usage tips and tricks from real world FreeZTP deployments.
 ## TABLE OF CONTENTS
 1. [Use-case: Provisioning Without Vlan1](#use-case-provisioning-without-vlan1)
 2. [Use-case: Upgrade IOS-XE 3.7.x to 16.3.6](#use-case-upgrade-ios-xe-37x-to-1636)
-3. [Use-case: IOS-XE Stack Numbering](#use-case-ios-xe-stack-numbering)
+3. [Use-case: Automated IOS-XE Stack Renumbering & Prioritization](#use-case-automated-ios-xe-stack-renumbering-&-prioritization)
 
 
 -----------------------------------------
@@ -249,7 +249,7 @@ This workaround uses EEM applets in the J2 switch template to download install t
     ```
 
 -----------------------------------------
-## Use-case: IOS-XE Stack Numbering
+## Use-case: Automated IOS-XE Stack Renumbering & Prioritization
 
 ###### Author: [derek-shnosh](https://github.com/derek-shnosh), Rev: 2, Date: 2018.1015, FreeZTP dev1.1.0m
 
@@ -257,7 +257,16 @@ This workaround uses EEM applets in the J2 switch template to download install t
 
 When the [required config (stack)](#required-config-stack) is added to a Jinja2 template for FreeZTP it will automatically build out an EEM applet that will set switch priorities and renumber all switches in the stack according to how they were allocated in the FreeZTP keystore.
 
-In this use-case, FreeZTP's `idarray` variables are being used to define stack member serial numbers (see the CSV section below). When the template is merged with the keystore, an action sequence is generated for each serial number (`idarray_#`) associated with the hostname (`keystore_id`).
+All switches in the stack can be powered on simultaneously. After the election processes are complete, the stack will continue booting and then perform the smart-install procedure where it will receive this applet as part of the templated configuration.
+
+The applet will need to be assigned a syslog trigger to automatically execute after all members in the stack are online. To find an appropriate syslog message, power up a couple switches in a stack and observe their console logs during the boot process. The following `syslog` trigger worked on IOS-XE 3.7.4E.
+
+```cisco
+event manager applet sw_stack
+ event syslog occurs 1 pattern "%HA_CONFIG_SYNC-6-BULK_CFGSYNC_SUCCEED: Bulk Sync succeeded" maxrun 60
+```
+
+In this use-case, FreeZTP's `idarray` variables are being used to define stack member serial numbers (see the CSV section below). When the template is merged with the keystore, an action sequence is generated for each serial number (`idarray_#`) associated with the hostname (`keystore_id`). Switch serial numbers should be assigned to `idarray_#`'s as they're meant to be numbered in the stack.
 
 #### CSV
 
@@ -322,7 +331,7 @@ Merged configuration that is pushed to the switch from FreeZTP (J2 templating fu
 !-- EEM applet to renumber switches accordingly.
 
 event manager applet sw_stack
-  event none
+  event none maxrun 60
   action 00.00 cli command "enable"
   action 00.01 cli command "show mod | i ^.[1-9]"
   action 00.02 set stack "$_cli_result"
@@ -439,7 +448,7 @@ event manager applet sw_stack
     !
     !-- EEM applet to renumber switches accordingly.
     event manager applet sw_stack
-    event none
+    event none maxrun 60
       action 00.00 cli command "enable"
       action 00.01 cli command "show mod | i ^.[1-9]"
       action 00.02 set stack "$_cli_result"
