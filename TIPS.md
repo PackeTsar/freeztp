@@ -10,7 +10,7 @@ Some usage tips and tricks from real world FreeZTP deployments.
 ## TABLE OF CONTENTS
 1. [Use-case: Provisioning Without Vlan1](#use-case-provisioning-without-vlan1)
 2. [Use-case: Upgrade IOS-XE 3.7.x to 16.3.6](#use-case-upgrade-ios-xe-37x-to-1636)
-3. [Use-case: Automated IOS-XE Stack Renumbering & Prioritization](#use-case-automated-ios-xe-stack-renumbering-prioritization)
+3. [Use-case: Automated IOS-XE Stack Renumbering](#use-case-automated-ios-xe-stack-renumbering)
 
 
 -----------------------------------------
@@ -249,7 +249,7 @@ This workaround uses EEM applets in the J2 switch template to download install t
     ```
 
 -----------------------------------------
-## Use-case: Automated IOS-XE Stack Renumbering & Prioritization
+## Use-case: Automated IOS-XE Stack Renumbering
 
 ###### Author: [derek-shnosh](https://github.com/derek-shnosh), Rev: 2, Date: 2018.1015, FreeZTP dev1.1.0m
 
