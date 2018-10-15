@@ -251,7 +251,7 @@ This workaround uses EEM applets in the J2 switch template to download install t
 -----------------------------------------
 ## Use-case: IOS-XE Stack Numbering
 
-###### Author: [derek-shnosh](https://github.com/derek-shnosh), Rev: 1, Date: 2018.1012, FreeZTP dev1.1.0m
+###### Author: [derek-shnosh](https://github.com/derek-shnosh), Rev: 2, Date: 2018.1015, FreeZTP dev1.1.0m
 
 ### Preamble
 
@@ -280,10 +280,10 @@ In this example, there are two serial numbers allocated to the stack **ASW-TR01-
 
 #### Explanation
 
-* The template gets a count of how many serial numbers are found in `idarray`.
-* The template generates an EEM applet and a group of action sequences for each switch found in `idarray`.
-* The configuration is pushed to the switch during the ZTP process.
-* The EEM applet (*when ran\**) will do the following;
+* J2 template gets a count of how many serial numbers are found in `idarray`.
+* J2 template generates an EEM applet containing a group of action sequences for each switch found in `idarray`.
+* The onfiguration is pushed to the switch during the ZTP process.
+* EEM applet (when ran, needs trigger) will do the following;
    * Execute the command `show module | inc ^.[1-9]` (*example output for two switches\*\**);
       ```cisco
       1       62     WS-C3850-12X48U-S     FOC22222222  abcd.ef01.1111  V02           16.3.6        
@@ -291,19 +291,17 @@ In this example, there are two serial numbers allocated to the stack **ASW-TR01-
       ASW-TR01-01#
       ```
    * For each switch, search the entire output for its serial number.
-      * If found, the applet searches the output line-by-line until it finds the serial number.
-         * If the line number does not match the allocated switch number (`idarray_#`), a syslog message will be generated, the priority will be set and the switch will be renumbered appropriately.
-         * If the line number matches the allocated switch number, as syslog message will be generated and only the priority will be set.
       * If not found, a syslog message will be generated, no changes will take place, and the applet will move onto the next switch.
-
-*See the Validation section to view the syslog message output for this example.*
-
-*\* An event trigger can be defined to fully automate the process, or it can be left as is and triggered manually by typing `event manager run sw-stack` in an elevated command prompt.*
+      * If found, the applet searches the output line-by-line until it finds the serial number.
+         * If the line number where the serial number was found matches the allocated switch number, as syslog message will be generated and only the priority will be set.
+         * If the line number where the serial number was found does not match the allocated switch number (`idarray_#`), a syslog message will be generated, the priority will be set and the switch will be renumbered appropriately.
 
 *\*\* This output is what EEM stores for parsing. Note the last line is the switch hostname, this line is ignored when searching for the switch serial number(s). All other line numbers correlate with the stack's current switch allocation numbers.*
 
+*See the Validation section to view the syslog message output for this example.*
+
 ### Merge-test
-Merged configuration that is pushed to the switch from FreeZTP (J2 templating functions do not print).
+Merged configuration that is pushed to the switch from FreeZTP (J2 templating functions do not print). Any line starting with a `!` will be ignored by the switch.
 
 ```cisco
 !-- Variables (keys) parsed from CSV keystore.
@@ -322,151 +320,79 @@ Merged configuration that is pushed to the switch from FreeZTP (J2 templating fu
 !---- SW_COUNT (count of serials found in IDARRAY): 2
 !
 !-- EEM applet to renumber switches accordingly.
-event manager applet sw-stack
+
+event manager applet sw_stack
   event none
   action 00.00 cli command "enable"
   action 00.01 cli command "show mod | i ^.[1-9]"
   action 00.02 set stack "$_cli_result"
   !
   !
-  action 01.00 set idarray_1 "FOC11111111"
-  action 01.01 set sw "1"
-  action 01.02 set pri "16"
-  action 01.03 decrement pri 1
-  action 01.04 set i "0"
-  action 01.05 regexp "FOC11111111" "$stack"
-  action 01.06 if $_regexp_result eq "1"
-  action 01.07  foreach line "$stack" "\n"
-  action 01.08   increment i
-  action 01.09   if $i le "2"
-  action 01.10    string trim "$line"
-  action 01.11    set line "$_string_result"
-  action 01.12    regexp "FOC11111111" "$line"
-  action 01.13    if $_regexp_result eq "1"
-  action 01.14     if $i ne $sw
-  action 01.15      syslog msg "\n     ## $idarray_1 is currently switch number $i, it should be switch number $sw.\n     ## Setting priority to $pri and renumbering to $sw."
-  action 01.16      cli command "switch $i priority $pri" pattern "continue|#"
-  action 01.17      cli command ""
-  action 01.18      cli command "switch $i renumber $sw" pattern "continue|#"
-  action 01.19      cli command ""
-  action 01.20     else
-  action 01.21      syslog msg "\n     ## $idarray_1 is correctly numbered ($i).\n     ## Setting priority to $pri (renumbering not needed)."
-  action 01.22      cli command "switch $i priority $pri" pattern "continue|#"
-  action 01.23      cli command ""
-  action 01.24     end
-  action 01.25    end
-  action 01.26   end
-  action 01.27  end
-  action 01.28 else
-  action 01.29  syslog msg " ## FOC11111111 (sw-1 serial number) not found in the stack, check 'show mod' output."
+  action 01.00 set sw_num "1"
+  action 01.01 set pri "16"
+  action 01.02 decrement pri 1
+  action 01.03 regexp "FOC11111111" "$stack"
+  action 01.04 if $_regexp_result ne "1"
+  action 01.05  syslog msg "\n     ## FOC11111111 (Sw-1 serial) not found in the stack, check 'show mod' output."
+  action 01.06 else
+  action 01.07  set i "0"
+  action 01.08  foreach line "$stack" "\n"
+  action 01.09   increment i
+  action 01.10   if $i le "2"
+  action 01.11    string trim "$line"
+  action 01.12    set line "$_string_result"
+  action 01.13    regexp "FOC11111111" "$line"
+  action 01.14    if $_regexp_result eq "1"
+  action 01.15     if $i eq $sw_num 
+  action 01.16      syslog msg "\n     ## FOC11111111 is correctly numbered ($i).\n     ## Setting priority to $pri (renumbering not needed)."
+  action 01.17      cli command "switch $i priority $pri" pattern "continue|#"
+  action 01.18      cli command ""
+  action 01.19     else 
+  action 01.20      syslog msg "\n     ## FOC11111111 is currently switch number $i, it should be switch number $sw.\n     ## Setting priority to $pri and renumbering to $sw."
+  action 01.21      cli command "switch $i priority $pri" pattern "continue|#"
+  action 01.22      cli command ""
+  action 01.23      cli command "switch $i renumber $sw" pattern "continue|#"
+  action 01.24      cli command ""
+  action 01.25     end
+  action 01.26    end
+  action 01.27   end
+  action 01.28  end
+  action 01.29  syslog msg "\n     ## Switches have been renumbered and assigned priorities as needed."
   action 01.30 end
   !
   !
-  action 02.00 set idarray_2 "FOC22222222"
-  action 02.01 set sw "2"
-  action 02.02 set pri "16"
-  action 02.03 decrement pri 2
-  action 02.04 set i "0"
-  action 02.05 regexp "FOC22222222" "$stack"
-  action 02.06 if $_regexp_result eq "1"
-  action 02.07  foreach line "$stack" "\n"
-  action 02.08   increment i
-  action 02.09   if $i le "2"
-  action 02.10    string trim "$line"
-  action 02.11    set line "$_string_result"
-  action 02.12    regexp "FOC22222222" "$line"
-  action 02.13    if $_regexp_result eq "1"
-  action 02.14     if $i ne $sw
-  action 02.15      syslog msg "\n     ## $idarray_2 is currently switch number $i, it should be switch number $sw.\n     ## Setting priority to $pri and renumbering to $sw."
-  action 02.16      cli command "switch $i priority $pri" pattern "continue|#"
-  action 02.17      cli command ""
-  action 02.18      cli command "switch $i renumber $sw" pattern "continue|#"
-  action 02.19      cli command ""
-  action 02.20     else
-  action 02.21      syslog msg "\n     ## $idarray_2 is correctly numbered ($i).\n     ## Setting priority to $pri (renumbering not needed)."
-  action 02.22      cli command "switch $i priority $pri" pattern "continue|#"
-  action 02.23      cli command ""
-  action 02.24     end
-  action 02.25    end
-  action 02.26   end
-  action 02.27  end
-  action 02.28 else
-  action 02.29  syslog msg " ## FOC22222222 (sw-2 serial number) not found in the stack, check 'show mod' output."
+  action 02.00 set sw_num "2"
+  action 02.01 set pri "16"
+  action 02.02 decrement pri 2
+  action 02.03 regexp "FOC22222222" "$stack"
+  action 02.04 if $_regexp_result ne "1"
+  action 02.05  syslog msg "\n     ## FOC22222222 (Sw-2 serial) not found in the stack, check 'show mod' output."
+  action 02.06 else
+  action 02.07  set i "0"
+  action 02.08  foreach line "$stack" "\n"
+  action 02.09   increment i
+  action 02.10   if $i le "2"
+  action 02.11    string trim "$line"
+  action 02.12    set line "$_string_result"
+  action 02.13    regexp "FOC22222222" "$line"
+  action 02.14    if $_regexp_result eq "1"
+  action 02.15     if $i eq $sw_num 
+  action 02.16      syslog msg "\n     ## FOC22222222 is correctly numbered ($i).\n     ## Setting priority to $pri (renumbering not needed)."
+  action 02.17      cli command "switch $i priority $pri" pattern "continue|#"
+  action 02.18      cli command ""
+  action 02.19     else 
+  action 02.20      syslog msg "\n     ## FOC22222222 is currently switch number $i, it should be switch number $sw.\n     ## Setting priority to $pri and renumbering to $sw."
+  action 02.21      cli command "switch $i priority $pri" pattern "continue|#"
+  action 02.22      cli command ""
+  action 02.23      cli command "switch $i renumber $sw" pattern "continue|#"
+  action 02.24      cli command ""
+  action 02.25     end
+  action 02.26    end
+  action 02.27   end
+  action 02.28  end
+  action 02.29  syslog msg "\n     ## Switches have been renumbered and assigned priorities as needed."
   action 02.30 end
   !
-```
-
-### Resultant Config
-Configuration as it appears once applied to the switch.
-
-```cisco
-event manager applet sw-stack
- event none
- action 00.00 cli command "enable"
- action 00.01 cli command "show mod | i ^.[1-9]"
- action 00.02 set stack "$_cli_result"
- action 01.00 set idarray_1 "FOC11111111"
- action 01.01 set sw "1"
- action 01.02 set pri "16"
- action 01.03 decrement pri 1
- action 01.04 set i "0"
- action 01.05 regexp "FOC11111111" "$stack"
- action 01.06 if $_regexp_result eq "1"
- action 01.07  foreach line "$stack" "\n"
- action 01.08   increment i
- action 01.09   if $i le "2"
- action 01.10    string trim "$line"
- action 01.11    set line "$_string_result"
- action 01.12    regexp "FOC11111111" "$line"
- action 01.13    if $_regexp_result eq "1"
- action 01.14     if $i ne "$sw"
- action 01.15      syslog msg "\n     ## $idarray_1 is currently switch number $i, it should be switch number $sw.\n     ## Setting priority to $pri and renumbering to $sw."
- action 01.16      cli command "switch $i priority $pri" pattern "continue|#"
- action 01.17      cli command ""
- action 01.18      cli command "switch $i renumber $sw" pattern "continue|#"
- action 01.19      cli command ""
- action 01.20     else
- action 01.21      syslog msg "\n     ## $idarray_1 is correctly numbered ($i).\n     ## Setting priority to $pri (renumbering not needed)."
- action 01.22      cli command "switch $i priority $pri" pattern "continue|#"
- action 01.23      cli command ""
- action 01.24     end
- action 01.25    end
- action 01.26   end
- action 01.27  end
- action 01.28 else
- action 01.29  syslog msg " ## FOC11111111 (sw-1 serial number) not found in the stack, check 'show mod' output."
- action 01.30 end
- action 02.00 set idarray_2 "FOC22222222"
- action 02.01 set sw "2"
- action 02.02 set pri "16"
- action 02.03 decrement pri 2
- action 02.04 set i "0"
- action 02.05 regexp "FOC22222222" "$stack"
- action 02.06 if $_regexp_result eq "1"
- action 02.07  foreach line "$stack" "\n"
- action 02.08   increment i
- action 02.09   if $i le "2"
- action 02.10    string trim "$line"
- action 02.11    set line "$_string_result"
- action 02.12    regexp "FOC22222222" "$line"
- action 02.13    if $_regexp_result eq "1"
- action 02.14     if $i ne "$sw"
- action 02.15      syslog msg "\n     ## $idarray_2 is currently switch number $i, it should be switch number $sw.\n     ## Setting priority to $pri and renumbering to $sw."
- action 02.16      cli command "switch $i priority $pri" pattern "continue|#"
- action 02.17      cli command ""
- action 02.18      cli command "switch $i renumber $sw" pattern "continue|#"
- action 02.19      cli command ""
- action 02.20     else
- action 02.21      syslog msg "\n     ## $idarray_2 is correctly numbered ($i).\n     ## Setting priority to $pri (renumbering not needed)."
- action 02.22      cli command "switch $i priority $pri" pattern "continue|#"
- action 02.23      cli command ""
- action 02.24     end
- action 02.25    end
- action 02.26   end
- action 02.27  end
- action 02.28 else
- action 02.29  syslog msg " ## FOC22222222 (sw-2 serial number) not found in the stack, check 'show mod' output."
- action 02.30 end
 ```
 
 ### Validation
@@ -478,36 +404,38 @@ event manager applet sw-stack
 * For testing, I changed the `renumber` and `priority` action sequences to `syslog msg` (instead of `cli command`) and ran the applet manually to test output...
   * ... when switches are not numbered correctly;
   ```cisco
-  ASW-TR01-01#ev man run sw-stack
+  ASW-TR01-01#ev man run sw_stack
   ASW-TR01-01#
-  *Oct 11 2018 17:02:22.999 PDT: %HA_EM-6-LOG: sw-stack: 
+  *Oct 11 2018 17:02:22.999 PDT: %HA_EM-6-LOG: sw_stack: 
        ## FOC11111111 is currently switch number 2, it should be switch number 1.
        ## Setting priority to 15 and renumbering to 1.
-  *Oct 11 2018 17:02:22.999 PDT: %HA_EM-6-LOG: sw-stack: switch 2 priority 15
-  *Oct 11 2018 17:02:22.999 PDT: %HA_EM-6-LOG: sw-stack: 
-  *Oct 11 2018 17:02:22.999 PDT: %HA_EM-6-LOG: sw-stack: switch 2 renumber 1
-  *Oct 11 2018 17:02:23.000 PDT: %HA_EM-6-LOG: sw-stack: 
+  *Oct 11 2018 17:02:22.999 PDT: %HA_EM-6-LOG: sw_stack: switch 2 priority 15
+  *Oct 11 2018 17:02:22.999 PDT: %HA_EM-6-LOG: sw_stack: 
+  *Oct 11 2018 17:02:22.999 PDT: %HA_EM-6-LOG: sw_stack: switch 2 renumber 1
+  *Oct 11 2018 17:02:23.000 PDT: %HA_EM-6-LOG: sw_stack: 
        ## FOC22222222 is currently switch number 1, it should be switch number 2.
        ## Setting priority to 14 and renumbering to 2.
-  *Oct 11 2018 17:02:23.001 PDT: %HA_EM-6-LOG: sw-stack: switch 1 priority 14
-  *Oct 11 2018 17:02:23.001 PDT: %HA_EM-6-LOG: sw-stack: 
-  *Oct 11 2018 17:02:23.001 PDT: %HA_EM-6-LOG: sw-stack: switch 1 renumber 2
-  *Oct 11 2018 17:02:23.001 PDT: %HA_EM-6-LOG: sw-stack: 
+  *Oct 11 2018 17:02:23.001 PDT: %HA_EM-6-LOG: sw_stack: switch 1 priority 14
+  *Oct 11 2018 17:02:23.001 PDT: %HA_EM-6-LOG: sw_stack: 
+  *Oct 11 2018 17:02:23.001 PDT: %HA_EM-6-LOG: sw_stack: switch 1 renumber 2
+  *Oct 11 2018 17:02:23.001 PDT: %HA_EM-6-LOG: sw_stack: 
+       ## Switches have been renumbered and assigned priorities as needed.
   ```
 
   * ...when switches are numbered correctly (manually renumbered and reloaded).
   ```cisco
-  ASW-TR01-01(config)#do ev man run sw-stack
-  ASW-TR01-01(config)#
-  *Oct 11 2018 16:31:58.039 PDT: %HA_EM-6-LOG: sw-stack: 
-       ## FOC11111111 is correctly numbered (1).
+  ASW-TR01-01# ev man run sw_stack
+  ASW-TR01-01#
+  *Oct 15 2018 12:34:47.696 PDT: %HA_EM-6-LOG: sw_stack: 
+       ## FOC2138X0N2 is correctly numbered (1).
        ## Setting priority to 15 (renumbering not needed).
-  *Oct 11 2018 16:31:58.040 PDT: %HA_EM-6-LOG: sw-stack: switch 1 priority 15
-  *Oct 11 2018 16:31:58.041 PDT: %HA_EM-6-LOG: sw-stack: 
-       ## FOC22222222 is correctly numbered (2).
+  *Oct 15 2018 12:34:47.819 PDT: %HA_EM-6-LOG: sw_stack: 
+       ## Switches have been renumbered and assigned priorities as needed.
+  *Oct 15 2018 12:34:47.820 PDT: %HA_EM-6-LOG: sw_stack: 
+       ## FCW2139F1D2 is correctly numbered (2).
        ## Setting priority to 14 (renumbering not needed).
-  *Oct 11 2018 16:31:58.041 PDT: %HA_EM-6-LOG: sw-stack: switch 2 priority 14
-  *Oct 11 2018 16:31:58.042 PDT: %HA_EM-6-LOG: sw-stack: 
+  *Oct 15 2018 12:34:47.944 PDT: %HA_EM-6-LOG: sw_stack:
+       ## Switches have been renumbered and assigned priorities as needed.
   ```
 
 ### Required Config (Stack)
@@ -520,54 +448,54 @@ event manager applet sw-stack
     !---- IDARRAY_2 (switch 2 serial number): {{idarray_2}}
     !---- IDARRAY_3 (switch 3 serial number): {{idarray_3}}
     !---- IDARRAY_4 (switch 4 serial number): {{idarray_4}}
-    !---- IDARRAY_4 (switch 5 serial number): {{idarray_5}}
-    !---- IDARRAY_4 (switch 6 serial number): {{idarray_6}}
-    !---- IDARRAY_4 (switch 7 serial number): {{idarray_7}}
-    !---- IDARRAY_4 (switch 8 serial number): {{idarray_8}}
-    !---- IDARRAY_4 (switch 9 serial number): {{idarray_9}}
+    !---- IDARRAY_5 (switch 5 serial number): {{idarray_5}}
+    !---- IDARRAY_6 (switch 6 serial number): {{idarray_6}}
+    !---- IDARRAY_7 (switch 7 serial number): {{idarray_7}}
+    !---- IDARRAY_8 (switch 8 serial number): {{idarray_8}}
+    !---- IDARRAY_9 (switch 9 serial number): {{idarray_9}}
     !---- IDARRAY (all serials): {{idarray}}
     !
     !-- Count number of serials parsed from CSV: {% set sw_count = idarray|count %}
     !---- SW_COUNT (count of serials found in IDARRAY): {{sw_count}}
     !
     !-- EEM applet to renumber switches accordingly.
-    event manager applet sw-stack
-      event none
+    event manager applet sw_stack
+    event none
       action 00.00 cli command "enable"
       action 00.01 cli command "show mod | i ^.[1-9]"
       action 00.02 set stack "$_cli_result"
       !{% for sw in idarray %}
       !{% set i = loop.index %}
-      action 0{{i}}.00 set idarray_{{i}} "{{sw}}"
-      action 0{{i}}.01 set sw "{{i}}"
-      action 0{{i}}.02 set pri "16"
-      action 0{{i}}.03 decrement pri {{i}}
-      action 0{{i}}.04 set i "0"
-      action 0{{i}}.05 regexp "{{sw}}" "$stack"
-      action 0{{i}}.06 if $_regexp_result eq "1"
-      action 0{{i}}.07  foreach line "$stack" "\n"
-      action 0{{i}}.08   increment i
-      action 0{{i}}.09   if $i le "{{sw_count}}"
-      action 0{{i}}.10    string trim "$line"
-      action 0{{i}}.11    set line "$_string_result"
-      action 0{{i}}.12    regexp "{{sw}}" "$line"
-      action 0{{i}}.13    if $_regexp_result eq "1"
-      action 0{{i}}.14     if $i ne $sw
-      action 0{{i}}.15      syslog msg "\n     ## $idarray_{{i}} is currently switch number $i, it should be switch number $sw.\n     ## Setting priority to $pri and renumbering to $sw."
-      action 0{{i}}.16      cli command "switch $i priority $pri" pattern "continue|#"
-      action 0{{i}}.17      cli command ""
-      action 0{{i}}.18      cli command "switch $i renumber $sw" pattern "continue|#"
-      action 0{{i}}.19      cli command ""
-      action 0{{i}}.20     else
-      action 0{{i}}.21      syslog msg "\n     ## $idarray_{{i}} is correctly numbered ($i).\n     ## Setting priority to $pri (renumbering not needed)."
-      action 0{{i}}.22      cli command "switch $i priority $pri" pattern "continue|#"
-      action 0{{i}}.23      cli command ""
-      action 0{{i}}.24     end
-      action 0{{i}}.25    end
-      action 0{{i}}.26   end
-      action 0{{i}}.27  end
-      action 0{{i}}.28 else
-      action 0{{i}}.29  syslog msg " ## {{sw}} (sw-{{i}} serial number) not found in the stack, check 'show mod' output."
+      action 0{{i}}.00 set sw_num "{{i}}"
+      action 0{{i}}.01 set pri "16"
+      action 0{{i}}.02 decrement pri {{i}}
+      action 0{{i}}.03 regexp "{{sw}}" "$stack"
+      action 0{{i}}.04 if $_regexp_result ne "1"
+      action 0{{i}}.05  syslog msg "\n     ## {{sw}} (Sw-{{i}} serial) not found in the stack, check 'show mod' output."
+      action 0{{i}}.06 else
+      action 0{{i}}.07  set i "0"
+      action 0{{i}}.08  foreach line "$stack" "\n"
+      action 0{{i}}.09   increment i
+      action 0{{i}}.10   if $i le "{{sw_count}}"
+      action 0{{i}}.11    string trim "$line"
+      action 0{{i}}.12    set line "$_string_result"
+      action 0{{i}}.13    regexp "{{sw}}" "$line"
+      action 0{{i}}.14    if $_regexp_result eq "1"
+      action 0{{i}}.15     if $i eq $sw_num 
+      action 0{{i}}.16      syslog msg "\n     ## {{sw}} is correctly numbered ($i).\n     ## Setting priority to $pri (renumbering not needed)."
+      action 0{{i}}.17      cli command "switch $i priority $pri" pattern "continue|#"
+      action 0{{i}}.18      cli command ""
+      action 0{{i}}.19     else 
+      action 0{{i}}.20      syslog msg "\n     ## {{sw}} is currently switch number $i, it should be switch number $sw.\n     ## Setting priority to $pri and renumbering to $sw."
+      action 0{{i}}.21      cli command "switch $i priority $pri" pattern "continue|#"
+      action 0{{i}}.22      cli command ""
+      action 0{{i}}.23      cli command "switch $i renumber $sw" pattern "continue|#"
+      action 0{{i}}.24      cli command ""
+      action 0{{i}}.25     end
+      action 0{{i}}.26    end
+      action 0{{i}}.27   end
+      action 0{{i}}.28  end
+      action 0{{i}}.29  syslog msg "\n     ## Switches have been renumbered and assigned priorities as needed."
       action 0{{i}}.30 end
       !{% endfor %}
     ```
