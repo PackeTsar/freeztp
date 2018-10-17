@@ -169,12 +169,12 @@ This workaround uses EEM applets in the J2 switch template to download install t
 
     * *The four variables can be defined in the keystore or left in the template.*
 
-        | Variable      | Description                                                                                                        |
-        | :-----------: | :----------------------------------------------------------------------------------------------------------------- |
-        | `tftp_addr`   | Address of TFTP server, typically FreeZTP.                                                                         |
-        | `image_bin`   | Name of the image file to download.                                                                                |
-        | `access_vlan` | Vlan to configure on the provisioning interface (Gi1/0/48) after upgrade/reload is complete.                       |
-        | `prov_int`    | Interface to be used for provisioning; e.g. Te1/0/48<br>> *3850-12X48U-S interfaces 37-48 are TenGigabitEthernet.* |
+      | Variable      | Description                                                                                                        |
+      | :-----------: | :----------------------------------------------------------------------------------------------------------------- |
+      | `tftp_addr`   | Address of TFTP server, typically FreeZTP.                                                                         |
+      | `image_bin`   | Name of the image file to download.                                                                                |
+      | `access_vlan` | Vlan to configure on the provisioning interface (Gi1/0/48) after upgrade/reload is complete.                       |
+      | `prov_int`    | Interface to be used for provisioning; e.g. Te1/0/48<br>> *3850-12X48U-S interfaces 37-48 are TenGigabitEthernet.* |
 
 * Template Config Snippet
 
@@ -208,50 +208,50 @@ This workaround uses EEM applets in the J2 switch template to download install t
     !-- POST_ZTP_1 EEM applet to download and install the image, clean up config, then reload.
     event manager applet post_ztp_1
       event syslog occurs 1 pattern "%DHCP-6-ADDRESS_ASSIGN: Interface Vlan1 assigned DHCP address" maxrun 900
-        action 01.00 syslog msg "\n     ##Switch/stack is ready, downloading and installing image in 120s."
-        action 01.01 wait 120
-        action 01.02 cli command "enable"
-        action 01.03 cli command "debug event man act cli"
-        action 02.00 cli command "conf t"
-        action 03.00 cli command "no event man app post_ztp_1"
-        action 04.00 cli command "do copy tftp://{{ tftp_addr }}/{{ image_bin }} flash:"
-        action 05.00 cli command "int vlan 1"
-        action 05.01 cli command   "no ip addr"
-        action 05.02 cli command   "shut"
-        action 06.00 cli command "int {{ prov_int }}"
-        action 06.01 cli command   "no desc"
-        action 06.02 cli command   "switchp acc vl {{ access_vlan }}
-        action 07.00 cli command "end"
-        action 08.00 cli command "write mem" pattern "confirm|#"
-        action 08.01 cli command ""
-        action 09.00 cli command "software install file flash:{{ image_bin }} new force" pattern "proceed|#"
-        action 09.01 cli command "y"
-        action 10.00 syslog msg "\n     ## Installation complete, reloading for upgrade."
-        action 10.01 cli command "undebug all"
+      action 01.00 syslog msg "\n     ##Switch/stack is ready, downloading and installing image in 120s."
+      action 01.01 wait 120
+      action 01.02 cli command "enable"
+      action 01.03 cli command "debug event man act cli"
+      action 02.00 cli command "conf t"
+      action 03.00 cli command "no event man app post_ztp_1"
+      action 04.00 cli command "do copy tftp://{{ tftp_addr }}/{{ image_bin }} flash:"
+      action 05.00 cli command "int vlan 1"
+      action 05.01 cli command   "no ip addr"
+      action 05.02 cli command   "shut"
+      action 06.00 cli command "int {{ prov_int }}"
+      action 06.01 cli command   "no desc"
+      action 06.02 cli command   "switchp acc vl {{ access_vlan }}
+      action 07.00 cli command "end"
+      action 08.00 cli command "write mem" pattern "confirm|#"
+      action 08.01 cli command ""
+      action 09.00 cli command "software install file flash:{{ image_bin }} new force" pattern "proceed|#"
+      action 09.01 cli command "y"
+      action 10.00 syslog msg "\n     ## Installation complete, reloading for upgrade."
+      action 10.01 cli command "undebug all"
 
     !-- (Optional) POST_ZTP_2 applet to run package clean and add any config commands that were previously incompatible.
     !-- (Optional) Add any desired configs between actions 03.00 and 04.00.
     event manager applet post_ztp_2
       event syslog occurs 1 pattern "%IOSXE_REDUNDANCY-6-PEER" maxrun 600
-        action 01.00 syslog msg "\n     ## Switch/stack reloaded on new image, running 'post_ztp_2' EEM applet in 120s."
-        action 01.01 wait 120
-        action 01.02 cli command "enable"
-        action 01.03 cli command "debug event man act cli"
-        action 02.00 cli command "conf t"
-        action 03.00 cli command "no event man app post_ztp_2"
-        action 04.00 cli command "end"
-        action 05.00 cli command "write mem" pattern "confirm|#"
-        action 05.01 cli command ""
-        action 06.00 cli command "req plat soft pack clean sw all" pattern "proceed|#"
-        action 06.01 cli command "y"
-        action 07.00 syslog msg "\n     ## Any unused .bin or .pkg files have been deleted.\n     ## Switch is ready for deployment, OK to power off."
-        action 07.01 cli command "undebug all"
+      action 01.00 syslog msg "\n     ## Switch/stack reloaded on new image, running 'post_ztp_2' EEM applet in 120s."
+      action 01.01 wait 120
+      action 01.02 cli command "enable"
+      action 01.03 cli command "debug event man act cli"
+      action 02.00 cli command "conf t"
+      action 03.00 cli command "no event man app post_ztp_2"
+      action 04.00 cli command "end"
+      action 05.00 cli command "write mem" pattern "confirm|#"
+      action 05.01 cli command ""
+      action 06.00 cli command "req plat soft pack clean sw all" pattern "proceed|#"
+      action 06.01 cli command "y"
+      action 07.00 syslog msg "\n     ## Any unused .bin or .pkg files have been deleted.\n     ## Switch is ready for deployment, OK to power off."
+      action 07.01 cli command "undebug all"
     ```
 
 -----------------------------------------
 ## Use-case: Automated IOS-XE Stack Renumbering
 
-###### Author: [derek-shnosh](https://github.com/derek-shnosh), Rev: 2, Date: 2018.1015, FreeZTP dev1.1.0m
+###### Author: [derek-shnosh](https://github.com/derek-shnosh), Rev: 3, Date: 2018.1017, FreeZTP dev1.1.0m
 
 ### Preamble
 
@@ -295,15 +295,15 @@ In this example, there are two serial numbers allocated to the stack **ASW-TR01-
 * EEM applet (when ran, needs trigger) will do the following;
    * Execute the command `show module | inc ^.[1-9]` (*example output for two switches\*\**);
       ```cisco
-      1       62     WS-C3850-12X48U-S     FOC22222222  abcd.ef01.1111  V02           16.3.6        
-      2       62     WS-C3850-12X48U-S     FOC11111111  abcd.ef02.2222  V02           16.3.6        
+       1       62     WS-C3850-12X48U-S     FOC22222222  abcd.ef01.1111  V02           16.3.6        
+       2       62     WS-C3850-12X48U-S     FOC11111111  abcd.ef02.2222  V02           16.3.6        
       ASW-TR01-01#
       ```
    * For each switch, search the entire output for its serial number.
       * If not found, a syslog message will be generated, no changes will take place, and the applet will move onto the next switch.
       * If found, the applet searches the output line-by-line until it finds the serial number.
-         * If the line number where the serial number was found matches the allocated switch number, as syslog message will be generated and only the priority will be set.
-         * If the line number where the serial number was found does not match the allocated switch number (`idarray_#`), a syslog message will be generated, the priority will be set and the switch will be renumbered appropriately.
+       * If the line number where the serial number was found matches the allocated switch number, as syslog message will be generated and only the priority will be set.
+       * If the line number where the serial number was found does not match the allocated switch number (`idarray_#`), a syslog message will be generated, the priority will be set and the switch will be renumbered appropriately.
 
 *\*\* This output is what EEM stores for parsing. Note the last line is the switch hostname, this line is ignored when searching for the switch serial number(s). All other line numbers correlate with the stack's current switch allocation numbers.*
 
@@ -329,14 +329,14 @@ Merged configuration that is pushed to the switch from FreeZTP (J2 templating fu
 !---- SW_COUNT (count of serials found in IDARRAY): 2
 !
 !-- EEM applet to renumber switches accordingly.
-
 event manager applet sw_stack
   event none maxrun 60
   action 00.00 cli command "enable"
   action 00.01 cli command "show mod | i ^.[1-9]"
   action 00.02 set stack "$_cli_result"
-  action 00.03 set err_list ""
-  action 00.04 set renum_list ""
+  action 00.03 set error_list ""
+  action 00.04 set change_list ""
+  action 00.05 set upgrade_list ""
   !
   !
   action 01.00 set sw_num "1"
@@ -345,7 +345,7 @@ event manager applet sw_stack
   action 01.03 regexp "FOC11111111" "$stack"
   action 01.04 if $_regexp_result ne "1"
   action 01.05  syslog msg "\n     ## FOC11111111 (Sw-1 serial) not found in the stack, check 'show mod' output."
-  action 01.06  append err_list "\n     ## FOC11111111 is allocated (idarray_1) but was not found in the stack."
+  action 01.06  append error_list "\n     ## FOC11111111 is allocated (idarray_1) but was not found in the stack."
   action 01.07 else
   action 01.08  set i "0"
   action 01.09  foreach line "$stack" "\n"
@@ -355,22 +355,25 @@ event manager applet sw_stack
   action 01.13    set line "$_string_result"
   action 01.14    regexp "FOC11111111" "$line"
   action 01.15    if $_regexp_result eq "1"
-  action 01.16     if $i eq $sw_num 
-  action 01.17      syslog msg "\n     ## FOC11111111 is correctly numbered ($i), renumbering not needed.\n     ## Setting priority for FOC11111111 to $pri."
-  action 01.18      cli command "switch $i priority $pri" pattern "continue|#"
-  action 01.19      cli command ""
-  action 01.20     else 
-  action 01.21      syslog msg "\n     ## FOC11111111 is currently switch number $i, it should be switch number $sw_num.\n     ## Setting priority to $pri and renumbering to $sw_num."
-  action 01.22      cli command "switch $i priority $pri" pattern "continue|#"
-  action 01.23      cli command ""
-  action 01.24      cli command "switch $i renumber $sw_num" pattern "continue|#"
-  action 01.25      cli command ""
-  action 01.26      append renum_list "\n     ## FOC11111111 (Priority: $pri // Renumber: $i > $sw_num)"
-  action 01.27     end
-  action 01.28    end
-  action 01.29   end
-  action 01.30  end
-  action 01.31 end
+  action 01.16     regexp "([0-9]+.)+$" "$line" curr_ver
+  action 01.17     if $curr_ver ne ""
+  action 01.18      append upgrade_list "1"
+  action 01.19     end
+  action 01.20     if $i eq $sw_num 
+  action 01.21      cli command "switch $i priority $pri" pattern "continue|#"
+  action 01.22      cli command "y"
+  action 01.23      append change_list "\n     ## FOC11111111 (Priority: $pri // Numbered:       $sw_num // Version: $curr_ver )"
+  action 01.24     else 
+  action 01.25      cli command "switch $i priority $pri" pattern "continue|#"
+  action 01.26      cli command "y"
+  action 01.27      cli command "switch $i renumber $sw_num" pattern "continue|#"
+  action 01.28      cli command "y"
+  action 01.29      append change_list "\n     ## FOC11111111 (Priority: $pri // Renumbered: $i > $sw_num* // Version: $curr_ver )"
+  action 01.30     end
+  action 01.31    end
+  action 01.32   end
+  action 01.33  end
+  action 01.34 end
   !
   !
   action 02.00 set sw_num "2"
@@ -379,7 +382,7 @@ event manager applet sw_stack
   action 02.03 regexp "FOC22222222" "$stack"
   action 02.04 if $_regexp_result ne "1"
   action 02.05  syslog msg "\n     ## FOC22222222 (Sw-2 serial) not found in the stack, check 'show mod' output."
-  action 02.06  append err_list "\n     ## FOC22222222 is allocated (idarray_2) but was not found in the stack."
+  action 02.06  append error_list "\n     ## FOC22222222 is allocated (idarray_2) but was not found in the stack."
   action 02.07 else
   action 02.08  set i "0"
   action 02.09  foreach line "$stack" "\n"
@@ -389,34 +392,31 @@ event manager applet sw_stack
   action 02.13    set line "$_string_result"
   action 02.14    regexp "FOC22222222" "$line"
   action 02.15    if $_regexp_result eq "1"
-  action 02.16     if $i eq $sw_num 
-  action 02.17      syslog msg "\n     ## FOC22222222 is correctly numbered ($i), renumbering not needed.\n     ## Setting priority for FOC22222222 to $pri."
-  action 02.18      cli command "switch $i priority $pri" pattern "continue|#"
-  action 02.19      cli command ""
-  action 02.20     else 
-  action 02.21      syslog msg "\n     ## FOC22222222 is currently switch number $i, it should be switch number $sw_num.\n     ## Setting priority to $pri and renumbering to $sw_num."
-  action 02.22      cli command "switch $i priority $pri" pattern "continue|#"
-  action 02.23      cli command ""
-  action 02.24      cli command "switch $i renumber $sw_num" pattern "continue|#"
-  action 02.25      cli command ""
-  action 02.26      append renum_list "\n     ## FOC22222222 (Priority: $pri // Renumber: $i > $sw_num)"
-  action 02.27     end
-  action 02.28    end
-  action 02.29   end
-  action 02.30  end
-  action 02.31 end
+  action 02.16     regexp "([0-9]+.)+$" "$line" curr_ver
+  action 02.17     if $curr_ver ne ""
+  action 02.18      append upgrade_list "2"
+  action 02.19     end
+  action 02.20     if $i eq $sw_num 
+  action 02.21      cli command "switch $i priority $pri" pattern "continue|#"
+  action 02.22      cli command "y"
+  action 02.23      append change_list "\n     ## FOC22222222 (Priority: $pri // Numbered:       $sw_num // Version: $curr_ver )"
+  action 02.24     else 
+  action 02.25      cli command "switch $i priority $pri" pattern "continue|#"
+  action 02.26      cli command "y"
+  action 02.27      cli command "switch $i renumber $sw_num" pattern "continue|#"
+  action 02.28      cli command "y"
+  action 02.29      append change_list "\n     ## FOC22222222 (Priority: $pri // Renumbered: $i > $sw_num* // Version: $curr_ver )"
+  action 02.30     end
+  action 02.31    end
+  action 02.32   end
+  action 02.33  end
+  action 02.34 end
   !
-  action 09.89 wait 5
-  action 09.90 string length $renum_list
-  action 09.91 if $_string_result eq "0"
-  action 09.92  syslog msg "\n     ## All switches have been assigned a priority, none of them required renumbering."
-  action 09.93 else
-  action 09.94  syslog msg "\n     ## All switches have been assigned a priority, the following switches have been renumbered; $renum_list"
-  action 09.95 end
-  action 09.96 string length $err_list
-  action 09.97 if $_string_result ne "0"
-  action 09.98  syslog msg "\n     ## The following errors occured; $err_list"
-  action 09.99 end
+  action 09.90 wait 3
+  action 09.91 if $error_list ne ""
+  action 09.92  syslog msg "\n     ## The following errors occurred; $error_list"
+  action 09.93 end
+  action 09.94 syslog msg "\n     ## Switches below have been assigned a priority and renumbered* as needed; $change_list"
   !
 ```
 
@@ -452,8 +452,9 @@ event manager applet sw_stack
       action 00.00 cli command "enable"
       action 00.01 cli command "show mod | i ^.[1-9]"
       action 00.02 set stack "$_cli_result"
-      action 00.03 set err_list ""
-      action 00.04 set renum_list ""
+      action 00.03 set error_list ""
+      action 00.04 set change_list ""
+      action 00.05 set upgrade_list ""
       !{% for sw in idarray %}
       !{% set i = loop.index %}
       action 0{{i}}.00 set sw_num "{{i}}"
@@ -462,7 +463,7 @@ event manager applet sw_stack
       action 0{{i}}.03 regexp "{{sw}}" "$stack"
       action 0{{i}}.04 if $_regexp_result ne "1"
       action 0{{i}}.05  syslog msg "\n     ## {{sw}} (Sw-{{i}} serial) not found in the stack, check 'show mod' output."
-      action 0{{i}}.06  append err_list "\n     ## {{sw}} is allocated (idarray_{{i}}) but was not found in the stack."
+      action 0{{i}}.06  append error_list "\n     ## {{sw}} is allocated (idarray_{{i}}) but was not found in the stack."
       action 0{{i}}.07 else
       action 0{{i}}.08  set i "0"
       action 0{{i}}.09  foreach line "$stack" "\n"
@@ -472,34 +473,31 @@ event manager applet sw_stack
       action 0{{i}}.13    set line "$_string_result"
       action 0{{i}}.14    regexp "{{sw}}" "$line"
       action 0{{i}}.15    if $_regexp_result eq "1"
-      action 0{{i}}.16     if $i eq $sw_num 
-      action 0{{i}}.17      syslog msg "\n     ## {{sw}} is correctly numbered ($i), renumbering not needed.\n     ## Setting priority for {{sw}} to $pri."
-      action 0{{i}}.18      cli command "switch $i priority $pri" pattern "continue|#"
-      action 0{{i}}.19      cli command ""
-      action 0{{i}}.20     else 
-      action 0{{i}}.21      syslog msg "\n     ## {{sw}} is currently switch number $i, it should be switch number $sw_num.\n     ## Setting priority to $pri and renumbering to $sw_num."
-      action 0{{i}}.22      cli command "switch $i priority $pri" pattern "continue|#"
-      action 0{{i}}.23      cli command ""
-      action 0{{i}}.24      cli command "switch $i renumber $sw_num" pattern "continue|#"
-      action 0{{i}}.25      cli command ""
-      action 0{{i}}.26      append renum_list "\n     ## {{sw}} (Priority: $pri // Renumber: $i > $sw_num)"
-      action 0{{i}}.27     end
-      action 0{{i}}.28    end
-      action 0{{i}}.29   end
-      action 0{{i}}.30  end
-      action 0{{i}}.31 end
+      action 0{{i}}.16     regexp "([0-9]+.)+$" "$line" curr_ver
+      action 0{{i}}.17     if $curr_ver ne "{{target_ver}}"
+      action 0{{i}}.18      append upgrade_list "{{i}}"
+      action 0{{i}}.19     end
+      action 0{{i}}.20     if $i eq $sw_num 
+      action 0{{i}}.21      cli command "switch $i priority $pri" pattern "continue|#"
+      action 0{{i}}.22      cli command "y"
+      action 0{{i}}.23      append change_list "\n     ## {{sw}} (Priority: $pri // Numbered:       $sw_num // Version: $curr_ver )"
+      action 0{{i}}.24     else 
+      action 0{{i}}.25      cli command "switch $i priority $pri" pattern "continue|#"
+      action 0{{i}}.26      cli command "y"
+      action 0{{i}}.27      cli command "switch $i renumber $sw_num" pattern "continue|#"
+      action 0{{i}}.28      cli command "y"
+      action 0{{i}}.29      append change_list "\n     ## {{sw}} (Priority: $pri // Renumbered: $i > $sw_num* // Version: $curr_ver )"
+      action 0{{i}}.30     end
+      action 0{{i}}.31    end
+      action 0{{i}}.32   end
+      action 0{{i}}.33  end
+      action 0{{i}}.34 end
       !{% endfor %}
-      action 09.89 wait 5
-      action 09.90 string length $renum_list
-      action 09.91 if $_string_result eq "0"
-      action 09.92  syslog msg "\n     ## All switches have been assigned a priority, none of them required renumbering."
-      action 09.93 else
-      action 09.94  syslog msg "\n     ## All switches have been assigned a priority, the following switches have been renumbered; $renum_list"
-      action 09.95 end
-      action 09.96 string length $err_list
-      action 09.97 if $_string_result ne "0"
-      action 09.98  syslog msg "\n     ## The following errors occured; $err_list"
-      action 09.99 end
+      action 09.90 wait 3
+      action 09.91 if $error_list ne ""
+      action 09.92  syslog msg "\n     ## The following errors occurred; $error_list"
+      action 09.93 end
+      action 09.94 syslog msg "\n     ## Switches below have been assigned a priority and renumbered* as needed; $change_list"
     ```
 
 
