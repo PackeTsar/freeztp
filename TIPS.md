@@ -266,7 +266,7 @@ In this use-case, FreeZTP's `idarray` variables are being used to define stack m
 In this example, there are four switches allocated to the stack **ASW-TR01-01**;
 * **FOC11111111** (`idarray_1`) should be switch 1 in the stack, with a priority of 15.
 * **FOC22222222** (`idarray_2`) should be switch 2 in the stack, with a priority of 14.
-* **FOC33333333** (`idarray_4`) should be switch 3 in the stack, with a priority of 13.
+* **FOC33333333** (`idarray_3`) should be switch 3 in the stack, with a priority of 13.
 * **FOC44444444** (`idarray_4`) should be switch 4 in the stack, with a priority of 12.
 
 #### CSV
@@ -322,11 +322,11 @@ Switch  Ports    Model                Serial No.   MAC address     Hw Ver.      
 ### Process/Explanation
 
 1. Switches are connected via stack cables and powered up simultaneously.
-    * Only one of the switches needs to be connected to the provisioning network.
-2. Switches complete election process and stack initiates smart-install.
-3. Switch requests config, FreeZTP gives a (merged) config containing the [required config (stack)](#required-config-stack).
+    * An interface on only one of the switches needs to be connected to the provisioning network.
+2. Switches complete the election process and stack initiates smart-install.
+3. Stack requests config, FreeZTP gives a (merged) config containing the [required config (stack)](#required-config-stack).
     * The J2 variable `sw_count` is *set*  during the merge process (counts number of serial numbers found in `idarray`).
-4. Switch applies configuration and a syslog message is generated; **`sw_stack` applet is triggered by this syslog message**.
+4. Stack applies configuration and a syslog message is generated; **`sw_stack` applet is triggered by this syslog message**.
 5. [EEM Applet `sw_stack` loaded to memory.]
     1. Execute the command `show module | inc ^.[1-9]` *(output as read by EEM for current example with 4 switches\*)*;
        ```cisco
@@ -337,12 +337,12 @@ Switch  Ports    Model                Serial No.   MAC address     Hw Ver.      
        ASW-TR01-01#
        ```
     2. [J2 Loop] For each switch serial, search the entire output for its serial number;
-        * If not found, a syslog message will be generated, no changes will take place, and the applet will move onto the next switch.
+        * If not found, a syslog message will be generated and the applet will move onto the next switch.
         * [EEM Loop] If found, the applet searches the output line-by-line\*\* until it finds the serial number;
-            * If the line number where the serial number was found matches the allocated switch number, only the priority will be set.
-            * If the line number where the serial number was found does not match the allocated switch number (`idarray_#`), the priority will be set and the switch will be renumbered.
-    3. Syslog messages are generated outlining any errors and outlining all changes made to switch priorities and numbers.
-    4. Applet deletes itself from running configuration and writes the startup-config.
+            * If the line number where the serial number was found matches the allocated switch number (`idarray_#`), only the priority will be set.
+            * If the line number where the serial number was found does not match the allocated switch number, the priority will be set and the switch will be renumbered.
+    3. Syslog messages are generated outlining any errors and all changes made to switch priorities and numbers.
+    4. Applet deletes itself from running configuration, writes the startup-config, and generates a syslog message stating that the process is complete.
 
 \**This output is what EEM stores as `$stack` for parsing, all line numbers correlate with the stack's current switch allocation numbers; i.e. the first line contains information for switch 1, second line contains information for switch 2, etc...*
 
@@ -432,7 +432,7 @@ event manager applet sw_stack
 
 ### Merged Config
 
-Merged configuration that is pushed to the switch from FreeZTP;
+Merged configuration that is pushed to the switch from FreeZTP for this example;
 * J2 templating functions do not *print*; i.e. anything enclosed with `{% %}` will not appear in the merged config.
 * Any line starting with a `!` will be ignored by the switch.
 
@@ -622,7 +622,7 @@ This applet has been confirmed functional on stacked C3850-12X48U-S switches run
 
 #### Logs
 
-Below is an abbreviated and sanitized log output from a stack of 4 switches (as outlined in the example above). Their real serial numbers have been replaced by those in this example.
+Below is an abbreviated and sanitized log output from 4 stacked switches, real serial numbers have been replaced by those in this example.
 
 ```
 Would you like to enter the initial configuration dialog? [yes/no]: 
@@ -645,6 +645,7 @@ Loading ZTP-23D9F46EC4-confg from 172.17.251.251 (via Vlan1): !
      ##  FOC22222222 (Priority: 14 // Renumbered: 1 > 2* // Version: 03.07.04E )
      ##  FOC33333333 (Priority: 13 // Renumbered: 4 > 3* // Version: 03.07.04E )
      ##  FOC44444444 (Priority: 12 // Renumbered: 2 > 4* // Version: 03.07.04E )
+*Oct 17 2018 12:47:52.732 PDT: %SYS-5-CONFIG_I: Configured from console by eem_svc on vty0 (EEM:post_ztp_1)
 *Oct 17 2018 12:47:52.756 PDT: %HA_EM-6-LOG: sw_stack: 
      ## EEM applet `sw_stack` deleted and config written, reload for changes to take effect.
 ...
