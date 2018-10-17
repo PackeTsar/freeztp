@@ -645,7 +645,7 @@ Loading ZTP-23D9F46EC4-confg from 172.17.251.251 (via Vlan1): !
      ##  FOC22222222 (Priority: 14 // Renumbered: 1 > 2* // Version: 03.07.04E )
      ##  FOC33333333 (Priority: 13 // Renumbered: 4 > 3* // Version: 03.07.04E )
      ##  FOC44444444 (Priority: 12 // Renumbered: 2 > 4* // Version: 03.07.04E )
-*Oct 17 2018 12:47:52.732 PDT: %SYS-5-CONFIG_I: Configured from console by eem_svc on vty0 (EEM:post_ztp_1)
+*Oct 17 2018 12:47:52.732 PDT: %SYS-5-CONFIG_I: Configured from console by eem_svc on vty0 (EEM:sw_stack)
 *Oct 17 2018 12:47:52.756 PDT: %HA_EM-6-LOG: sw_stack: 
      ## EEM applet `sw_stack` deleted and config written, reload for changes to take effect.
 ...
