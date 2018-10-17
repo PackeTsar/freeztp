@@ -255,7 +255,7 @@ This workaround uses EEM applets in the J2 switch template to download install t
 
 ### Preamble
 
-This applet aids in acheiving the ultimate goal of ZTP, which is to *not touch* the switch or stack to fully provision/configure it, including stack priorities and numbers. When [this code](#required-config-stack) is added to a Jinja2 template for FreeZTP it will automatically build out an EEM applet that will set switch priorities and renumber all switches in the stack according to how they were allocated in the FreeZTP keystore.
+When [this code](#required-config-stack) is added to a Jinja2 template for FreeZTP it will automatically build out an EEM applet that will set switch priorities and renumber all switches in the stack according to how they were allocated in the FreeZTP keystore.
 
 All switches in the stack can be powered on simultaneously; i.e. there is no need to do the *2-minute-tango* between powering up switches. After the election processes are complete, the stack will continue booting and then perform the smart-install procedure where it will receive this applet as part of the templated configuration.
 
