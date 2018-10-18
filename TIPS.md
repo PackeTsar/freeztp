@@ -399,7 +399,7 @@ event manager applet sw_stack
   action 0{{i}}.13    set line "$_string_result"
   action 0{{i}}.14    regexp "{{sw}}" "$line"
   action 0{{i}}.15    if $_regexp_result eq "1"
-  action 0{{i}}.16     regexp "([0-9]+.)+$" "$line" curr_ver
+  action 0{{i}}.16     regexp "([0-9\.A-Z]+$)" "$line" curr_ver
   action 0{{i}}.17     if $i eq $sw_num 
   action 0{{i}}.18      cli command "switch $i priority $pri" pattern "continue|#"
   action 0{{i}}.19      cli command "y"
