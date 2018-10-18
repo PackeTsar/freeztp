@@ -481,11 +481,11 @@ event manager applet sw_stack
   action 01.13    set line "$_string_result"
   action 01.14    regexp "FOC11111111" "$line"
   action 01.15    if $_regexp_result eq "1"
-  action 01.16     regexp "([0-9]+.)+$" "$line" curr_ver
+  action 01.16     regexp "([0-9\.A-Z]+$)" "$line" curr_ver
   action 01.17     if $i eq $sw_num 
   action 01.18      cli command "switch $i priority $pri" pattern "continue|#"
   action 01.19      cli command "y"
-  action 01.20      append change_list "\n     ##  FOC11111111 (Priority: $pri // Numbered:       $sw_num // Version: $curr_ver)"
+  action 01.20      append change_list "\n     ##  FOC11111111 (Priority: $pri // Numbered:       $sw_num  // Version: $curr_ver)"
   action 01.21     else 
   action 01.22      cli command "switch $i priority $pri" pattern "continue|#"
   action 01.23      cli command "y"
@@ -515,11 +515,11 @@ event manager applet sw_stack
   action 02.13    set line "$_string_result"
   action 02.14    regexp "FOC22222222" "$line"
   action 02.15    if $_regexp_result eq "1"
-  action 02.16     regexp "([0-9]+.)+$" "$line" curr_ver
+  action 02.16     regexp "([0-9\.A-Z]+$)" "$line" curr_ver
   action 02.17     if $i eq $sw_num 
   action 02.18      cli command "switch $i priority $pri" pattern "continue|#"
   action 02.19      cli command "y"
-  action 02.20      append change_list "\n     ##  FOC22222222 (Priority: $pri // Numbered:       $sw_num // Version: $curr_ver)"
+  action 02.20      append change_list "\n     ##  FOC22222222 (Priority: $pri // Numbered:       $sw_num  // Version: $curr_ver)"
   action 02.21     else 
   action 02.22      cli command "switch $i priority $pri" pattern "continue|#"
   action 02.23      cli command "y"
@@ -549,11 +549,11 @@ event manager applet sw_stack
   action 03.13    set line "$_string_result"
   action 03.14    regexp "FOC33333333" "$line"
   action 03.15    if $_regexp_result eq "1"
-  action 03.16     regexp "([0-9]+.)+$" "$line" curr_ver
+  action 03.16     regexp "([0-9\.A-Z]+$)" "$line" curr_ver
   action 03.17     if $i eq $sw_num 
   action 03.18      cli command "switch $i priority $pri" pattern "continue|#"
   action 03.19      cli command "y"
-  action 03.20      append change_list "\n     ##  FOC33333333 (Priority: $pri // Numbered:       $sw_num // Version: $curr_ver)"
+  action 03.20      append change_list "\n     ##  FOC33333333 (Priority: $pri // Numbered:       $sw_num  // Version: $curr_ver)"
   action 03.21     else 
   action 03.22      cli command "switch $i priority $pri" pattern "continue|#"
   action 03.23      cli command "y"
@@ -583,11 +583,11 @@ event manager applet sw_stack
   action 04.13    set line "$_string_result"
   action 04.14    regexp "FOC44444444" "$line"
   action 04.15    if $_regexp_result eq "1"
-  action 04.16     regexp "([0-9]+.)+$" "$line" curr_ver
+  action 04.16     regexp "([0-9\.A-Z]+$)" "$line" curr_ver
   action 04.17     if $i eq $sw_num 
   action 04.18      cli command "switch $i priority $pri" pattern "continue|#"
   action 04.19      cli command "y"
-  action 04.20      append change_list "\n     ##  FOC44444444 (Priority: $pri // Numbered:       $sw_num // Version: $curr_ver)"
+  action 04.20      append change_list "\n     ##  FOC44444444 (Priority: $pri // Numbered:       $sw_num  // Version: $curr_ver)"
   action 04.21     else 
   action 04.22      cli command "switch $i priority $pri" pattern "continue|#"
   action 04.23      cli command "y"
