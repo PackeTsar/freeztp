@@ -328,7 +328,8 @@ Switch  Ports    Model                Serial No.   MAC address     Hw Ver.      
     * The J2 variable `sw_count` is *set*  during the merge process (counts number of serial numbers found in `idarray`).
 4. Stack applies configuration and a syslog message is generated; **`sw_stack` applet is triggered by this syslog message**.
 5. [EEM Applet `sw_stack` loaded to memory.]
-    1. Execute the command `show module | inc ^.[1-9]` *(output as read by EEM for current example with 4 switches\*)*;
+    1. Waits 120 seconds for the stack redundancy operations to complete.
+    2. Executes the command `show module | inc ^.[1-9]` *(output as read by EEM for current example with 4 switches\*)*;
        ```cisco
         1       62     WS-C3850-12X48U-S     FOC22222222  abcd.ef22.2222  V02           03.07.04E   
         2       62     WS-C3850-12X48U-S     FOC44444444  abcd.ef44.4444  V02           03.07.04E   
@@ -336,13 +337,14 @@ Switch  Ports    Model                Serial No.   MAC address     Hw Ver.      
         4       62     WS-C3850-12X48U-S     FOC33333333  abcd.ef33.3333  V02           03.07.04E   
        ASW-TR01-01#
        ```
-    2. [J2 Loop] For each switch serial, search the entire output for its serial number;
+    3. [J2 Loop] For each switch serial, searches the entire output for its serial number;
         * If not found, a syslog message will be generated and the applet will move onto the next switch.
         * [EEM Loop] If found, the applet searches the output line-by-line\*\* until it finds the serial number;
             * If the line number where the serial number was found matches the allocated switch number (`idarray_#`), only the priority will be set.
             * If the line number where the serial number was found does not match the allocated switch number, the priority will be set and the switch will be renumbered.
-    3. Syslog messages are generated outlining any errors and all changes made to switch priorities and numbers.
-    4. Applet deletes itself from running configuration, writes the startup-config, and generates a syslog message stating that the process is complete.
+    4. Syslog messages are generated outlining any errors and all changes made to switch priorities and numbers.
+    5. Applet deletes itself from running configuration, writes the startup-config, and generates a syslog message stating that the process is complete.
+6. The stack can now be reloaded to finish the renumbering process.
 
 \**This output is what EEM stores as `$stack` for parsing, all line numbers correlate with the stack's current switch allocation numbers; i.e. the first line contains information for switch 1, second line contains information for switch 2, etc...*
 
