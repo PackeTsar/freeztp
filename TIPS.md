@@ -403,7 +403,7 @@ event manager applet sw_stack
   action 0{{i}}.17     if $i eq $sw_num 
   action 0{{i}}.18      cli command "switch $i priority $pri" pattern "continue|#"
   action 0{{i}}.19      cli command "y"
-  action 0{{i}}.20      append change_list "\n     ##  {{sw}} (Priority: $pri // Numbered:       $sw_num // Version: $curr_ver)"
+  action 0{{i}}.20      append change_list "\n     ##  {{sw}} (Priority: $pri // Numbered:       $sw_num  // Version: $curr_ver)"
   action 0{{i}}.21     else 
   action 0{{i}}.22      cli command "switch $i priority $pri" pattern "continue|#"
   action 0{{i}}.23      cli command "y"
