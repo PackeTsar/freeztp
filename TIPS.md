@@ -413,22 +413,23 @@ event manager applet sw_stack
   action 0{{i}}.25      cli command "y"
   action 0{{i}}.26      append change_list "\n     ##  {{sw}} (Priority: $pri // Renumbered: $i > $sw_num* // Version: $curr_ver)"
   action 0{{i}}.27     end
-  action 0{{i}}.28    end
-  action 0{{i}}.29   end
-  action 0{{i}}.30  end
-  action 0{{i}}.31 end
+  action 0{{i}}.28     break
+  action 0{{i}}.29    end
+  action 0{{i}}.30   end
+  action 0{{i}}.31  end
+  action 0{{i}}.32 end
   !{% endfor %}
-  action 09.90 wait 3
-  action 09.91 if $error_list ne ""
-  action 09.92  syslog msg "\n     ## The following errors occurred; $error_list"
-  action 09.93 end
-  action 09.94 syslog msg "\n     ## Switches below have been assigned a priority and renumbered* as needed; $change_list"
-  action 09.95 cli command "conf t"
-  action 09.96 cli command "no event man app sw_stack"
-  action 09.97 cli command "end"
-  action 09.98 cli command "write mem" pattern "confirm|#"
-  action 09.99 cli command ""
-  action 10.00 syslog msg "\n     ## EEM applet (sw_stack) deleted and config written, changes take effect at next reload."
+  action 10.00 wait 5
+  action 10.01 if $error_list ne ""
+  action 10.02  syslog msg "\n     ## The following errors occurred; $error_list"
+  action 10.03 end
+  action 10.04 syslog msg "\n     ## Switches below have been assigned a priority and renumbered* as needed; $change_list"
+  action 10.05 cli command "conf t"
+  action 10.06 cli command "no event man app sw_stack"
+  action 10.07 cli command "end"
+  action 10.08 cli command "write mem" pattern "confirm|#"
+  action 10.09 cli command ""
+  action 10.10 syslog msg "\n     ## EEM applet (sw_stack) deleted and config written, reload for changes to take effect."
   !
 ```
 
