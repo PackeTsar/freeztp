@@ -496,10 +496,11 @@ event manager applet sw_stack
   action 01.25      cli command "y"
   action 01.26      append change_list "\n     ##  FOC11111111 (Priority: $pri // Renumbered: $i > $sw_num* // Version: $curr_ver)"
   action 01.27     end
-  action 01.28    end
-  action 01.29   end
-  action 01.30  end
-  action 01.31 end
+  action 01.28     break
+  action 01.29    end
+  action 01.30   end
+  action 01.31  end
+  action 01.32 end
   !
   !
   action 02.00 set sw_num "2"
@@ -530,10 +531,11 @@ event manager applet sw_stack
   action 02.25      cli command "y"
   action 02.26      append change_list "\n     ##  FOC22222222 (Priority: $pri // Renumbered: $i > $sw_num* // Version: $curr_ver)"
   action 02.27     end
-  action 02.28    end
-  action 02.29   end
-  action 02.30  end
-  action 02.31 end
+  action 02.28     break
+  action 02.29    end
+  action 02.30   end
+  action 02.31  end
+  action 02.32 end
   !
   !
   action 03.00 set sw_num "3"
@@ -564,10 +566,11 @@ event manager applet sw_stack
   action 03.25      cli command "y"
   action 03.26      append change_list "\n     ##  FOC33333333 (Priority: $pri // Renumbered: $i > $sw_num* // Version: $curr_ver)"
   action 03.27     end
-  action 03.28    end
-  action 03.29   end
-  action 03.30  end
-  action 03.31 end
+  action 03.28     break
+  action 03.29    end
+  action 03.30   end
+  action 03.31  end
+  action 03.32 end
   !
   !
   action 04.00 set sw_num "4"
@@ -598,10 +601,11 @@ event manager applet sw_stack
   action 04.25      cli command "y"
   action 04.26      append change_list "\n     ##  FOC44444444 (Priority: $pri // Renumbered: $i > $sw_num* // Version: $curr_ver)"
   action 04.27     end
-  action 04.28    end
-  action 04.29   end
-  action 04.30  end
-  action 04.31 end
+  action 04.28     break
+  action 04.29    end
+  action 04.30   end
+  action 04.31  end
+  action 04.32 end
   !
   action 10.00 wait 3
   action 10.01 if $error_list ne ""
