@@ -375,16 +375,15 @@ event manager applet sw_stack
   event syslog occurs 1 pattern "%SYS-5-CONFIG_I: Configured from tftp" maxrun 60
   action 00.00 syslog msg "\n     ## FreeZTP configuration received via TFTP, run 'sw_stack' EEM applet in 120s."
   action 00.01 wait 120
-  action 00.02 syslog msg "\n     ## Checking all switches' version and stack membership, adjusting where necessary."
-  action 00.03 cli command "enable"
-  action 00.04 cli command "show mod | i ^.[1-9]"
-  action 00.05 set stack "$_cli_result"
-  action 00.06 syslog msg "\n     ## Current order of switches in stack;\n$stack"
-  action 00.07 set error_list ""
-  action 00.08 set change_list ""
-  action 00.09 set upgrade_list ""
-  !{% for sw in idarray %}
-  !{% set i = loop.index %}
+  action 00.02 cli command "enable"
+  action 00.03 cli command "show mod | i ^.[1-9]"
+  action 00.04 set stack "$_cli_result"
+  action 00.05 syslog msg "\n     ## Checking all switches' version and stack membership, adjusting where necessary.\n     ## Current order;\n$stack"
+  action 00.06 set error_list ""
+  action 00.07 set change_list ""
+  action 00.08 set upgrade_list ""
+  {%for sw in idarray%}
+  {%-  set i=loop.index%}
   action 0{{i}}.00 set sw_num "{{i}}"
   action 0{{i}}.01 set pri "16"
   action 0{{i}}.02 decrement pri {{i}}
@@ -402,23 +401,21 @@ event manager applet sw_stack
   action 0{{i}}.14    regexp "{{sw}}" "$line"
   action 0{{i}}.15    if $_regexp_result eq "1"
   action 0{{i}}.16     regexp "([0-9\.A-Z]+$)" "$line" curr_ver
-  action 0{{i}}.17     if $i eq $sw_num 
-  action 0{{i}}.18      cli command "switch $i priority $pri" pattern "continue|#"
-  action 0{{i}}.19      cli command "y"
+  action 0{{i}}.17     cli command "switch $i priority $pri" pattern "continue|#"
+  action 0{{i}}.18     cli command "y"
+  action 0{{i}}.19     if $i eq $sw_num
   action 0{{i}}.20      append change_list "\n     ##  {{sw}} (Priority: $pri // Numbered:       $sw_num  // Version: $curr_ver)"
-  action 0{{i}}.21     else 
-  action 0{{i}}.22      cli command "switch $i priority $pri" pattern "continue|#"
+  action 0{{i}}.21     else
+  action 0{{i}}.22      cli command "switch $i renumber $sw_num" pattern "continue|#"
   action 0{{i}}.23      cli command "y"
-  action 0{{i}}.24      cli command "switch $i renumber $sw_num" pattern "continue|#"
-  action 0{{i}}.25      cli command "y"
-  action 0{{i}}.26      append change_list "\n     ##  {{sw}} (Priority: $pri // Renumbered: $i > $sw_num* // Version: $curr_ver)"
-  action 0{{i}}.27     end
-  action 0{{i}}.28     break
-  action 0{{i}}.29    end
-  action 0{{i}}.30   end
-  action 0{{i}}.31  end
-  action 0{{i}}.32 end
-  !{% endfor %}
+  action 0{{i}}.24      append change_list "\n     ##  {{sw}} (Priority: $pri // Renumbered: $i > $sw_num* // Version: $curr_ver)"
+  action 0{{i}}.25     end
+  action 0{{i}}.26     break
+  action 0{{i}}.27    end
+  action 0{{i}}.28   end
+  action 0{{i}}.29  end
+  action 0{{i}}.30 end
+  {%endfor%}
   action 10.00 wait 5
   action 10.01 if $error_list ne ""
   action 10.02  syslog msg "\n     ## The following errors occurred; $error_list"
@@ -452,22 +449,20 @@ Merged configuration that is pushed to the switch from FreeZTP for this example;
 !---- IDARRAY_9 (switch 9 serial number): 
 !---- IDARRAY (all serials): ['FOC11111111', 'FOC22222222', 'FOC33333333', 'FOC44444444']
 !
-!-- EEM applet to renumber switches accordingly.
+!-- EEM applet to renumber switches accordingly (ALL SUBSEQUENT LINES ARE REQUIRED).
 !---- SW_COUNT (count of serials found in IDARRAY): 4
 event manager applet sw_stack
   event syslog occurs 1 pattern "%SYS-5-CONFIG_I: Configured from tftp" maxrun 60
   action 00.00 syslog msg "\n     ## FreeZTP configuration received via TFTP, run 'sw_stack' EEM applet in 120s."
   action 00.01 wait 120
-  action 00.02 syslog msg "\n     ## Checking all switches' version and stack membership, adjusting where necessary."
-  action 00.03 cli command "enable"
-  action 00.04 cli command "show mod | i ^.[1-9]"
-  action 00.05 set stack "$_cli_result"
-  action 00.06 syslog msg "\n     ## Current order of switches in stack;\n$stack"
-  action 00.07 set error_list ""
-  action 00.08 set change_list ""
-  action 00.09 set upgrade_list ""
-  !
-  !
+  action 00.02 cli command "enable"
+  action 00.03 cli command "show mod | i ^.[1-9]"
+  action 00.04 set stack "$_cli_result"
+  action 00.05 syslog msg "\n     ## Checking all switches' version and stack membership, adjusting where necessary.\n     ## Current order;\n$stack"
+  action 00.06 set error_list ""
+  action 00.07 set change_list ""
+  action 00.08 set upgrade_list ""
+  
   action 01.00 set sw_num "1"
   action 01.01 set pri "16"
   action 01.02 decrement pri 1
@@ -485,24 +480,21 @@ event manager applet sw_stack
   action 01.14    regexp "FOC11111111" "$line"
   action 01.15    if $_regexp_result eq "1"
   action 01.16     regexp "([0-9\.A-Z]+$)" "$line" curr_ver
-  action 01.17     if $i eq $sw_num 
-  action 01.18      cli command "switch $i priority $pri" pattern "continue|#"
-  action 01.19      cli command "y"
+  action 01.17     cli command "switch $i priority $pri" pattern "continue|#"
+  action 01.18     cli command "y"
+  action 01.19     if $i eq $sw_num
   action 01.20      append change_list "\n     ##  FOC11111111 (Priority: $pri // Numbered:       $sw_num  // Version: $curr_ver)"
-  action 01.21     else 
-  action 01.22      cli command "switch $i priority $pri" pattern "continue|#"
+  action 01.21     else
+  action 01.22      cli command "switch $i renumber $sw_num" pattern "continue|#"
   action 01.23      cli command "y"
-  action 01.24      cli command "switch $i renumber $sw_num" pattern "continue|#"
-  action 01.25      cli command "y"
-  action 01.26      append change_list "\n     ##  FOC11111111 (Priority: $pri // Renumbered: $i > $sw_num* // Version: $curr_ver)"
-  action 01.27     end
-  action 01.28     break
-  action 01.29    end
-  action 01.30   end
-  action 01.31  end
-  action 01.32 end
-  !
-  !
+  action 01.24      append change_list "\n     ##  FOC11111111 (Priority: $pri // Renumbered: $i > $sw_num* // Version: $curr_ver)"
+  action 01.25     end
+  action 01.26     break
+  action 01.27    end
+  action 01.28   end
+  action 01.29  end
+  action 01.30 end
+  
   action 02.00 set sw_num "2"
   action 02.01 set pri "16"
   action 02.02 decrement pri 2
@@ -520,24 +512,21 @@ event manager applet sw_stack
   action 02.14    regexp "FOC22222222" "$line"
   action 02.15    if $_regexp_result eq "1"
   action 02.16     regexp "([0-9\.A-Z]+$)" "$line" curr_ver
-  action 02.17     if $i eq $sw_num 
-  action 02.18      cli command "switch $i priority $pri" pattern "continue|#"
-  action 02.19      cli command "y"
+  action 02.17     cli command "switch $i priority $pri" pattern "continue|#"
+  action 02.18     cli command "y"
+  action 02.19     if $i eq $sw_num
   action 02.20      append change_list "\n     ##  FOC22222222 (Priority: $pri // Numbered:       $sw_num  // Version: $curr_ver)"
-  action 02.21     else 
-  action 02.22      cli command "switch $i priority $pri" pattern "continue|#"
+  action 02.21     else
+  action 02.22      cli command "switch $i renumber $sw_num" pattern "continue|#"
   action 02.23      cli command "y"
-  action 02.24      cli command "switch $i renumber $sw_num" pattern "continue|#"
-  action 02.25      cli command "y"
-  action 02.26      append change_list "\n     ##  FOC22222222 (Priority: $pri // Renumbered: $i > $sw_num* // Version: $curr_ver)"
-  action 02.27     end
-  action 02.28     break
-  action 02.29    end
-  action 02.30   end
-  action 02.31  end
-  action 02.32 end
-  !
-  !
+  action 02.24      append change_list "\n     ##  FOC22222222 (Priority: $pri // Renumbered: $i > $sw_num* // Version: $curr_ver)"
+  action 02.25     end
+  action 02.26     break
+  action 02.27    end
+  action 02.28   end
+  action 02.29  end
+  action 02.30 end
+  
   action 03.00 set sw_num "3"
   action 03.01 set pri "16"
   action 03.02 decrement pri 3
@@ -555,24 +544,21 @@ event manager applet sw_stack
   action 03.14    regexp "FOC33333333" "$line"
   action 03.15    if $_regexp_result eq "1"
   action 03.16     regexp "([0-9\.A-Z]+$)" "$line" curr_ver
-  action 03.17     if $i eq $sw_num 
-  action 03.18      cli command "switch $i priority $pri" pattern "continue|#"
-  action 03.19      cli command "y"
+  action 03.17     cli command "switch $i priority $pri" pattern "continue|#"
+  action 03.18     cli command "y"
+  action 03.19     if $i eq $sw_num
   action 03.20      append change_list "\n     ##  FOC33333333 (Priority: $pri // Numbered:       $sw_num  // Version: $curr_ver)"
-  action 03.21     else 
-  action 03.22      cli command "switch $i priority $pri" pattern "continue|#"
+  action 03.21     else
+  action 03.22      cli command "switch $i renumber $sw_num" pattern "continue|#"
   action 03.23      cli command "y"
-  action 03.24      cli command "switch $i renumber $sw_num" pattern "continue|#"
-  action 03.25      cli command "y"
-  action 03.26      append change_list "\n     ##  FOC33333333 (Priority: $pri // Renumbered: $i > $sw_num* // Version: $curr_ver)"
-  action 03.27     end
-  action 03.28     break
-  action 03.29    end
-  action 03.30   end
-  action 03.31  end
-  action 03.32 end
-  !
-  !
+  action 03.24      append change_list "\n     ##  FOC33333333 (Priority: $pri // Renumbered: $i > $sw_num* // Version: $curr_ver)"
+  action 03.25     end
+  action 03.26     break
+  action 03.27    end
+  action 03.28   end
+  action 03.29  end
+  action 03.30 end
+  
   action 04.00 set sw_num "4"
   action 04.01 set pri "16"
   action 04.02 decrement pri 4
@@ -590,24 +576,22 @@ event manager applet sw_stack
   action 04.14    regexp "FOC44444444" "$line"
   action 04.15    if $_regexp_result eq "1"
   action 04.16     regexp "([0-9\.A-Z]+$)" "$line" curr_ver
-  action 04.17     if $i eq $sw_num 
-  action 04.18      cli command "switch $i priority $pri" pattern "continue|#"
-  action 04.19      cli command "y"
+  action 04.17     cli command "switch $i priority $pri" pattern "continue|#"
+  action 04.18     cli command "y"
+  action 04.19     if $i eq $sw_num
   action 04.20      append change_list "\n     ##  FOC44444444 (Priority: $pri // Numbered:       $sw_num  // Version: $curr_ver)"
-  action 04.21     else 
-  action 04.22      cli command "switch $i priority $pri" pattern "continue|#"
+  action 04.21     else
+  action 04.22      cli command "switch $i renumber $sw_num" pattern "continue|#"
   action 04.23      cli command "y"
-  action 04.24      cli command "switch $i renumber $sw_num" pattern "continue|#"
-  action 04.25      cli command "y"
-  action 04.26      append change_list "\n     ##  FOC44444444 (Priority: $pri // Renumbered: $i > $sw_num* // Version: $curr_ver)"
-  action 04.27     end
-  action 04.28     break
-  action 04.29    end
-  action 04.30   end
-  action 04.31  end
-  action 04.32 end
-  !
-  action 10.00 wait 3
+  action 04.24      append change_list "\n     ##  FOC44444444 (Priority: $pri // Renumbered: $i > $sw_num* // Version: $curr_ver)"
+  action 04.25     end
+  action 04.26     break
+  action 04.27    end
+  action 04.28   end
+  action 04.29  end
+  action 04.30 end
+  
+  action 10.00 wait 5
   action 10.01 if $error_list ne ""
   action 10.02  syslog msg "\n     ## The following errors occurred; $error_list"
   action 10.03 end
