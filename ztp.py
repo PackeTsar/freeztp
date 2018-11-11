@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "dev1.1.0m"
+version = "v1.1.0"
 
 
 # NEXT: Finish clear integration
