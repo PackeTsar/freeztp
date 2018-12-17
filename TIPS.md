@@ -251,33 +251,40 @@ This workaround uses EEM applets in the J2 switch template to download install t
 -----------------------------------------
 ## Use-case: Automated IOS-XE Stack Renumbering
 
-###### Author: [derek-shnosh](https://github.com/derek-shnosh), Rev: 4, Date: 2018.1108, FreeZTP v1.1.0
+###### Author: [derek-shnosh](https://github.com/derek-shnosh), Rev: 5, Date: 2018.1217, FreeZTP v1.1.0
 
 ### Preamble
 
-When [this code](#required-config-stack) is added to a Jinja2 template for FreeZTP it will automatically build out an EEM applet that will set switch priorities and renumber all switches in the stack according to how they were allocated in the FreeZTP keystore.
+Include this snippet in a FreeZTP Jinja2 template to create an EEM applet that will renumber and prioritize all switches in a stack according to how they were allocated in the FreeZTP keystore.
 
-All switches in the stack can be powered on simultaneously; i.e. there is no need to do the *2-minute-tango* between powering up switches. After the election processes are complete, the stack will continue booting and then perform the smart-install procedure where it will receive this applet as part of the templated configuration.
+It's almost guaranteed that stacked switches will not be numbered in the desired order if powered on simultaneously for the first time. The first switch in the stack might be assigned switch number 3, and the second switch might be assigned switch number 1, etc.
+
+This can be circumvented by waiting [*2 minutes*](https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst3850/hardware/installation/guide/b_c3850_hig/b_c3850_hig_chapter_010.html#ariaid-title13) between powering up switches. However this becomes a bit cumbersome and inefficient when provisioning a large amount of switch stacks.
+
+With this snippet all switches in the stack can be powered on simultaneously. After the election processes are complete the stack will continue booting and then perform the smart-install procedure where it will receive the EEM applet as part of the templated configuration.
 
 In this use-case, FreeZTP's `idarray` variables are being used to define stack member serial numbers. When the template is merged with the keystore, an action sequence is generated for each serial number (`idarray_#`) associated with the hostname (`keystore_id`). Switch serial numbers should be assigned to `idarray_#`'s as they're meant to be numbered in the stack (see the CSV example below).
 
 ### Example
 
 In this example, there are four switches allocated to the stack **ASW-TR01-01**;
-* **FOC11111111** (`idarray_1`) should be switch 1 in the stack, with a priority of 15.
-* **FOC22222222** (`idarray_2`) should be switch 2 in the stack, with a priority of 14.
-* **FOC33333333** (`idarray_3`) should be switch 3 in the stack, with a priority of 13.
-* **FOC44444444** (`idarray_4`) should be switch 4 in the stack, with a priority of 12.
+
+| Order/Array # | Serial # | Notes |
+| :-: | :-: | :- |
+| `idarray_1` | **FOC11111111** | Should be switch 1 in the stack, with a priority of 15. |
+| `idarray_2` | **FOC22222222** | Should be switch 2 in the stack, with a priority of 14. |
+| `idarray_3` | **FOC33333333** | Should be switch 3 in the stack, with a priority of 13. |
+| `idarray_4` | **FOC44444444** | Should be switch 4 in the stack, with a priority of 12. |
 
 #### CSV
 
 Variables defined in the keystore (FreeZTP);
 
-* `keystore_id` = hostname
-* `association` = template
-* `idarray_<n>` = serial number(s)
+* `keystore_id` = Hostname of the switch.
+* `association` = J2 template configured in FreeZTP.
+* `idarray_#` = Switch serial number(s).
 
-The switch serial numbers are added to the `idarray_#` fields in accordance with how they are to be positioned in the stack.
+> `idarray_#` fields are populated with serial numbers in accordance with how they are to be numbered in the stack.
 
 ```csv
 keystore_id,association,idarray_1,idarray_2,idarray_3,idarray_4,idarray_5,idarray_6,idarray_7,idarray_8,idarray_9
@@ -322,14 +329,15 @@ Switch  Ports    Model                Serial No.   MAC address     Hw Ver.      
 ### Process/Explanation
 
 1. Switches are connected via stack cables and powered up simultaneously.
-    * An interface on only one of the switches needs to be connected to the provisioning network.
+    > An interface on only one of the switches needs to be connected to the provisioning network.
 2. Switches complete the election process and stack initiates smart-install.
-3. Stack requests config, FreeZTP gives a (merged) config containing the [required config (stack)](#required-config-stack).
-    * The J2 variable `sw_count` is *set*  during the merge process (counts number of serial numbers found in `idarray`).
-4. Stack applies configuration and a syslog message is generated; **`sw_stack` applet is triggered by this syslog message**.
-5. [EEM Applet `sw_stack` loaded to memory.]
+3. Stack requests config, FreeZTP gives a (merged) config containing the code.
+    * J2 variable `sw_count` is *set*  during the merge process by counting serial numbers found in `idarray`.
+4. Stack applies configuration and a syslog message is generated; **`sw_stack` applet is triggered**.
+5. *[EEM Applet `sw_stack` loaded to memory.]*
     1. Waits 120 seconds for the stack redundancy operations to complete.
-    2. Executes the command `show module | inc ^.[1-9]` *(output as read by EEM for current example with 4 switches\*)*;
+    2. Executes command `show module | inc ^.[1-9]` *(output as read by EEM for current example)*;
+        > This output is what EEM stores as `$stack` for parsing. All line numbers correlate with the stack's current switch allocation numbers; i.e. first line contains information for switch 1, second line contains information for switch 2, etc... 
        ```cisco
         1       62     WS-C3850-12X48U-S     FOC22222222  abcd.ef22.2222  V02           03.07.04E   
         2       62     WS-C3850-12X48U-S     FOC44444444  abcd.ef44.4444  V02           03.07.04E   
@@ -337,24 +345,21 @@ Switch  Ports    Model                Serial No.   MAC address     Hw Ver.      
         4       62     WS-C3850-12X48U-S     FOC33333333  abcd.ef33.3333  V02           03.07.04E   
        ASW-TR01-01#
        ```
-    3. [J2 Loop] For each switch serial, searches the entire output for its serial number;
+    3. [J2 Loop] For each switch, searches the entire output for its serial number;
         * If not found, a syslog message will be generated and the applet will move onto the next switch.
-        * [EEM Loop] If found, the applet searches the output line-by-line\*\* until it finds the serial number;
+        * [EEM Loop] If found, the applet searches the output line-by-line until it finds the serial number;
+            > The last line of the output is the switch hostname (elevated prompt), which is ignored when searching for switch serial number(s); i.e. the number of lines that the applet will search is limited by the Jinja2 `sw_count` variable set in the template.
             * If the line number where the serial number was found matches the allocated switch number (`idarray_#`), only the priority will be set.
             * If the line number where the serial number was found does not match the allocated switch number, the priority will be set and the switch will be renumbered.
-    4. Syslog messages are generated outlining any errors and all changes made to switch priorities and numbers.
+    4. Syslog messages are generated outlining any errors and all changes made to priorities and numbers.
     5. Applet deletes itself from running configuration, writes the startup-config, and generates a syslog message stating that the process is complete.
 6. The stack can now be reloaded to finish the renumbering process.
 
-\**This output is what EEM stores as `$stack` for parsing, all line numbers correlate with the stack's current switch allocation numbers; i.e. the first line contains information for switch 1, second line contains information for switch 2, etc...*
+### Snippet
 
-\*\**The last line of the output is the switch hostname (elevated prompt), which is ignored when searching for switch serial number(s); i.e. the number of lines that the applet will search is limited by the Jinja2 `sw_count` variable set in the template, which is set when the template is merged by FreeZTP.*
-
-### Required Config (Stack)
-
-Configuration snippet to be added to the Jinja2 template.
-* The first section serves to have the `IDARRAY` variables (passed from FreeZTP) appear in the merged config; these lines are *ignored by the switch* due to the leading `!` notations (commented out).
-* **Everything below `!-- EEM applet to renumber switches accordingly` is required***.
+* Configuration snippet to be added to the Jinja2 template.
+  * The first section serves to have the `IDARRAY` variables (passed from FreeZTP) appear in the merged config; these lines are *ignored by the switch* due to the leading `!` notations (commented out).
+  * **Everything below `!-- EEM applet to renumber switches accordingly` is required**.
 
 ```jinja2
 !-- Variables (keys) parsed from CSV keystore.
@@ -432,9 +437,9 @@ event manager applet sw_stack
 
 ### Merged Config
 
-Merged configuration that is pushed to the switch from FreeZTP for this example;
-* J2 templating functions do not *print*; i.e. anything enclosed with `{% %}` will not appear in the merged config.
-* Any line starting with a `!` will be ignored by the switch.
+* Merged configuration that is pushed to the switch from FreeZTP for this example;
+  * J2 templating functions do not *print*; i.e. anything enclosed with `{% %}` will not appear in the merged config.
+  * Any line starting with a `!` will be ignored by the switch.
 
 ```cisco
 !-- Variables (keys) parsed from CSV keystore.
@@ -607,7 +612,7 @@ event manager applet sw_stack
 
 ### Validation
 
-This applet has been confirmed functional on stacked C3850-12X48U-S switches running the following IOS-XE versions;
+* This has been confirmed functional on stacked C3850-12X48U-S switches running the following IOS-XE versions;
   * IOS-XE 3.7.4E
   * IOS-XE 16.3.6
 
