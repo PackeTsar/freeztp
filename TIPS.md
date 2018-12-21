@@ -265,6 +265,86 @@ With this snippet all switches in the stack can be powered on simultaneously. Af
 
 In this use-case, FreeZTP's `idarray` variables are being used to define stack member serial numbers. When the template is merged with the keystore, an action sequence is generated for each serial number (`idarray_#`) associated with the hostname (`keystore_id`). Switch serial numbers should be assigned to `idarray_#`'s as they're meant to be numbered in the stack (see the CSV example below).
 
+#### Snippet
+
+* Configuration snippet to be added to the Jinja2 template.
+  * The first section serves to have the `IDARRAY` variables (passed from FreeZTP) appear in the merged config; these lines are *ignored by the switch* due to the leading `!` notations (commented out).
+  * **Everything below `!-- EEM applet to renumber switches accordingly` is required**.
+
+```jinja2
+!-- Variables (keys) parsed from CSV keystore.
+!---- IDARRAY_1 (switch 1 serial number): {{idarray_1}}
+!---- IDARRAY_2 (switch 2 serial number): {{idarray_2}}
+!---- IDARRAY_3 (switch 3 serial number): {{idarray_3}}
+!---- IDARRAY_4 (switch 4 serial number): {{idarray_4}}
+!---- IDARRAY_5 (switch 5 serial number): {{idarray_5}}
+!---- IDARRAY_6 (switch 6 serial number): {{idarray_6}}
+!---- IDARRAY_7 (switch 7 serial number): {{idarray_7}}
+!---- IDARRAY_8 (switch 8 serial number): {{idarray_8}}
+!---- IDARRAY_9 (switch 9 serial number): {{idarray_9}}
+!---- IDARRAY (all serials): {{idarray}}
+!
+!-- EEM applet to renumber switches accordingly (ALL SUBSEQUENT LINES ARE REQUIRED).
+!---- SW_COUNT (count of serials found in IDARRAY): {%set sw_count=idarray|count%}{{sw_count}}
+event manager applet sw_stack
+  event syslog occurs 1 pattern "%SYS-5-CONFIG_I: Configured from tftp" maxrun 60
+  action 00.00 syslog msg "\n     ## FreeZTP configuration received via TFTP, run 'sw_stack' EEM applet in 120s."
+  action 00.01 wait 120
+  action 00.02 cli command "enable"
+  action 00.03 cli command "show mod | i ^.[1-9]"
+  action 00.04 set stack "$_cli_result"
+  action 00.05 syslog msg "\n     ## Checking all switches' version and stack membership, adjusting where necessary.\n     ## Current order;\n$stack"
+  action 00.06 set error_list ""
+  action 00.07 set change_list ""
+  action 00.08 set upgrade_list ""
+  {%for sw in idarray%}
+  {%-  set i=loop.index%}
+  action 0{{i}}.00 set sw_num "{{i}}"
+  action 0{{i}}.01 set pri "16"
+  action 0{{i}}.02 decrement pri {{i}}
+  action 0{{i}}.03 regexp "{{sw}}" "$stack"
+  action 0{{i}}.04 if $_regexp_result ne "1"
+  action 0{{i}}.05  syslog msg "\n     ## {{sw}} (Sw-{{i}} serial) not found in the stack, check 'show mod' output."
+  action 0{{i}}.06  append error_list "\n     ##  {{sw}} is allocated (idarray_{{i}}) but was not found in the stack."
+  action 0{{i}}.07 else
+  action 0{{i}}.08  set i "0"
+  action 0{{i}}.09  foreach line "$stack" "\n"
+  action 0{{i}}.10   increment i
+  action 0{{i}}.11   if $i le "{{sw_count}}"
+  action 0{{i}}.12    string trim "$line"
+  action 0{{i}}.13    set line "$_string_result"
+  action 0{{i}}.14    regexp "{{sw}}" "$line"
+  action 0{{i}}.15    if $_regexp_result eq "1"
+  action 0{{i}}.16     regexp "([0-9\.A-Z]+$)" "$line" curr_ver
+  action 0{{i}}.17     cli command "switch $i priority $pri" pattern "continue|#"
+  action 0{{i}}.18     cli command "y"
+  action 0{{i}}.19     if $i eq $sw_num
+  action 0{{i}}.20      append change_list "\n     ##  {{sw}} (Priority: $pri // Numbered:       $sw_num  // Version: $curr_ver)"
+  action 0{{i}}.21     else
+  action 0{{i}}.22      cli command "switch $i renumber $sw_num" pattern "continue|#"
+  action 0{{i}}.23      cli command "y"
+  action 0{{i}}.24      append change_list "\n     ##  {{sw}} (Priority: $pri // Renumbered: $i > $sw_num* // Version: $curr_ver)"
+  action 0{{i}}.25     end
+  action 0{{i}}.26     break
+  action 0{{i}}.27    end
+  action 0{{i}}.28   end
+  action 0{{i}}.29  end
+  action 0{{i}}.30 end
+  {%endfor%}
+  action 10.00 wait 5
+  action 10.01 if $error_list ne ""
+  action 10.02  syslog msg "\n     ## The following errors occurred; $error_list"
+  action 10.03 end
+  action 10.04 syslog msg "\n     ## Switches below have been assigned a priority and renumbered* as needed; $change_list"
+  action 10.05 cli command "conf t"
+  action 10.06 cli command "no event man app sw_stack"
+  action 10.07 cli command "end"
+  action 10.08 cli command "write mem" pattern "confirm|#"
+  action 10.09 cli command ""
+  action 10.10 syslog msg "\n     ## EEM applet (sw_stack) deleted and config written, reload for changes to take effect."
+  !
+```
+
 ### Example
 
 In this example, there are four switches allocated to the stack **ASW-TR01-01**;
@@ -354,86 +434,6 @@ Switch  Ports    Model                Serial No.   MAC address     Hw Ver.      
     4. Syslog messages are generated outlining any errors and all changes made to priorities and numbers.
     5. Applet deletes itself from running configuration, writes the startup-config, and generates a syslog message stating that the process is complete.
 6. The stack can now be reloaded to finish the renumbering process.
-
-### Snippet
-
-* Configuration snippet to be added to the Jinja2 template.
-  * The first section serves to have the `IDARRAY` variables (passed from FreeZTP) appear in the merged config; these lines are *ignored by the switch* due to the leading `!` notations (commented out).
-  * **Everything below `!-- EEM applet to renumber switches accordingly` is required**.
-
-```jinja2
-!-- Variables (keys) parsed from CSV keystore.
-!---- IDARRAY_1 (switch 1 serial number): {{idarray_1}}
-!---- IDARRAY_2 (switch 2 serial number): {{idarray_2}}
-!---- IDARRAY_3 (switch 3 serial number): {{idarray_3}}
-!---- IDARRAY_4 (switch 4 serial number): {{idarray_4}}
-!---- IDARRAY_5 (switch 5 serial number): {{idarray_5}}
-!---- IDARRAY_6 (switch 6 serial number): {{idarray_6}}
-!---- IDARRAY_7 (switch 7 serial number): {{idarray_7}}
-!---- IDARRAY_8 (switch 8 serial number): {{idarray_8}}
-!---- IDARRAY_9 (switch 9 serial number): {{idarray_9}}
-!---- IDARRAY (all serials): {{idarray}}
-!
-!-- EEM applet to renumber switches accordingly (ALL SUBSEQUENT LINES ARE REQUIRED).
-!---- SW_COUNT (count of serials found in IDARRAY): {%set sw_count=idarray|count%}{{sw_count}}
-event manager applet sw_stack
-  event syslog occurs 1 pattern "%SYS-5-CONFIG_I: Configured from tftp" maxrun 60
-  action 00.00 syslog msg "\n     ## FreeZTP configuration received via TFTP, run 'sw_stack' EEM applet in 120s."
-  action 00.01 wait 120
-  action 00.02 cli command "enable"
-  action 00.03 cli command "show mod | i ^.[1-9]"
-  action 00.04 set stack "$_cli_result"
-  action 00.05 syslog msg "\n     ## Checking all switches' version and stack membership, adjusting where necessary.\n     ## Current order;\n$stack"
-  action 00.06 set error_list ""
-  action 00.07 set change_list ""
-  action 00.08 set upgrade_list ""
-  {%for sw in idarray%}
-  {%-  set i=loop.index%}
-  action 0{{i}}.00 set sw_num "{{i}}"
-  action 0{{i}}.01 set pri "16"
-  action 0{{i}}.02 decrement pri {{i}}
-  action 0{{i}}.03 regexp "{{sw}}" "$stack"
-  action 0{{i}}.04 if $_regexp_result ne "1"
-  action 0{{i}}.05  syslog msg "\n     ## {{sw}} (Sw-{{i}} serial) not found in the stack, check 'show mod' output."
-  action 0{{i}}.06  append error_list "\n     ##  {{sw}} is allocated (idarray_{{i}}) but was not found in the stack."
-  action 0{{i}}.07 else
-  action 0{{i}}.08  set i "0"
-  action 0{{i}}.09  foreach line "$stack" "\n"
-  action 0{{i}}.10   increment i
-  action 0{{i}}.11   if $i le "{{sw_count}}"
-  action 0{{i}}.12    string trim "$line"
-  action 0{{i}}.13    set line "$_string_result"
-  action 0{{i}}.14    regexp "{{sw}}" "$line"
-  action 0{{i}}.15    if $_regexp_result eq "1"
-  action 0{{i}}.16     regexp "([0-9\.A-Z]+$)" "$line" curr_ver
-  action 0{{i}}.17     cli command "switch $i priority $pri" pattern "continue|#"
-  action 0{{i}}.18     cli command "y"
-  action 0{{i}}.19     if $i eq $sw_num
-  action 0{{i}}.20      append change_list "\n     ##  {{sw}} (Priority: $pri // Numbered:       $sw_num  // Version: $curr_ver)"
-  action 0{{i}}.21     else
-  action 0{{i}}.22      cli command "switch $i renumber $sw_num" pattern "continue|#"
-  action 0{{i}}.23      cli command "y"
-  action 0{{i}}.24      append change_list "\n     ##  {{sw}} (Priority: $pri // Renumbered: $i > $sw_num* // Version: $curr_ver)"
-  action 0{{i}}.25     end
-  action 0{{i}}.26     break
-  action 0{{i}}.27    end
-  action 0{{i}}.28   end
-  action 0{{i}}.29  end
-  action 0{{i}}.30 end
-  {%endfor%}
-  action 10.00 wait 5
-  action 10.01 if $error_list ne ""
-  action 10.02  syslog msg "\n     ## The following errors occurred; $error_list"
-  action 10.03 end
-  action 10.04 syslog msg "\n     ## Switches below have been assigned a priority and renumbered* as needed; $change_list"
-  action 10.05 cli command "conf t"
-  action 10.06 cli command "no event man app sw_stack"
-  action 10.07 cli command "end"
-  action 10.08 cli command "write mem" pattern "confirm|#"
-  action 10.09 cli command ""
-  action 10.10 syslog msg "\n     ## EEM applet (sw_stack) deleted and config written, reload for changes to take effect."
-  !
-```
 
 ### Merged Config
 
