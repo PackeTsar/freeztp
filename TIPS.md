@@ -47,206 +47,276 @@ The use of Vlan1 is not required for provisioning. The client switch running the
 -----------------------------------------
 ## Use-case: Upgrade IOS-XE 3.7.x to 16.3.6
 
-###### Author: [derek-shnosh](https://github.com/derek-shnosh), Rev: 1, Date: 2018.1008, FreeZTP v1.1.0
+###### Author: [derek-shnosh](https://github.com/derek-shnosh), Rev: 2, Date: 2018.1224, FreeZTP v1.1.0
 
-### Problem
+### Preamble
 
-IOS-XE 3.7.4 cannot upgrade to 16.3.6 via smart-install because `new force` isn't appended.
+IOS-XE 3.7.4 cannot upgrade to 16.3.6 via smart-install because `new force` isn't appended. This workaround utilizes EEM applets in a Jinja2 switch template to download install the updated image. 
 
-* Switch log output from failure;
+#### Switch log output from failure
 
-    ```
-    Would you like to enter the initial configuration dialog? [yes/no]:
-    Loading ztp_ios_upgrade from 172.17.251.251 (via Vlan1): !
-    [OK - 38 bytes]
-    Preparing install operation ...
-    [1]: Downloading file tftp://172.17.251.251/cat3k_caauniversalk9.16.03.06.
-    SPA.bin to active switch 1
-    [1]: Finished downloading file tftp://172.17.251.251/cat3k_caauniversalk9.16.03.06.
-    SPA.bin to active switch 1
-    [1]: Copying software from active switch 1 to switch 2
-    [1]: Finished copying software to switch 2
-    [1 2]: Starting install operation
-    [1 2]: Expanding bundle cat3k_caa-universalk9.16.03.06.SPA.bin
-    [1 2]: Copying package files
-    [1 2]: Package files copied
-    [1 2]: Finished expanding bundle cat3k_caa-universalk9.16.03.06.SPA.bin
-    [1 2]: Verifying and copying expanded package files to flash:
-    [1 2]: Verified and copied expanded package files to flash:
-    [1 2]: Starting compatibility checks
-    [1]: % Candidate package compatibility checks failed because the following
-    package dependencies were not satisfied. Operation aborted.
-
-
-    [2]: % Candidate package compatibility checks failed because the following
-    package dependencies were not satisfied. Operation aborted.
+```cisco
+Would you like to enter the initial configuration dialog? [yes/no]:
+Loading ztp_ios_upgrade from 172.17.251.251 (via Vlan1): !
+[OK - 38 bytes]
+Preparing install operation ...
+[1]: Downloading file tftp://172.17.251.251/cat3k_caauniversalk9.16.03.06.
+SPA.bin to active switch 1
+[1]: Finished downloading file tftp://172.17.251.251/cat3k_caauniversalk9.16.03.06.
+SPA.bin to active switch 1
+[1]: Copying software from active switch 1 to switch 2
+[1]: Finished copying software to switch 2
+[1 2]: Starting install operation
+[1 2]: Expanding bundle cat3k_caa-universalk9.16.03.06.SPA.bin
+[1 2]: Copying package files
+[1 2]: Package files copied
+[1 2]: Finished expanding bundle cat3k_caa-universalk9.16.03.06.SPA.bin
+[1 2]: Verifying and copying expanded package files to flash:
+[1 2]: Verified and copied expanded package files to flash:
+[1 2]: Starting compatibility checks
+[1]: % Candidate package compatibility checks failed because the following
+package dependencies were not satisfied. Operation aborted.
 
 
-    [1]: % An internal error was encountered. Operation aborted.
-    [2]: % An internal error was encountered. Operation aborted.
+[2]: % Candidate package compatibility checks failed because the following
+package dependencies were not satisfied. Operation aborted.
 
-    ERROR: Software Installation Failed: 35 2
 
-    Loading network-confg from 172.17.251.251 (via Vlan1): !
-    [OK - 69 bytes]
-    Loading ZTP-23CFBA478F-confg from 172.17.251.251 (via Vlan1): !
-    [OK - 77012 bytes] 
-    ```
+[1]: % An internal error was encountered. Operation aborted.
+[2]: % An internal error was encountered. Operation aborted.
 
-* TAC confirmation;
+ERROR: Software Installation Failed: 35 2
 
-    >The behavior is expected due to the command syntax difference as you suspected.
-    We documented the behavior in a bug below: https://bst.cloudapps.cisco.com/bugsearch/bug/CSCvd49193
-    The running code 3.7.4E is affected and this issue is fixed on 3.6.8E.
-    Is it possible for you to try the following?
-    1- Upgrade from 3.7.4E to 3.6.8E via smart install
-    2- Upgrade from 3.6.8E to 16.3.6 via smart install
+Loading network-confg from 172.17.251.251 (via Vlan1): !
+[OK - 69 bytes]
+Loading ZTP-23CFBA478F-confg from 172.17.251.251 (via Vlan1): !
+[OK - 77012 bytes] 
+```
 
-    ![BugID_Screenshot_from_TAC][BugID]
+#### TAC confirmation
 
-### Workaround
+> The behavior is expected due to the command syntax difference as you suspected. We documented the behavior in a bug below: [https://bst.cloudapps.cisco.com/bugsearch/bug/CSCvd49193](https://bst.cloudapps.cisco.com/bugsearch/bug/CSCvd49193). The running code 3.7.4E is affected and this issue is fixed on 3.6.8E.
+> 
+> Is it possible for you to try the following?
+>
+> 1- Upgrade from 3.7.4E to 3.6.8E via smart install
+> 
+> 2- Upgrade from 3.6.8E to 16.3.6 via smart install
+> 
+> ![BugID_Screenshot_from_TAC][BugID]
 
-This workaround uses EEM applets in the J2 switch template to download install the updated image.
+### Considerations/Notes
 
-#### Process Order
+* Validated on Cisco 3850-12X48U-S switches with IOS-XE 3.7.4E installed out of the box; upgrading to IOS-XE 16.3.6.
+* Default TFTP blocksize is *512* on IOS-XE 3.7.4E, and *8192* on IOS-XE 16.3.6; adding this to the template significantly reduces the image transfer time.
+* The J2 template should not contain any configuration or syntax that is incompatible in IOS-XE version (3.7.4E). Any commands that are compatible with later IOS-XE versions only should be added to the `post_ztp_2` applet.
 
-1. Switch is powered up connected to the provisioning network and initiates smart-install, FreeZTP does not give an image.
-2. Switch requests config, FreeZTP gives a (merged) config, containing the [required config (upgrade)](#required-config-upgrade).
-    * *Merged template should not contain any incompatible configuration commands for current software version (3.7.4E).*
-3. Switch applies configuration with Vlan1 configured for DHCP addressing; **`post_ztp_1` is triggered by Vlan1 obtaining a DHCP address**.
-4. [EEM Applet `post_ztp_1` loaded to memory.]
-    1. Applet deletes itself from running configuration, downloads the bin file, cleans up temp configs and then writes the startup-config.
+#### Applet: `post_ztp_1`
+
+* Triggered by the switch receiving a DHCP address on Vlan1; notes regarding the `maxrun` and `wait`;
+  * `action 01.00 ... maxrun 900` - 15 minutes to accommodate the 2 minute wait, the 4-5 minute TFTP download, and the 5-6 minute install.
+  * `action 01.01 wait 120` - Vlan1 obtains a DHCP address approximately 1.5 minutes before the switch will allow configurations if stacked (see **IOS-XE 3.7.4E Log** below). *This wait can be omitted for stand-alone switches*.
+
+##### IOS-XE 3.7.4E Log
+
+```cisco
+*21:32:15.992: %DHCP-6-ADDRESS_ASSIGN: Interface Vlan1 assigned DHCP address 172.17.250.6, mask 255.255.254.0
+...
+*21:33:42.831: %HA_CONFIG_SYNC-6-BULK_CFGSYNC_SUCCEED: Bulk Sync succeeded
+*21:33:43.824: %RF-5-RF_TERMINAL_STATE: 1 ha_mgr:  Terminal state reached for (SSO)
+```
+
+
+#### Applet: `post_ztp_2`
+
+* Triggered by IOS-XE 16.x specific *redundancy* syslog message; notes regarding the `maxrun` and `wait`;
+  * `action 01.00 ... maxrun 600` - 10 minutes to accommodate the 2 minute wait, any optional configuration changes and the software package clean process.
+  * `action 01.01 wait 120` - *Redundancy* syslog message is logged approximately 1.75 minutes before the switch will allow configurations if stacked (see **IOS-XE 16.3.6 Log** below). *This wait can be omitted for stand_alone switches*.
+
+##### IOS-XE 16.3.6 Log
+
+```cisco
+21:54:16.002 PDT: %IOSXE_REDUNDANCY-6-PEER: Active detected switch 2 as standby.
+...
+21:56:00.711 PDT: %HA_CONFIG_SYNC-6-BULK_CFGSYNC_SUCCEED: Bulk Sync succeeded
+21:56:01.735 PDT: %RF-5-RF_TERMINAL_STATE: Terminal state reached for (SSO)
+```
+
+### Process/Explanation
+
+1. Switch is powered up connected to the provisioning network and initiates smart-install. Switch requests an upgrade first but no image is downloaded since image download is disabled in FreeZTP.
+2. Switch requests config, FreeZTP gives a (merged) config containing the *required config*.
+3. Switch applies configuration with Vlan1 configured for DHCP addressing.
+   * **`post_ztp_1` is triggered by Vlan1 obtaining a DHCP address**.
+4. *[EEM Applet `post_ztp_1` loaded to memory.]*
+    1. Applet deletes itself from running config, downloads the bin file, cleans up temp configs and writes the startup-config.
     2. Switch then runs the `software install` command, answers **y** to reload prompt from install command.
-5. Switch reloads; **`post_ztp_2` is triggered by a syslog command specific to IOS-XE 16.x *(%IOSXE_REDUNDANCY-6-PEER)***.
-    * **This trigger may need to be changed!**<br>*I'm unsure if this syslog message is present when provisioning a single switch (i.e. not stacked) as I never tested this scenario. I will update if I get an opportunity to test this on a single switch.*
-6. [EEM applet `post_ztp_2` loaded into memory.]
+5. Switch reloads.
+   * **`post_ztp_2` is triggered by a syslog command specific to IOS-XE 16.x *(%IOSXE_REDUNDANCY-6-PEER)***.
+      > **This trigger may need to be changed!** *I'm unsure if this syslog message is present when provisioning a stand-alone switch as I never tested this scenario. I will update if I get an opportunity to test this on a stand-alone switch.*
+6. *[EEM applet `post_ztp_2` loaded into memory.]*
     1. Applet deletes itself from running configuration and writes the startup-config.
-    2. (Optional) Add action sequences for any IOS-XE 16.x specific commands.
+    2. *(Optional)* Add action sequences for any IOS-XE 16.x specific commands.
     3. Applet runs the package clean process to delete the old .pkg and packages.conf file(s).
 
-#### Considerations
+### Required Config
 
-* Tested and validated on Cisco 3850-12X48U-S switches with IOS-XE 3.7.4E installed out of the box (upgrading to IOS-XE 16.3.6).
-* Default TFTP blocksize is *512* on IOS-XE 3.7.4E (default is *8192* on IOS-XE 16.3.6); this speeds up the image transfer substantially.
-* `post_ztp_1` applet, triggered by Vlan1 receiving a DHCP address;
-  * `action 01.00 ... maxrun 900` - 15 minutes to accommodate the 2 minute wait, the 4-5 minute TFTP download, and the 5-6 minute install.
-  * `action 01.01 wait 120` - Vlan1 obtains a DHCP address approximately 1.5 minutes before the switch will allow configurations if stacked (see **IOS-XE 3.7.4E Log** below).
-* `post_ztp_2` applet, triggered by IOS-XE 16.x specific *redundancy* syslog message;
-  * `action 01.00 ... maxrun 600` - 10 minutes to accommodate the 2 minute wait, any optional configuration changes and the software package clean process.
-  * `action 01.01 wait 120` - *Redundancy* syslog message is logged approximately 1.75 minutes before the switch will allow configurations if stacked (see **IOS 16.3.6 Log** below).
+* Disable FreeZTP image downloads, replace `<SCOPE>` with the name of your configured DHCP scope.
 
-#### Log files
+   `ztp set dhcpd <SCOPE> imagediscoveryfile-option disable && ztp request dhcpd-commit && ztp service restart`
 
-* IOS-XE 3.7.4E
-    ```
-    *21:32:15.992: %DHCP-6-ADDRESS_ASSIGN: Interface Vlan1 assigned DHCP address 172.17.250.6, mask 255.255.254.0
-    ...
-    *21:33:42.831: %HA_CONFIG_SYNC-6-BULK_CFGSYNC_SUCCEED: Bulk Sync succeeded
-    *21:33:43.824: %RF-5-RF_TERMINAL_STATE: 1 ha_mgr:  Terminal state reached for (SSO)
-    ```
-
-* IOS-XE 16.3.6
-    ```
-    21:54:16.002 PDT: %IOSXE_REDUNDANCY-6-PEER: Active detected switch 2 as standby.
-    ...
-    21:56:00.711 PDT: %HA_CONFIG_SYNC-6-BULK_CFGSYNC_SUCCEED: Bulk Sync succeeded
-    21:56:01.735 PDT: %RF-5-RF_TERMINAL_STATE: Terminal state reached for (SSO)
-    ```
-
-#### Required Config (Upgrade)
-
-* Disable FreeZTP image downloads
-
-    ```
-    ztp set dhcpd <SCOPE> imagediscoveryfile-option disable
-    ztp request dhcpd-commit
-    ztp service restart
-    ```
-
-* Allocate a *provisioning interface*; i.e. the interface connected to the provisioning network.
+* Allocate a *provisioning interface* as `prov_int`; i.e. the interface connected to the provisioning network.
 
 * Modify the variables in the template config snippet below to suit network/needs, then add the whole snippet to the J2 switch template.
+   > These four variables can be defined in the keystore or left in the template.
 
-    * *The four variables can be defined in the keystore or left in the template.*
+   | Variable      | Description                                                                                                     |
+   | :-----------: | :-------------------------------------------------------------------------------------------------------------- |
+   | `tftp_addr`   | Address of TFTP server, typically FreeZTP.                                                                      |
+   | `image_bin`   | Name of the image file to download.                                                                             |
+   | `access_vlan` | Vlan to configure on the provisioning interface (Gi1/0/48) after upgrade/reload is complete.                    |
+   | `prov_int`    | Interface to be used for provisioning; e.g. Te1/0/48 *(3850-12X48U-S interfaces 37-48 are TenGigabitEthernet.)* |
 
-      | Variable      | Description                                                                                                        |
-      | :-----------: | :----------------------------------------------------------------------------------------------------------------- |
-      | `tftp_addr`   | Address of TFTP server, typically FreeZTP.                                                                         |
-      | `image_bin`   | Name of the image file to download.                                                                                |
-      | `access_vlan` | Vlan to configure on the provisioning interface (Gi1/0/48) after upgrade/reload is complete.                       |
-      | `prov_int`    | Interface to be used for provisioning; e.g. Te1/0/48<br>> *3850-12X48U-S interfaces 37-48 are TenGigabitEthernet.* |
+#### Template Config Snippet
 
-* Template Config Snippet
+```jinja2
+!-- EEM applet to upgrade switches accordingly (ALL SUBSEQUENT LINES ARE REQUIRED).
+!---- {%set sw_count=idarray|count%}
+!---- {%set tftp_addr="172.17.251.251"%}
+!---- {%set access_vlan="501"%}
+!---- {%set prov_int="Te1/0/48"%}
+!---- {%set image={"bin":"cat3k_caa-universalk9.16.03.06.SPA.bin",
+                   "ver":"16.3.6"}%}
+!
+!-- Required for EEM applet to function as intended.
+logging buffered 20480 debugging
+file prompt quiet
+ip tftp blocksize 8192
 
-    ```jinja2
-    !-- Variables (keys) statically defined within the template.
-    !{% set tftp_addr = "172.17.251.251" %}
-    !{% set image_bin = "cat3k_caa-universalk9.16.03.06.SPA.bin"%}
-    !{% set access_vlan = "501" %}
-    !{% set prov_int = "Te1/0/48" %}
+!-- Required for TFTP transfers from FreeZTP (or other reachable TFTP server; i.e. `tftp_addr`).
+interface Vlan1
+  ip address dhcp
+  no shutdown
 
-    !-- Required for EEM applet to function as intended.
-    logging buffered 20480 debugging
-    file prompt quiet
-    ip tftp blocksize 8192
-
-    !-- Required for TFTP transfers from FreeZTP (or other reachable TFTP server; i.e. `tftp_addr`).
-    interface Vlan1
-      ip address dhcp
-      no shutdown
-
-    !-- Interface that is connected to the provisioning network, must remain on Vlan1 for TFTP download.
-    interface GigabitEthernet1/0/48
-      description TMP//PROVISION:Omit config; updated with post_ztp_2 EEM applet.
-      switchport
-      switchport mode access
-      switchport nonegotiate
-      switchport access vlan 1
-      spanning-tree portfast
-      no shutdown
-
-    !-- POST_ZTP_1 EEM applet to download and install the image, clean up config, then reload.
-    event manager applet post_ztp_1
-      event syslog occurs 1 pattern "%DHCP-6-ADDRESS_ASSIGN: Interface Vlan1 assigned DHCP address" maxrun 900
-      action 01.00 syslog msg "\n     ##Switch/stack is ready, downloading and installing image in 120s."
-      action 01.01 wait 120
-      action 01.02 cli command "enable"
-      action 01.03 cli command "debug event man act cli"
-      action 02.00 cli command "conf t"
-      action 03.00 cli command "no event man app post_ztp_1"
-      action 04.00 cli command "do copy tftp://{{ tftp_addr }}/{{ image_bin }} flash:"
-      action 05.00 cli command "int vlan 1"
-      action 05.01 cli command   "no ip addr"
-      action 05.02 cli command   "shut"
-      action 06.00 cli command "int {{ prov_int }}"
-      action 06.01 cli command   "no desc"
-      action 06.02 cli command   "switchp acc vl {{ access_vlan }}
-      action 07.00 cli command "end"
-      action 08.00 cli command "write mem" pattern "confirm|#"
-      action 08.01 cli command ""
-      action 09.00 cli command "software install file flash:{{ image_bin }} new force" pattern "proceed|#"
-      action 09.01 cli command "y"
-      action 10.00 syslog msg "\n     ## Installation complete, reloading for upgrade."
-      action 10.01 cli command "undebug all"
-
-    !-- (Optional) POST_ZTP_2 applet to run package clean and add any config commands that were previously incompatible.
-    !-- (Optional) Add any desired configs between actions 03.00 and 04.00.
-    event manager applet post_ztp_2
-      event syslog occurs 1 pattern "%IOSXE_REDUNDANCY-6-PEER" maxrun 600
-      action 01.00 syslog msg "\n     ## Switch/stack reloaded on new image, running 'post_ztp_2' EEM applet in 120s."
-      action 01.01 wait 120
-      action 01.02 cli command "enable"
-      action 01.03 cli command "debug event man act cli"
-      action 02.00 cli command "conf t"
-      action 03.00 cli command "no event man app post_ztp_2"
-      action 04.00 cli command "end"
-      action 05.00 cli command "write mem" pattern "confirm|#"
-      action 05.01 cli command ""
-      action 06.00 cli command "req plat soft pack clean sw all" pattern "proceed|#"
-      action 06.01 cli command "y"
-      action 07.00 syslog msg "\n     ## Any unused .bin or .pkg files have been deleted.\n     ## Switch is ready for deployment, OK to power off."
-      action 07.01 cli command "undebug all"
-    ```
+!-- Interface that is connected to the provisioning network, must remain on Vlan1 for TFTP download.
+interface GigabitEthernet1/0/48
+  description TMP//PROVISION:Omit config; updated with post_ztp_2 EEM applet.
+  switchport
+  switchport mode access
+  switchport nonegotiate
+  switchport access vlan 1
+  spanning-tree portfast
+  no shutdown
+!
+event manager environment q "
+!
+event manager applet sw_upgrade
+!-- Check all switches in stack to see if an upgrade is needed.
+ event syslog occurs 1 pattern "Configured from tftp://{{tftp_addr}}" maxrun 960
+ action 00.00 syslog msg "\n     ## Configuration received via TFTP, run 'sw_upgrade' EEM applet in 120s."
+ action 00.01 wait 120
+ action 00.02 syslog msg "\n     ## Checking all switches' version."
+ action 00.03 cli command "enable"
+ action 00.04 cli command "show mod | i ^.[1-9]"
+ action 00.05 set stack "$_cli_result"
+ action 00.06 syslog msg "\n     ## Current list of switches in stack;\n$stack"
+ action 00.07 set error_list ""
+ action 00.08 set upgrade_list ""
+ !{% for sw in idarray %}
+ !{% set i = loop.index %}
+ action 0{{i}}.00 set sw_num "{{i}}"
+ action 0{{i}}.01 set pri "16"
+ action 0{{i}}.02 decrement pri {{i}}
+ action 0{{i}}.03 regexp "{{sw}}" "$stack"
+ action 0{{i}}.04 if $_regexp_result ne "1"
+ action 0{{i}}.05  append error_list "\n     ##  {{sw}} is allocated (idarray_{{i}}) but was not found in the stack."
+ action 0{{i}}.06 else
+ action 0{{i}}.07  set i "0"
+ action 0{{i}}.08  foreach line "$stack" "\n"
+ action 0{{i}}.09   increment i
+ action 0{{i}}.10   if $i le "{{sw_count}}"
+ action 0{{i}}.11    string trim "$line"
+ action 0{{i}}.12    set line "$_string_result"
+ action 0{{i}}.13    regexp "{{sw}}" "$line"
+ action 0{{i}}.14    if $_regexp_result eq "1"
+ action 0{{i}}.15     regexp "([0-9\.A-Z]+$)" "$line" curr_ver
+ action 0{{i}}.16     if $curr_ver ne "{{target_ver}}"
+ action 0{{i}}.17      append upgrade_list "{{i}}"
+ action 0{{i}}.18     end
+ action 0{{i}}.19     break
+ action 0{{i}}.20    end
+ action 0{{i}}.21   end
+ action 0{{i}}.22  end
+ action 0{{i}}.23 end
+ !{% endfor %}
+ action 10.00 wait 5
+ action 10.01 if $error_list ne ""
+ action 10.02  syslog msg "\n     ## The following errors occurred; $error_list"
+ action 10.03 end
+ action 11.00 cli command "conf t"
+ action 11.01 cli command "no event man app sw_upgrade"
+ action 12.00 if $upgrade_list eq ""
+ action 12.01  syslog msg "\n     ## All switches are running version {{target_ver}}, skipping download->upgrade/reload.\n     ## Finalizing config in 20s."
+ action 12.02  cli command "no event man env q"
+ action 12.03  cli command "event man env ztp_upgraded no"
+ action 12.04  cli command " event man app post_upgrade"
+ action 12.05  cli command " event timer countdown time 20 maxrun 480"
+ action 12.06  cli command " no action 00.00"
+ action 12.07  cli command " no action 00.01"
+ action 12.08  cli command " end"
+ action 12.09  cli command "write mem" pattern "confirm|#"
+ action 12.10  cli command ""
+ action 12.11 else
+ action 12.12  syslog msg "\n     ## One or more switches require an upgrade to version {{target_ver}} ($upgrade_list).\n     ## Proceeding with download->upgrade/reload."
+ action 12.13  cli command "event man env ztp_upgraded yes"
+ action 12.14  cli command "event man app post_upgrade"
+ action 12.15  cli command " event syslog occurs 1 pattern $q%IOSXE_REDUNDANCY-6-PEER$q maxrun 630"
+ action 12.16  cli command " no event man env q"
+ action 12.17  cli command "end"
+ action 12.18  cli command "write mem" pattern "confirm|#"
+ action 12.19  cli command ""
+ action 12.20  syslog msg "\n     ## (Standby) Downloading image..."
+ action 12.21  cli command "copy tftp://{{tftp_addr}}/{{image_bin}} flash:"
+ action 12.22  syslog msg "\n     ## (Standby) Image downloaded, upgrading..."
+ action 12.23  cli command "software install file flash:{{image_bin}} new force" pattern "proceed|#"
+ action 12.24  syslog msg "\n     ## Upgrade complete, rebooting."
+ action 12.25  cli command "y"
+ action 12.26 end
+ !
+ event manager applet post_upgrade
+!-- Clean up VL-1 and `prov_int` configs, write mem, and then perform package clean.
+!-- (Optional) Add any desired configs between actions 03.00 and 04.00.
+ event none
+ action 00.00 syslog msg "\n     ## Switch reloaded on new image, running 'post_upgrade' EEM applet in 150s."
+ action 00.01 wait 150
+ action 00.02 syslog msg "\n     ## Applying global configs ignored by smart-install and generating crypto key."
+ action 00.03 cli command "enable"
+ action 00.04 set upgr "$ztp_upgraded"
+ action 01.00 cli command "conf t"
+ action 01.01 cli command "no event man env ztp_upgraded"
+ action 01.02 cli command "no event man app post_upgrade"
+ !-- action 02.00 cli command "" {# Use actions 02.00 - 02.99 for desired configs or configs specific to later IOS-XE version(s). #}
+ action 03.00 syslog msg "\n     ## Disabling VL-1 SVI, updating Te#/0/48 configs, and writing startup config."
+ action 03.01 cli command "int vl 1"
+ action 03.02 cli command " no desc"
+ action 03.03 cli command " no ip addr"
+ action 03.04 cli command " shut"
+ action 03.05 cli command "default range {{prov_int}}"
+ action 03.06 cli command "int {{prov_int}}"
+ !-- action 03.07 cli command "" {# Use actions 3.07 - 3.99 to configure `prov_int` as desired. #}
+ action 04.00 cli command "end"
+ action 04.01 cli command "write mem" pattern "confirm|#"
+ action 04.02 cli command ""
+ action 05.00 if $upgr eq "yes"
+ action 05.01  syslog msg "\n     ## (Standby) ZTP upgrade detected, performing software package clean..."
+ action 05.02  cli command "req plat soft pack clean sw all" pattern "proceed|#"
+ action 05.03  cli command "y"
+ action 05.04  syslog msg "\n     ## Unused .bin or .pkg files from previous version(s) have been deleted."
+ action 05.05 else
+ action 05.06  syslog msg "\n     ## ZTP upgrade not detected, skipping software package clean."
+ action 05.07 end
+ action 05.08 syslog msg "\n     ## Start-up config written, ({{hostname}}) is ready for deployment, OK to power off."
+```
 
 -----------------------------------------
 ## Use-case: Automated IOS-XE Stack Renumbering
