@@ -170,12 +170,12 @@ Loading ZTP-23CFBA478F-confg from 172.17.251.251 (via Vlan1): !
 * Modify the variables in the template config snippet below to suit network/needs, then add the whole snippet to the J2 switch template.
    > These four variables can be defined in the keystore or left in the template.
 
-   | Variable      | Description                                                                                                     |
-   | :-----------: | :-------------------------------------------------------------------------------------------------------------- |
-   | `tftp_addr`   | Address of TFTP server, typically FreeZTP.                                                                      |
-   | `image_bin`   | Name of the image file to download.                                                                             |
-   | `access_vlan` | Vlan to configure on the provisioning interface (Gi1/0/48) after upgrade/reload is complete.                    |
-   | `prov_int`    | Interface to be used for provisioning; e.g. Te1/0/48 *(3850-12X48U-S interfaces 37-48 are TenGigabitEthernet.)* |
+   |    Variable     | Description                                                                                                     |
+   | :-------------: | :-------------------------------------------------------------------------------------------------------------- |
+   |   `tftp_addr`   | Address of TFTP server, typically FreeZTP.                                                                      |
+   |  `access_vlan`  | Vlan to configure on the provisioning interface (Gi1/0/48) after upgrade/reload is complete.                    |
+   |   `prov_int`    | Interface to be used for provisioning; e.g. Te1/0/48 *(3850-12X48U-S interfaces 37-48 are TenGigabitEthernet.)* |
+   | `image.bin|ver` | Name of the image file to download, and the image version short-hand.                                                                             |
 
 #### Template Config Snippet
 
@@ -240,7 +240,7 @@ event manager applet sw_upgrade
  action 0{{i}}.13    regexp "{{sw}}" "$line"
  action 0{{i}}.14    if $_regexp_result eq "1"
  action 0{{i}}.15     regexp "([0-9\.A-Z]+$)" "$line" curr_ver
- action 0{{i}}.16     if $curr_ver ne "{{target_ver}}"
+ action 0{{i}}.16     if $curr_ver ne "{{image.ver}}"
  action 0{{i}}.17      append upgrade_list "{{i}}"
  action 0{{i}}.18     end
  action 0{{i}}.19     break
@@ -276,9 +276,9 @@ event manager applet sw_upgrade
  action 12.18  cli command "write mem" pattern "confirm|#"
  action 12.19  cli command ""
  action 12.20  syslog msg "\n     ## (Standby) Downloading image..."
- action 12.21  cli command "copy tftp://{{tftp_addr}}/{{image_bin}} flash:"
+ action 12.21  cli command "copy tftp://{{tftp_addr}}/{{image.bin}} flash:"
  action 12.22  syslog msg "\n     ## (Standby) Image downloaded, upgrading..."
- action 12.23  cli command "software install file flash:{{image_bin}} new force" pattern "proceed|#"
+ action 12.23  cli command "software install file flash:{{image.bin}} new force" pattern "proceed|#"
  action 12.24  syslog msg "\n     ## Upgrade complete, rebooting."
  action 12.25  cli command "y"
  action 12.26 end
