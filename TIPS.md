@@ -175,7 +175,7 @@ Loading ZTP-23CFBA478F-confg from 172.17.251.251 (via Vlan1): !
    |   `tftp_addr`   | Address of TFTP server, typically FreeZTP.                                                                      |
    |  `access_vlan`  | Vlan to configure on the provisioning interface (Gi1/0/48) after upgrade/reload is complete.                    |
    |   `prov_int`    | Interface to be used for provisioning; e.g. Te1/0/48 *(3850-12X48U-S interfaces 37-48 are TenGigabitEthernet.)* |
-   | `image.bin|ver` | Name of the image file to download, and the image version short-hand.                                                                             |
+   | `image.bin/ver` | Name of the image file to download, and the image version short-hand.                                                                             |
 
 #### Template Config Snippet
 
