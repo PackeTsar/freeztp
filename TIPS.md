@@ -419,12 +419,12 @@ event manager applet sw_stack
 
 In this example, there are four switches allocated to the stack **ASW-TR01-01**;
 
-| Order/Array # | Serial # | Notes |
-| :-: | :-: | :- |
-| `idarray_1` | **FOC11111111** | Should be switch 1 in the stack, with a priority of 15. |
-| `idarray_2` | **FOC22222222** | Should be switch 2 in the stack, with a priority of 14. |
-| `idarray_3` | **FOC33333333** | Should be switch 3 in the stack, with a priority of 13. |
-| `idarray_4` | **FOC44444444** | Should be switch 4 in the stack, with a priority of 12. |
+| Order/Array # | Serial # | MAC Addr |  Notes |
+| :-: | :-: | :-: | :- |
+| `idarray_1` | **FOC11111111** | **abcd.ef11.1111** | Should be switch 1 in the stack, with a priority of 15. |
+| `idarray_2` | **FOC22222222** | **abcd.ef22.2222** | Should be switch 2 in the stack, with a priority of 14. |
+| `idarray_3` | **FOC33333333** | **abcd.ef33.3333** | Should be switch 3 in the stack, with a priority of 13. |
+| `idarray_4` | **FOC44444444** | **abcd.ef44.4444** | Should be switch 4 in the stack, with a priority of 12. |
 
 #### CSV
 
