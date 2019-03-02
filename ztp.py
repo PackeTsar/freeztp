@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "v1.1.0"
+version = "v1.1.0a"
 
 
 # NEXT: Finish clear integration
@@ -500,7 +500,7 @@ class config_factory:
 				f.close()
 			elif not os.path.isdir(dir):
 				log("cfact.log_merged_config_file: Creating new directory ({})".format(dir))
-				os.makedirs(dir) 
+				os.makedirs(dir)
 				log("cfact.log_merged_config_file: Writing to file ({})".format(newfile))
 				f = open(newfile, "w")
 				f.write("\n\n{}\n\n".format(filedata))
@@ -1297,6 +1297,8 @@ class config_manager:
 			console(oid)
 	def hidden_list_templates(self):
 		for template in self.running["templates"]:
+			console(template)
+		for template in self.running["external-templates"]:
 			console(template)
 	def hidden_list_external_templates(self):
 		for template in self.running["external-templates"]:
