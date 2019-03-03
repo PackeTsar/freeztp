@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "v1.1.0a"
+version = "v1.1.0b"
 
 
 # NEXT: Finish clear integration
@@ -221,10 +221,9 @@ class ztp_dyn_file:
 class config_factory:
 	def __init__(self):
 		global j2
-		global Environment
 		global meta
 		import jinja2 as j2
-		from jinja2 import Environment, meta
+		from jinja2 import meta
 		self.state = {}
 		self.snmprequests = {}
 		try:
@@ -486,7 +485,8 @@ class config_factory:
 			newdict = dict(keystore_data)
 			newdict.update(other_args)
 			log("cfact.log_merged_config_file: Creating custom log file name from variables:\n{}".format(json.dumps(newdict, indent=4)))
-			template = j2.Template(config.running["logging"]["merged-config-to-custom-file"])
+			env = j2.Environment(loader=j2.FileSystemLoader('/'))
+			template = env.from_string(config.running["logging"]["merged-config-to-custom-file"])
 			newfile = template.render(newdict)
 			log("cfact.log_merged_config_file: Final merge log file is ({})".format(newfile))
 			###########
@@ -528,7 +528,8 @@ class config_factory:
 		hname = timehex[2:12].upper()
 		return("ZTP-"+hname)
 	def merge_base_config(self, tempid):
-		template = j2.Template(self.baseconfig)
+		env = j2.Environment(loader=j2.FileSystemLoader('/'))
+		template = env.from_string(self.baseconfig)
 		return template.render(autohostname=tempid, community=self.basesnmpcom)
 	def merge_final_config(self, keystoreid):
 		if keystoreid in config.running["keyvalstore"]:
@@ -536,7 +537,8 @@ class config_factory:
 		else:
 			path = external_keystores.data
 		templatedata = self.get_template(keystoreid)
-		template = j2.Template(templatedata)
+		env = j2.Environment(loader=j2.FileSystemLoader('/'))
+		template = env.from_string(templatedata)
 		vals = self.pull_keystore_values(path, keystoreid)
 		log("cfact.merge_final_config: Merging with values:\n{}".format(json.dumps(vals, indent=4)))
 		return (template.render(vals), vals)
@@ -616,18 +618,19 @@ class config_factory:
 		if not identity:
 			log("ID '%s' does not exist in keystore!" % iden)
 		else:
-			env = Environment()
 			if template == "final":
 				templatedata = self.get_template(identity)
 				if not templatedata:
 					log("No tempate associated with identity %s" % iden)
 					quit()
 				else:
-					j2template = j2.Template(templatedata)
+					env = j2.Environment(loader=j2.FileSystemLoader('/'))
+					j2template = env.from_string(templatedata)
 					ast = env.parse(templatedata)
 			elif template == "initial":
-				j2template = j2.Template(self.baseconfig)
-				ast = env.parse(self.baseconfig)
+				env = j2.Environment(loader=j2.FileSystemLoader('/'))
+				j2template = env.from_string(self.baseconfig)
+				ast = j2template.parse(self.baseconfig)
 			templatevarlist = list(meta.find_undeclared_variables(ast))
 			varsmissing = False
 			missingvarlist = []
@@ -2908,7 +2911,7 @@ class integration_spark:
 			raise ValueError("Invalid or Unknown Integration Destination")
 		if message.file != None:
 			sendfile = io.StringIO(message.file.data)
-			data.update({'files': (message.file.filename, sendfile, "text/plain")})
+			data.update({'files': ("{}.txt".format(message.file.filename), sendfile, "text/plain")})
 		txtmsg = """------------------------------
 ## **FreeZTP Provisioning (%s)**
 - Timestamp: **%s**
