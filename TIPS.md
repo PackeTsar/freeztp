@@ -26,7 +26,7 @@ The use of Vlan1 is not required for provisioning. The client switch running the
 
 * Configure the *master* provisioning switch interfaces as follows; Replace `<n>` with interfaces that client switches will connect to.
 
-    ```
+    ```cisco-ios-cfg
     interface <n>
       desc PROVISION
       switchport access vlan 3967
@@ -55,7 +55,7 @@ IOS-XE 3.7.4 cannot upgrade to 16.3.6 via smart-install because `new force` isn'
 
 #### Switch log output from failure
 
-```cisco
+```cisco-ios-log
 Would you like to enter the initial configuration dialog? [yes/no]:
 Loading ztp_ios_upgrade from 172.17.251.251 (via Vlan1): !
 [OK - 38 bytes]
@@ -119,7 +119,7 @@ Loading ZTP-23CFBA478F-confg from 172.17.251.251 (via Vlan1): !
 
 ##### IOS-XE 3.7.4E Log
 
-```cisco
+```cisco-ios-log
 *21:32:15.992: %DHCP-6-ADDRESS_ASSIGN: Interface Vlan1 assigned DHCP address 172.17.250.6, mask 255.255.254.0
 ...
 *21:33:42.831: %HA_CONFIG_SYNC-6-BULK_CFGSYNC_SUCCEED: Bulk Sync succeeded
@@ -135,7 +135,7 @@ Loading ZTP-23CFBA478F-confg from 172.17.251.251 (via Vlan1): !
 
 ##### IOS-XE 16.3.6 Log
 
-```cisco
+```cisco-ios-log
 21:54:16.002 PDT: %IOSXE_REDUNDANCY-6-PEER: Active detected switch 2 as standby.
 ...
 21:56:00.711 PDT: %HA_CONFIG_SYNC-6-BULK_CFGSYNC_SUCCEED: Bulk Sync succeeded
@@ -163,7 +163,11 @@ Loading ZTP-23CFBA478F-confg from 172.17.251.251 (via Vlan1): !
 
 * Disable FreeZTP image downloads, replace `<SCOPE>` with the name of your configured DHCP scope.
 
-   `ztp set dhcpd <SCOPE> imagediscoveryfile-option disable && ztp request dhcpd-commit && ztp service restart`
+   ```bash
+   ztp set dhcpd <SCOPE> imagediscoveryfile-option disable && \
+   ztp request dhcpd-commit && \
+   ztp service restart
+   ```
 
 * Allocate a *provisioning interface* as `prov_int`; i.e. the interface connected to the provisioning network.
 
@@ -419,7 +423,7 @@ event manager applet sw_stack
 
 In this example, there are four switches allocated to the stack **ASW-TR01-01**;
 
-| Order/Array # | Serial # | MAC Addr |  Notes |
+| Order/Array # | Serial # | MAC Address |  Notes |
 | :-: | :-: | :-: | :- |
 | `idarray_1` | **FOC11111111** | **abcd.ef11.1111** | Should be switch 1 in the stack, with a priority of 15. |
 | `idarray_2` | **FOC22222222** | **abcd.ef22.2222** | Should be switch 2 in the stack, with a priority of 14. |
@@ -447,7 +451,7 @@ The default *priority* for all switches (out of the box) is **1**; these priorit
 
 Notice that all switches have a priority of **1** in the output below. The priority range is **1-15**; the (online) switch with highest priority will be chosen as the *active* 'supervisor' switch during any election processes/failure events.
 
-```cisco
+```cisco-ios-show
 ASW-TR01-01#show switch
 Switch/Stack Mac Address : abcd.ef22.2222 - Local Mac Address
 Mac persistency wait time: Indefinite
@@ -466,7 +470,7 @@ The default *number* for all switches (out of the box) is also **1**; as the swi
 
 The election process for this example resulted in the switches being numbered as follows;
 
-```cisco
+```cisco-ios-show
 ASW-TR01-01#show module
 Switch  Ports    Model                Serial No.   MAC address     Hw Ver.       Sw Ver. 
 ------  -----   ---------             -----------  --------------  -------       --------
@@ -488,7 +492,7 @@ Switch  Ports    Model                Serial No.   MAC address     Hw Ver.      
     1. Waits 120 seconds for the stack redundancy operations to complete.
     2. Executes command `show module | inc ^.[1-9]` *(output as read by EEM for current example)*;
         > This output is what EEM stores as `$stack` for parsing. All line numbers correlate with the stack's current switch allocation numbers; i.e. first line contains information for switch 1, second line contains information for switch 2, etc... 
-       ```cisco
+       ```cisco-ios-log
         1       62     WS-C3850-12X48U-S     FOC22222222  abcd.ef22.2222  V02           03.07.04E   
         2       62     WS-C3850-12X48U-S     FOC44444444  abcd.ef44.4444  V02           03.07.04E   
         3       62     WS-C3850-12X48U-S     FOC11111111  abcd.ef11.1111  V02           03.07.04E   
@@ -511,7 +515,7 @@ Switch  Ports    Model                Serial No.   MAC address     Hw Ver.      
   * J2 templating functions do not *print*; i.e. anything enclosed with `{% %}` will not appear in the merged config.
   * Any line starting with a `!` will be ignored by the switch.
 
-```cisco
+```cisco-ios-cfg
 !-- Variables (keys) parsed from CSV keystore.
 !---- IDARRAY_1 (switch 1 serial number): FOC11111111
 !---- IDARRAY_2 (switch 2 serial number): FOC22222222
@@ -690,7 +694,7 @@ event manager applet sw_stack
 
 Below is an abbreviated and sanitized log output from 4 stacked switches, real serial numbers have been replaced by those in this example.
 
-```
+```cisco-ios-log
 Would you like to enter the initial configuration dialog? [yes/no]: 
 Loading network-confg from 172.17.251.251 (via Vlan1): !
 [OK - 94 bytes]
