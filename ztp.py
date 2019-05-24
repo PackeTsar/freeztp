@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "dev1.1.0g"
+version = "v1.2.0"
 
 
 ##### Import native modules #####
