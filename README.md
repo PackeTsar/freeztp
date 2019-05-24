@@ -5,7 +5,7 @@ A Zero-Touch Provisioning system built for Cisco Catalyst switches.
 
 -----------------------------------------
 ##   VERSION   ##
-The version of FreeZTP documented here is: **v1.1.0**
+The version of FreeZTP documented here is: **dev1.1.0g**
 
 
 -----------------------------------------
@@ -572,6 +572,17 @@ Once setup, you can send a test message to the integration destination using the
           - `local_hour`
           - `local_minute`
           - `local_second`
+
+
+### v1.2.0
+**Bug Fixes in V1.1.0 --> V1.2.0:**
+- External template object names would not populate for autocomplete when configuring an association. For example `ztp set association id MYKEYSTORE template <tab>` would not show external template objects as options.
+- *ISSUE #45*: Jinja2 templates would not allow the use of `include` statements. Jinja2 handling was rewritten to include this functionality. Jinja2 templates can now be included with the `{% include '/root/BASE_CONFIG.txt' %}` syntax.
+
+**Added Features in V1.1.0 --> V1.2.0:**
+- *Custom DHCPD-Options*: You can now add custom DHCPD option types using the syntax `ztp set dhcpd-option <obj-name>`
+  - An example option can be `ztp set dhcpd-option ntp-server code 42 type ip-address`
+  - This will make the option name `ntp-server` available for use in the configured DHCPD scopes so you can set the value, like `ztp set dhcpd SOMESCOPE ntp-server 10.0.0.1`
 
 
 -----------------------------------------
