@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "v1.1.0c"
+version = "v1.1.0d"
 
 
 # NEXT: Finish clear integration
@@ -1412,8 +1412,12 @@ class config_manager:
 	def dhcpd_compile(self):
 		result = "########### FREEZTP DHCP SCOPES ###########\n"
 		result += "############## DO NOT MODIFY ##############\n"
-		result += "option ztp-tftp-address code 150 = { ip-address };\n"
+		result += "option ztp-tftp-address code 150 = ip-address;\n"
 		result += "option imagediscoveryfile-option code 125 = string;\n"
+		for option in self.running["dhcpd-options"]:
+			typ = self.running["dhcpd-options"][option]["type"]
+			code = self.running["dhcpd-options"][option]["code"]
+			result += "option {} code {} = {};\n".format(option, code, typ)
 		result += "#\n"
 		result += "#"
 		mappings = {
@@ -2200,7 +2204,8 @@ _ztp_complete()
 	fi
 	if [ "$prev2" == "dhcpd" ]; then
 	  if [ "$prev3" == "set" ]; then
-		COMPREPLY=( $(compgen -W "subnet first-address last-address gateway ztp-tftp-address imagediscoveryfile-option dns-servers domain-name lease-time" -- $cur) )
+		local options=$(for k in `ztp hidden show dhcpd-options`; do echo $k ; done)
+		COMPREPLY=( $(compgen -W "${options} subnet first-address last-address gateway ztp-tftp-address imagediscoveryfile-option dns-servers domain-name lease-time" -- $cur) )
 	  fi
 	  if [ "$prev3" == "show" ]; then
 		COMPREPLY=( $(compgen -W "current all raw" -- $cur) )
