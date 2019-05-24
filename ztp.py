@@ -7,12 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "v1.1.0b"
-
-
-# NEXT: Finish clear integration
-# NEXT: Fully test inputs to integrations and helpers
-# NEXT: Get spark integration working
+version = "v1.1.0f"
 
 
 ##### Import native modules #####
@@ -831,6 +826,8 @@ class config_manager:
 				self.save()
 			except ValueError:
 				console("Must be an integer!")
+		elif setting == "dhcpd-option":
+			self.set_dhcpd_options(args)
 		elif setting == "dhcpd":
 			self.set_dhcpd(args)
 		elif setting == "logging":
@@ -924,6 +921,13 @@ class config_manager:
 				console("DHCP Scope '%s' is not currently configured" % iden)
 			else:
 				del self.running["dhcpd"][iden]
+		elif setting == "dhcpd-option":
+			if "dhcpd-options" not in list(self.running):
+				console("No DHCP options are currently configured")
+			elif iden not in list(self.running["dhcpd-options"]):
+				console("DHCP Option '%s' is not currently configured" % iden)
+			else:
+				del self.running["dhcpd-options"][iden]
 		else:
 			console("Unknown Setting!")
 		self.save()
@@ -980,6 +984,26 @@ class config_manager:
 			self.running.update({"associations": {}})
 		self.running["associations"].update({iden: template})
 		self.save()
+	dhcp_option_types = [
+		"string",
+		"ip-address",
+		"int32",
+		"domain-list",
+		"domain-name"
+	]
+	def set_dhcpd_options(self, args):
+		try:
+			code = int(args[5])
+			if code > 254 or code < 1:
+				console("ERROR: Code must be integer between 1-254")
+				sys.exit()
+		except ValueError:
+			console("ERROR: Code must be integer between 1-254")
+		if args[7] not in self.dhcp_option_types:
+			console("ERROR: Option type not valid. Accepted options are ({})".format(self.dhcp_option_types))
+			sys.exit()
+		self.running["dhcpd-options"].update({args[3]: {"type": args[7], "code": int(args[5])}})
+		self.save()
 	def set_dhcpd(self, args):
 		global netaddr
 		import netaddr
@@ -989,7 +1013,7 @@ class config_manager:
 		scope = args[3]
 		setting = args[4]
 		value = args[5]
-		checks = {"subnet": self.is_net, "first-address": self.is_ip, "last-address": self.is_ip, "gateway": self.is_ip, "ztp-tftp-address": self.is_ip, "imagediscoveryfile-option": self.make_true, "domain-name": self.make_true, "lease-time": self.is_num}
+		checks = {"subnet": self.is_net, "first-address": self.is_ip, "last-address": self.is_ip, "gateway": self.is_ip, "domain-name": self.make_true, "lease-time": self.is_num, "imagediscoveryfile-option": self.make_true}
 		#### Build Path
 		if "dhcpd" not in list(self.running):
 			self.running.update({"dhcpd": {}})
@@ -1004,6 +1028,8 @@ class config_manager:
 				console(check)
 		elif setting == "dns-servers":
 			value = ", ".join(args[5:])
+			self.running["dhcpd"][scope].update({setting: value})
+		elif setting in self.running["dhcpd-options"]:
 			self.running["dhcpd"][scope].update({setting: value})
 		else:
 			console("BAD COMMAND!")
@@ -1133,6 +1159,12 @@ class config_manager:
 		imagesup = "ztp set image-supression %s"  % str(self.running["image-supression"])
 		delaykey = "ztp set delay-keystore %s"  % str(self.running["delay-keystore"])
 		############
+		dhcpoptlist = []
+		for option in self.running["dhcpd-options"]:
+			code = self.running["dhcpd-options"][option]["code"]
+			typ = self.running["dhcpd-options"][option]["type"]
+			dhcpoptlist.append("ztp set dhcpd-option %s code %s type %s" % (option, code, typ))
+		############
 		scopelist = []
 		for scope in self.running["dhcpd"]:
 			for option in self.running["dhcpd"][scope]:
@@ -1154,6 +1186,9 @@ class config_manager:
 		###########
 		###########
 		configtext += "\n#\n#\n#\n#######################################################\n"
+		configtext += "#\n#\n#\n"
+		for cmd in dhcpoptlist:
+			configtext += cmd + "\n"
 		configtext += "#\n#\n#\n"
 		for cmd in scopelist:
 			configtext += cmd + "\n"
@@ -1322,6 +1357,14 @@ class config_manager:
 	def hidden_list_image_files(self):
 		for each in os.listdir(self.running["tftproot"]):
 			console(each)
+	def hidden_list_dhcpd_options(self):
+		for option in self.running["dhcpd-options"]:
+			console(option)
+	def hidden_list_dhcpd_option_types(self):
+		for typ in self.dhcp_option_types:
+			console(typ)
+	def hidden_show_dhcpd_option(self, opt_name):
+		console(self.running["dhcpd-options"][opt_name]["type"])
 	def hidden_list_dhcpd_scopes(self):
 		for scope in self.running["dhcpd"]:
 			console(scope)
@@ -1368,15 +1411,17 @@ class config_manager:
 	def dhcpd_compile(self):
 		result = "########### FREEZTP DHCP SCOPES ###########\n"
 		result += "############## DO NOT MODIFY ##############\n"
-		result += "option ztp-tftp-address code 150 = { ip-address };\n"
 		result += "option imagediscoveryfile-option code 125 = string;\n"
+		for option in self.running["dhcpd-options"]:
+			typ = self.running["dhcpd-options"][option]["type"]
+			code = self.running["dhcpd-options"][option]["code"]
+			result += "option {} code {} = {};\n".format(option, code, typ)
 		result += "#\n"
 		result += "#"
 		mappings = {
 		"gateway": " option routers <value>;",
 		"dns-servers": " option domain-name-servers <value>;",
 		"domain-name": ' option domain-name "<value>";',
-		"ztp-tftp-address": " option ztp-tftp-address <value>;",
 		"lease-time": " max-lease-time <value>;"
 		}
 		for scope in self.running["dhcpd"]:
@@ -1411,6 +1456,9 @@ class config_manager:
 						last = self.running["dhcpd"][scope]["last-address"]
 						txt = " range %s %s;" % (first, last)
 						scopetext += txt + "\n"
+					elif option in self.running["dhcpd-options"]:
+						txt = ' option {} {};'.format(option, self.running["dhcpd"][scope][option])
+						scopetext += txt + "\n"
 				if self.running["dhcpd"][scope]["imagediscoveryfile-option"] == "enable":
 					opt125val = self.opt125("isc")
 					txt = " send imagediscoveryfile-option %s;" % opt125val
@@ -1419,7 +1467,6 @@ class config_manager:
 				scopetext += ending
 				result += scopetext
 		return result
-		# option ztp-tftp-address code 150 = { ip-address };
 	def dhcpd_commit(self):
 		global netaddr
 		import netaddr
@@ -1593,6 +1640,12 @@ class installer:
 		"logging": {
 			"merged-config-to-mainlog": "enable",
 			"merged-config-to-custom-file": "disable"
+			},
+		"dhcpd-options": {
+			"ztp-tftp-address": {
+				"code": 150,
+				"type": "ip-address"
+				}
 			}
 		}
 		for key in newconfigkeys:
@@ -1798,10 +1851,10 @@ _ztp_complete()
 		COMPREPLY=( $(compgen -W "show" -- $cur) )
 		;;
 	  "set")
-		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile file-cache-timeout integration external-keystore template external-template keystore idarray association default-keystore default-template imagefile image-supression delay-keystore dhcpd logging" -- $cur) )
+		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile file-cache-timeout integration external-keystore template external-template keystore idarray association default-keystore default-template imagefile image-supression delay-keystore dhcpd-option dhcpd logging" -- $cur) )
 		;;
 	  "clear")
-		COMPREPLY=( $(compgen -W "keystore idarray snmpoid integration external-keystore template external-template association dhcpd log downloads provisioning" -- $cur) )
+		COMPREPLY=( $(compgen -W "keystore idarray snmpoid integration external-keystore template external-template association dhcpd-option dhcpd log downloads provisioning" -- $cur) )
 		;;
 	  "request")
 		COMPREPLY=( $(compgen -W "merge-test initial-merge default-keystore-test snmp-test dhcp-option-125 dhcpd-commit auto-dhcpd ipc-console integration-setup integration-test external-keystore-test keystore-csv-export" -- $cur) )
@@ -1816,7 +1869,7 @@ _ztp_complete()
 	case "$prev" in
 	  show)
 		if [ "$prev2" == "hidden" ]; then
-		  COMPREPLY=( $(compgen -W "keystores keys idarrays idarray snmpoids templates external-templates associations all_ids imagefiles dhcpd-scopes integrations integration-types integration-opts integration-keys external-keystores external-keystore-types external-keystore-opts external-keystore-keys" -- $cur) )
+		  COMPREPLY=( $(compgen -W "keystores keys idarrays idarray snmpoids templates external-templates associations all_ids imagefiles dhcpd-options dhcpd-option-types dhcpd-option dhcpd-scopes integrations integration-types integration-opts integration-keys external-keystores external-keystore-types external-keystore-opts external-keystore-keys" -- $cur) )
 		fi
 		;;
 	  config)
@@ -1979,6 +2032,16 @@ _ztp_complete()
 		  COMPREPLY=( $(compgen -W "<msec-to-delay> -" -- $cur) )
 		fi
 		;;
+	  dhcpd-option)
+		if [ "$prev2" == "set" ]; then
+		  local ids=$(for id in `ztp hidden show dhcpd-options`; do echo $id ; done)
+		  COMPREPLY=( $(compgen -W "${ids} <opt-name> -" -- $cur) )
+		fi
+		if [ "$prev2" == "clear" ]; then
+		  local ids=$(for id in `ztp hidden show dhcpd-options`; do echo $id ; done)
+		  COMPREPLY=( $(compgen -W "${ids}" -- $cur) )
+		fi
+		;;
 	  dhcpd)
 		if [ "$prev2" == "show" ]; then
 		  COMPREPLY=( $(compgen -W "leases" -- $cur) )
@@ -2068,13 +2131,9 @@ _ztp_complete()
 		  local integrations=$(for k in `ztp hidden show integrations`; do echo $k ; done)
 		  COMPREPLY=( $(compgen -W "${integrations} <svc_name> -" -- $cur) )
 		fi
-		if [ "$prev" == "external-keystore-opts" ]; then
-		  local exkeystores=$(for k in `ztp hidden show exkeystores`; do echo $k ; done)
-		  COMPREPLY=( $(compgen -W "${exkeystores} <store_name> -" -- $cur) )
-		fi
-		if [ "$prev" == "external-keystore-keys" ]; then
-		  local integrations=$(for k in `ztp hidden show external-keystores`; do echo $k ; done)
-		  COMPREPLY=( $(compgen -W "${external-keystores} <store_name> -" -- $cur) )
+		if [ "$prev" == "dhcpd-option" ]; then
+		  local options=$(for k in `ztp hidden show dhcpd-options`; do echo $k ; done)
+		  COMPREPLY=( $(compgen -W "${options} -" -- $cur) )
 		fi
 	  fi
 	fi
@@ -2129,9 +2188,15 @@ _ztp_complete()
 		COMPREPLY=( $(compgen -W "<id/arrayname> ${allids} -" -- $cur) )
 	  fi
 	fi
+	if [ "$prev2" == "dhcpd-option" ]; then
+	  if [ "$prev3" == "set" ]; then
+		COMPREPLY=( $(compgen -W "code" -- $cur) )
+	  fi
+	fi
 	if [ "$prev2" == "dhcpd" ]; then
 	  if [ "$prev3" == "set" ]; then
-		COMPREPLY=( $(compgen -W "subnet first-address last-address gateway ztp-tftp-address imagediscoveryfile-option dns-servers domain-name lease-time" -- $cur) )
+		local options=$(for k in `ztp hidden show dhcpd-options`; do echo $k ; done)
+		COMPREPLY=( $(compgen -W "${options} subnet first-address last-address gateway dns-servers domain-name lease-time imagediscoveryfile-option" -- $cur) )
 	  fi
 	  if [ "$prev3" == "show" ]; then
 		COMPREPLY=( $(compgen -W "current all raw" -- $cur) )
@@ -2153,6 +2218,9 @@ _ztp_complete()
 	if [ "$prev4" == "set" ]; then
 	  if [ "$prev3" == "keystore" ]; then
 		COMPREPLY=( $(compgen -W "<value> -" -- $cur) )
+	  fi
+	  if [ "$prev3" == "dhcpd-option" ]; then
+		COMPREPLY=( $(compgen -W "<1-254> -" -- $cur) )
 	  fi
 	fi
 	if [ "$prev4" == "set" ]; then
@@ -2199,12 +2267,6 @@ _ztp_complete()
 		if [ "$prev" == "gateway" ]; then
 		  COMPREPLY=( $(compgen -W "<gateway_ipv4_address> -" -- $cur) )
 		fi
-		if [ "$prev" == "ztp-tftp-address" ]; then
-		  COMPREPLY=( $(compgen -W "<ztp_server_ipv4_address> -" -- $cur) )
-		fi
-		if [ "$prev" == "imagediscoveryfile-option" ]; then
-		  COMPREPLY=( $(compgen -W "enable disable" -- $cur) )
-		fi
 		if [ "$prev" == "dns-servers" ]; then
 		  COMPREPLY=( $(compgen -W "<first_dns_ipv4_address> 8.8.8.8" -- $cur) )
 		fi
@@ -2213,6 +2275,12 @@ _ztp_complete()
 		fi
 		if [ "$prev" == "lease-time" ]; then
 		  COMPREPLY=( $(compgen -W "<lease_time_in_seconds> -" -- $cur) )
+		fi
+		if [ "$prev" == "imagediscoveryfile-option" ]; then
+		  COMPREPLY=( $(compgen -W "enable disable" -- $cur) )
+		else
+		  local typ=$(for k in `ztp hidden show dhcpd-option $prev`; do echo $k ; done)
+		  COMPREPLY=( $(compgen -W "<${typ}> -" -- $cur) )
 		fi
 	  fi
 	fi
@@ -2223,6 +2291,18 @@ _ztp_complete()
 	  if [ "$prev4" == "association" ]; then
 		local templates=$(for k in `ztp hidden show templates`; do echo $k ; done)
 		COMPREPLY=( $(compgen -W "<template_name> ${templates} -" -- $cur) )
+	  fi
+	  if [ "$prev4" == "dhcpd-option" ]; then
+		COMPREPLY=( $(compgen -W "type" -- $cur) )
+	  fi
+	fi
+  elif [ $COMP_CWORD -eq 7 ]; then
+	prev5=${COMP_WORDS[COMP_CWORD-5]}
+	prev6=${COMP_WORDS[COMP_CWORD-6]}
+	if [ "$prev6" == "set" ]; then
+	  if [ "$prev5" == "dhcpd-option" ]; then
+		local typs=$(for k in `ztp hidden show dhcpd-option-types`; do echo $k ; done)
+		COMPREPLY=( $(compgen -W "${typs}" -- $cur) )
 	  fi
 	fi
   fi
@@ -3352,6 +3432,9 @@ def interpreter():
 		console(" - hidden show associations                       |  Show a list of configured template associations")
 		console(" - hidden show all_ids                            |  Show a list of all configured IDs (Keystores and IDArrays)")
 		console(" - hidden show imagefiles                         |  Show a list of candidate imagefiles in the TFTP root directory")
+		console(" - hidden show dhcpd-options                      |  Show a list of configured DHCPD options")
+		console(" - hidden show dhcpd-option-types                 |  Show a list of allowed DHCP option types")
+		console(" - hidden show dhcpd-option <opt_name>            |  Show the type for this option")
 		console(" - hidden show dhcpd-scopes                       |  Show a list of configured DHCPD scopes")
 		console(" - hidden show integrations                       |  Show a list of external integrations")
 		console(" - hidden show integration-types                  |  Show a list of available integration types")
@@ -3379,6 +3462,12 @@ def interpreter():
 		config.hidden_list_all_ids()
 	elif arguments == "hidden show imagefiles":
 		config.hidden_list_image_files()
+	elif arguments == "hidden show dhcpd-options":
+		config.hidden_list_dhcpd_options()
+	elif arguments == "hidden show dhcpd-option-types":
+		config.hidden_list_dhcpd_option_types()
+	elif arguments[:24] == "hidden show dhcpd-option" and len(sys.argv) >= 4:
+		config.hidden_show_dhcpd_option(sys.argv[4])
 	elif arguments == "hidden show dhcpd-scopes":
 		config.hidden_list_dhcpd_scopes()
 	elif arguments == "hidden show integrations":
@@ -3472,6 +3561,7 @@ def interpreter():
 		console(" - set imagefile <binary_image_file_name>                      |  Set the image file name to be used for upgrades (must be in tftp root dir)")
 		console(" - set image-supression <seconds-to-supress>                   |  Set the seconds to supress a second image download preventing double-upgrades")
 		console(" - set delay-keystore <msec-to-delay>                          |  Set the miliseconds to delay the processing of a keystore lookup")
+		console(" - set dhcpd-option <opt-name> code <code> type <field-type>   |  Configure DHCP options to be available to the DHCP server")
 		console(" - set dhcpd <scope-name> [parameters]                         |  Configure DHCP scope(s) to serve IP addresses to ZTP clients")
 		console(" - set logging [parameters]                                    |  Set up custom logging settings")
 	elif arguments == "set suffix":
@@ -3526,6 +3616,10 @@ def interpreter():
 		console(" - set image-supression <seconds-to-supress>      |  Set the seconds to supress a second image download preventing double-upgrades")
 	elif arguments == "set delay-keystore":
 		console(" - set delay-keystore <msec-to-delay>             |  Set the miliseconds to delay the processing of a keystore lookup")
+	elif (arguments[:16] == "set dhcpd-option" and len(sys.argv) < 8) or arguments == "default-template":
+		console(" - set dhcpd-option <opt-name> code <code> type <field-type>       |  Configure DHCP options to be available to the DHCP server")
+		console("                                                                    Examples:")
+		console("                                                                         - set dhcpd-option ztp-tftp-address code 150 type ip-address")
 	elif arguments == "set dhcpd":
 		console(" - set dhcpd <scope-name> [parameters]            |  Configure DHCP scope(s) to serve IP addresses to ZTP clients")
 	elif (arguments[:11] == "set logging" and len(sys.argv) < 5) or arguments == "set logging":
@@ -3546,6 +3640,7 @@ def interpreter():
 		console(" - clear keystore <id> (all|<keyword>)            |  Delete an individual key or a whole keystore ID from the configuration")
 		console(" - clear idarray <arrayname>                      |  Delete an ID array from the configuration")
 		console(" - clear association <id/arrayname>               |  Delete an association from the configuration")
+		console(" - clear dhcpd-option <opt-name>                  |  Delete a configured DHCP option")
 		console(" - clear dhcpd <scope-name>                       |  Delete a DHCP scope")
 		console(" - clear log                                      |  Delete the logging info from the logfile")
 		console(" - clear downloads                                |  Delete the list of TFTP downloads")
@@ -3566,6 +3661,8 @@ def interpreter():
 		console(" - clear idarray <arrayname>                      |  Delete an ID array from the configuration")
 	elif (arguments[:17] == "clear association" and len(sys.argv) < 4) or arguments == "clear association":
 		console(" - clear association <id/arrayname>               |  Delete an association from the configuration")
+	elif (arguments[:18] == "clear dhcpd-option" and len(sys.argv) < 4) or arguments == "clear dhcpd-option":
+		console(" - clear dhcpd-option <opt-name>                  |  Delete a configured DHCP option")
 	elif (arguments[:11] == "clear dhcpd" and len(sys.argv) < 4) or arguments == "clear dhcpd":
 		console(" - clear dhcpd <scope-name>                       |  Delete a DHCP scope")
 	elif arguments[:13] == "clear snmpoid" and len(sys.argv) >= 4:
@@ -3732,6 +3829,7 @@ def interpreter():
 		console(" - set imagefile <binary_image_file_name>                      |  Set the image file name to be used for upgrades (must be in tftp root dir)")
 		console(" - set image-supression <seconds-to-supress>                   |  Set the seconds to supress a second image download preventing double-upgrades")
 		console(" - set delay-keystore <msec-to-delay>                          |  Set the miliseconds to delay the processing of a keystore lookup")
+		console(" - set dhcpd-option <opt-name> code <code> type <field-type>   |  Configure DHCP options to be available to the DHCP server")
 		console(" - set dhcpd <scope-name> [parameters]                         |  Configure DHCP scope(s) to serve IP addresses to ZTP clients")
 		console(" - set logging [parameters]                                    |  Set up custom logging settings")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
@@ -3744,6 +3842,7 @@ def interpreter():
 		console(" - clear external-keystore <name> (all|<key>)                  |  Delete an individual external-keystore key or the whole object")
 		console(" - clear idarray <arrayname>                                   |  Delete an ID array from the configuration")
 		console(" - clear association <id/arrayname>                            |  Delete an association from the configuration")
+		console(" - clear dhcpd-option <opt-name>                               |  Delete a configured DHCP option")
 		console(" - clear dhcpd <scope-name>                                    |  Delete a DHCP scope")
 		console(" - clear log                                                   |  Delete the logging info from the logfile")
 		console(" - clear downloads                                             |  Delete the list of TFTP downloads")
