@@ -7,12 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "v1.1.0d"
-
-
-# NEXT: Finish clear integration
-# NEXT: Fully test inputs to integrations and helpers
-# NEXT: Get spark integration working
+version = "v1.1.0f"
 
 
 ##### Import native modules #####
@@ -1018,7 +1013,7 @@ class config_manager:
 		scope = args[3]
 		setting = args[4]
 		value = args[5]
-		checks = {"subnet": self.is_net, "first-address": self.is_ip, "last-address": self.is_ip, "gateway": self.is_ip, "ztp-tftp-address": self.is_ip, "imagediscoveryfile-option": self.make_true, "domain-name": self.make_true, "lease-time": self.is_num}
+		checks = {"subnet": self.is_net, "first-address": self.is_ip, "last-address": self.is_ip, "gateway": self.is_ip, "domain-name": self.make_true, "lease-time": self.is_num, "imagediscoveryfile-option": self.make_true}
 		#### Build Path
 		if "dhcpd" not in list(self.running):
 			self.running.update({"dhcpd": {}})
@@ -1033,6 +1028,8 @@ class config_manager:
 				console(check)
 		elif setting == "dns-servers":
 			value = ", ".join(args[5:])
+			self.running["dhcpd"][scope].update({setting: value})
+		elif setting in self.running["dhcpd-options"]:
 			self.running["dhcpd"][scope].update({setting: value})
 		else:
 			console("BAD COMMAND!")
@@ -1366,6 +1363,8 @@ class config_manager:
 	def hidden_list_dhcpd_option_types(self):
 		for typ in self.dhcp_option_types:
 			console(typ)
+	def hidden_show_dhcpd_option(self, opt_name):
+		console(self.running["dhcpd-options"][opt_name]["type"])
 	def hidden_list_dhcpd_scopes(self):
 		for scope in self.running["dhcpd"]:
 			console(scope)
@@ -1412,7 +1411,6 @@ class config_manager:
 	def dhcpd_compile(self):
 		result = "########### FREEZTP DHCP SCOPES ###########\n"
 		result += "############## DO NOT MODIFY ##############\n"
-		result += "option ztp-tftp-address code 150 = ip-address;\n"
 		result += "option imagediscoveryfile-option code 125 = string;\n"
 		for option in self.running["dhcpd-options"]:
 			typ = self.running["dhcpd-options"][option]["type"]
@@ -1424,7 +1422,6 @@ class config_manager:
 		"gateway": " option routers <value>;",
 		"dns-servers": " option domain-name-servers <value>;",
 		"domain-name": ' option domain-name "<value>";',
-		"ztp-tftp-address": " option ztp-tftp-address <value>;",
 		"lease-time": " max-lease-time <value>;"
 		}
 		for scope in self.running["dhcpd"]:
@@ -1459,6 +1456,9 @@ class config_manager:
 						last = self.running["dhcpd"][scope]["last-address"]
 						txt = " range %s %s;" % (first, last)
 						scopetext += txt + "\n"
+					elif option in self.running["dhcpd-options"]:
+						txt = ' option {} {};'.format(option, self.running["dhcpd"][scope][option])
+						scopetext += txt + "\n"
 				if self.running["dhcpd"][scope]["imagediscoveryfile-option"] == "enable":
 					opt125val = self.opt125("isc")
 					txt = " send imagediscoveryfile-option %s;" % opt125val
@@ -1467,7 +1467,6 @@ class config_manager:
 				scopetext += ending
 				result += scopetext
 		return result
-		# option ztp-tftp-address code 150 = { ip-address };
 	def dhcpd_commit(self):
 		global netaddr
 		import netaddr
@@ -1646,11 +1645,7 @@ class installer:
 			"ztp-tftp-address": {
 				"code": 150,
 				"type": "ip-address"
-				},
-			"imagediscoveryfile-option": {
-				"code": 125,
-				"type": "string"
-				},
+				}
 			}
 		}
 		for key in newconfigkeys:
@@ -1874,7 +1869,7 @@ _ztp_complete()
 	case "$prev" in
 	  show)
 		if [ "$prev2" == "hidden" ]; then
-		  COMPREPLY=( $(compgen -W "keystores keys idarrays idarray snmpoids templates external-templates associations all_ids imagefiles dhcpd-options dhcpd-option-types dhcpd-scopes integrations integration-types integration-opts integration-keys external-keystores external-keystore-types external-keystore-opts external-keystore-keys" -- $cur) )
+		  COMPREPLY=( $(compgen -W "keystores keys idarrays idarray snmpoids templates external-templates associations all_ids imagefiles dhcpd-options dhcpd-option-types dhcpd-option dhcpd-scopes integrations integration-types integration-opts integration-keys external-keystores external-keystore-types external-keystore-opts external-keystore-keys" -- $cur) )
 		fi
 		;;
 	  config)
@@ -2136,13 +2131,9 @@ _ztp_complete()
 		  local integrations=$(for k in `ztp hidden show integrations`; do echo $k ; done)
 		  COMPREPLY=( $(compgen -W "${integrations} <svc_name> -" -- $cur) )
 		fi
-		if [ "$prev" == "external-keystore-opts" ]; then
-		  local exkeystores=$(for k in `ztp hidden show exkeystores`; do echo $k ; done)
-		  COMPREPLY=( $(compgen -W "${exkeystores} <store_name> -" -- $cur) )
-		fi
-		if [ "$prev" == "external-keystore-keys" ]; then
-		  local integrations=$(for k in `ztp hidden show external-keystores`; do echo $k ; done)
-		  COMPREPLY=( $(compgen -W "${external-keystores} <store_name> -" -- $cur) )
+		if [ "$prev" == "dhcpd-option" ]; then
+		  local options=$(for k in `ztp hidden show dhcpd-options`; do echo $k ; done)
+		  COMPREPLY=( $(compgen -W "${options} -" -- $cur) )
 		fi
 	  fi
 	fi
@@ -2205,7 +2196,7 @@ _ztp_complete()
 	if [ "$prev2" == "dhcpd" ]; then
 	  if [ "$prev3" == "set" ]; then
 		local options=$(for k in `ztp hidden show dhcpd-options`; do echo $k ; done)
-		COMPREPLY=( $(compgen -W "${options} subnet first-address last-address gateway ztp-tftp-address imagediscoveryfile-option dns-servers domain-name lease-time" -- $cur) )
+		COMPREPLY=( $(compgen -W "${options} subnet first-address last-address gateway dns-servers domain-name lease-time imagediscoveryfile-option" -- $cur) )
 	  fi
 	  if [ "$prev3" == "show" ]; then
 		COMPREPLY=( $(compgen -W "current all raw" -- $cur) )
@@ -2276,12 +2267,6 @@ _ztp_complete()
 		if [ "$prev" == "gateway" ]; then
 		  COMPREPLY=( $(compgen -W "<gateway_ipv4_address> -" -- $cur) )
 		fi
-		if [ "$prev" == "ztp-tftp-address" ]; then
-		  COMPREPLY=( $(compgen -W "<ztp_server_ipv4_address> -" -- $cur) )
-		fi
-		if [ "$prev" == "imagediscoveryfile-option" ]; then
-		  COMPREPLY=( $(compgen -W "enable disable" -- $cur) )
-		fi
 		if [ "$prev" == "dns-servers" ]; then
 		  COMPREPLY=( $(compgen -W "<first_dns_ipv4_address> 8.8.8.8" -- $cur) )
 		fi
@@ -2290,6 +2275,12 @@ _ztp_complete()
 		fi
 		if [ "$prev" == "lease-time" ]; then
 		  COMPREPLY=( $(compgen -W "<lease_time_in_seconds> -" -- $cur) )
+		fi
+		if [ "$prev" == "imagediscoveryfile-option" ]; then
+		  COMPREPLY=( $(compgen -W "enable disable" -- $cur) )
+		else
+		  local typ=$(for k in `ztp hidden show dhcpd-option $prev`; do echo $k ; done)
+		  COMPREPLY=( $(compgen -W "<${typ}> -" -- $cur) )
 		fi
 	  fi
 	fi
@@ -2310,8 +2301,8 @@ _ztp_complete()
 	prev6=${COMP_WORDS[COMP_CWORD-6]}
 	if [ "$prev6" == "set" ]; then
 	  if [ "$prev5" == "dhcpd-option" ]; then
-		local templates=$(for k in `ztp hidden show dhcpd-option-types`; do echo $k ; done)
-		COMPREPLY=( $(compgen -W "${templates}" -- $cur) )
+		local typs=$(for k in `ztp hidden show dhcpd-option-types`; do echo $k ; done)
+		COMPREPLY=( $(compgen -W "${typs}" -- $cur) )
 	  fi
 	fi
   fi
@@ -3443,6 +3434,7 @@ def interpreter():
 		console(" - hidden show imagefiles                         |  Show a list of candidate imagefiles in the TFTP root directory")
 		console(" - hidden show dhcpd-options                      |  Show a list of configured DHCPD options")
 		console(" - hidden show dhcpd-option-types                 |  Show a list of allowed DHCP option types")
+		console(" - hidden show dhcpd-option <opt_name>            |  Show the type for this option")
 		console(" - hidden show dhcpd-scopes                       |  Show a list of configured DHCPD scopes")
 		console(" - hidden show integrations                       |  Show a list of external integrations")
 		console(" - hidden show integration-types                  |  Show a list of available integration types")
@@ -3474,6 +3466,8 @@ def interpreter():
 		config.hidden_list_dhcpd_options()
 	elif arguments == "hidden show dhcpd-option-types":
 		config.hidden_list_dhcpd_option_types()
+	elif arguments[:24] == "hidden show dhcpd-option" and len(sys.argv) >= 4:
+		config.hidden_show_dhcpd_option(sys.argv[4])
 	elif arguments == "hidden show dhcpd-scopes":
 		config.hidden_list_dhcpd_scopes()
 	elif arguments == "hidden show integrations":
