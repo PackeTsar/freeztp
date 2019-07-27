@@ -5,7 +5,7 @@ A Zero-Touch Provisioning system built for Cisco Catalyst switches.
 
 -----------------------------------------
 ##   VERSION   ##
-The version of FreeZTP documented here is: **v1.2.0**
+The version of FreeZTP documented here is: **v1.3.0**
 
 
 -----------------------------------------
@@ -583,6 +583,11 @@ Once setup, you can send a test message to the integration destination using the
 - *Custom DHCPD-Options*: You can now add custom DHCPD option types using the syntax `ztp set dhcpd-option <obj-name>`
   - An example option can be `ztp set dhcpd-option ntp-server code 42 type ip-address`
   - This will make the option name `ntp-server` available for use in the configured DHCPD scopes so you can set the value, like `ztp set dhcpd SOMESCOPE ntp-server 10.0.0.1`
+
+  **Added Features and Bug Fixes in V1.2.0 --> V1.3.0:**
+  - *BUG: DHCPD Autocomplete Bug (#50)*: Using autocomplete to see the DHCPD scope attribute options after a scope name (ie: `ztp set dhcpd INTERFACE-ENS160 first-address <TAB>`) would throw an exception due to the complete script being faulty. Repaired the if/then login in the complete script and tested functionality
+  - *BUG: SNMP Information Not Included in Merges (#49)*: Discovered SNMP information was not being included in template merges to make it available for use in the templates. SNMP data is now available in templates by using `{{ snmpinfo.<oid_obj_name> }}`. You can also call up the discovered SNMP value used to match a keystore with `{{ snmpinfo.matched }}`
+  - *ENHANCEMENT: DHCPD Service Control*: ZTP previously had to capability to start/stop/restart the DHCPD service running on the OS other than when committing DHCP configurations. A command-set has been added under `ztp service` extending it with `(freeztp|dhcpd|all)` and allowing `(start|stop|restart)` for each service [group].
 
 
 -----------------------------------------

@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "v1.2.0b"
+version = "v1.3.0"
 
 
 ##### Import native modules #####
@@ -369,10 +369,17 @@ class config_factory:
 							"MAC Address": None,
 							"Timestamp": time.time()
 							})
-					keystoreid = self.get_keystore_id(identifiers)
+					keystoretup = self.get_keystore_id(identifiers)
+					if keystoretup:
+						keystoreid, iden = keystoretup
+					else:
+						keystoreid = None
+						iden = None
 					log("cfact.request: Keystore ID Lookup returned (%s)" % keystoreid)
+					snmpinfo = dict(identifiers)
+					snmpinfo.update({"matched": iden})
 					if keystoreid:
-						result, kvals = self.merge_final_config(keystoreid)
+						result, kvals = self.merge_final_config(keystoreid, snmpinfo)
 						if config.running["logging"]["merged-config-to-mainlog"] == "enable":
 							log("cfact.request: Returning the below config to TFTPy:\n%s\n%s\n%s" % ("#"*25, result, "#"*25))
 						else:
@@ -407,7 +414,7 @@ class config_factory:
 						default = self._default_lookup()
 						if default:
 							log("cfact.request: default-keystore is configured. Returning default")
-							result, kvals = self.merge_final_config(default)
+							result, kvals = self.merge_final_config(default, snmpinfo)
 							if config.running["logging"]["merged-config-to-mainlog"] == "enable":
 								log("cfact.request: Returning the below config to TFTPy:\n%s\n%s\n%s" % ("#"*25, result, "#"*25))
 							else:
@@ -526,7 +533,7 @@ class config_factory:
 		env = j2.Environment(loader=j2.FileSystemLoader('/'))
 		template = env.from_string(self.baseconfig)
 		return template.render(autohostname=tempid, community=self.basesnmpcom)
-	def merge_final_config(self, keystoreid):
+	def merge_final_config(self, keystoreid, snmpinfo=None):
 		if keystoreid in config.running["keyvalstore"]:
 			path = config.running
 		else:
@@ -535,6 +542,8 @@ class config_factory:
 		env = j2.Environment(loader=j2.FileSystemLoader('/'))
 		template = env.from_string(templatedata)
 		vals = self.pull_keystore_values(path, keystoreid)
+		if snmpinfo:
+			vals.update({"snmpinfo": snmpinfo})
 		log("cfact.merge_final_config: Merging with values:\n{}".format(json.dumps(vals, indent=4)))
 		return (template.render(vals), vals)
 	def get_keystore_id(self, idens, silent=False):
@@ -545,22 +554,22 @@ class config_factory:
 			if identifier in list(config.running["keyvalstore"]):
 				if not silent:
 					log("cfact.get_keystore_id: ID (%s) resolved directly to a keystore" % identifier)
-				return identifier
+				return (identifier, identifier)
 			else:
 				for arrayname in list(config.running["idarrays"]):
 					if identifier in config.running["idarrays"][arrayname]:
 						if not silent:
 							log("cfact.get_keystore_id: ID '%s' resolved to arrayname '%s'" % (identifier, arrayname))
-						return arrayname
+						return (arrayname, identifier)
 				if identifier in list(external_keystores.data["keyvalstore"]):
 					if not silent:
 						log("cfact.get_keystore_id: ID (%s) resolved directly to an external-keystore" % identifier)
-					return identifier
+					return (identifier, identifier)
 				for arrayname in list(external_keystores.data["idarrays"]):
 					if identifier in external_keystores.data["idarrays"][arrayname]:
 						if not silent:
 							log("cfact.get_keystore_id: ID '%s' resolved to arrayname '%s' in an external-keystore" % (identifier, arrayname))
-						return arrayname
+						return (arrayname, identifier)
 	def get_template(self, identity):
 		log("cfact.get_template: Looking up association for identity (%s)" % identity)
 		response = False
@@ -605,7 +614,7 @@ class config_factory:
 				log("cfact.get_template: Default-template is set to None")
 		return response
 	def merge_test(self, iden, template):
-		identity = self.get_keystore_id({"Merge Test":iden})
+		identity, identifier = self.get_keystore_id({"Merge Test":iden})
 		if identity in config.running["keyvalstore"]:
 			path = config.running
 		else:
@@ -639,7 +648,7 @@ class config_factory:
 					console("\t-"+var)
 				console("\n")
 			kvalues = self.pull_keystore_values(path, identity)
-			log("cfact.merge_final_config: Merging with values:\n{}".format(json.dumps(kvalues, indent=4)))
+			log("cfact.merge_test: Merging with values:\n{}".format(json.dumps(kvalues, indent=4)))
 			console("##############################")
 			console(j2template.render(kvalues))
 			console("##############################")
@@ -1631,7 +1640,7 @@ class log_management:
 ##### Installer class: A simple holder class which contains all of the    #####
 #####   installation scripts used to install/upgrade the ZTP server       #####
 class installer:
-	defaultconfig = '''{\n    "associations": {\n        "SERIAL100": "SHORT_TEMPLATE", \n        "STACK1": "LONG_TEMPLATE"\n    }, \n    "community": "secretcommunity", \n    "default-keystore": "DEFAULT_VALUES", \n    "default-template": "LONG_TEMPLATE", \n    "delay-keystore": 1000, \n    "dhcpd": {}, \n    "dhcpd-options": {\n        "ztp-tftp-address": {\n            "code": 150, \n            "type": "ip-address"\n        }\n    }, \n    "external-keystores": {}, \n    "external-templates": {}, \n    "file-cache-timeout": 10, \n    "idarrays": {\n        "STACK1": [\n            "SERIAL1", \n            "SERIAL2", \n            "SERIAL3"\n        ]\n    }, \n    "image-supression": 3600, \n    "imagediscoveryfile": "freeztp_ios_upgrade", \n    "imagefile": "cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin", \n    "initialfilename": "network-confg", \n    "integrations": {}, \n    "keyvalstore": {\n        "DEFAULT_VALUES": {\n            "hostname": "UNKNOWN_HOST", \n            "vl1_ip_address": "dhcp"\n        }, \n        "SERIAL100": {\n            "hostname": "SOMEDEVICE", \n            "vl1_ip_address": "10.0.0.201"\n        }, \n        "STACK1": {\n            "hostname": "CORESWITCH", \n            "vl1_ip_address": "10.0.0.200", \n            "vl1_netmask": "255.255.255.0"\n        }\n    }, \n    "logging": {\n        "merged-config-to-custom-file": "disable", \n        "merged-config-to-mainlog": "enable"\n    }, \n    "snmpoid": {\n        "WS-C2960_SERIAL_NUMBER": "1.3.6.1.2.1.47.1.1.1.1.11.1001", \n        "WS-C3850_SERIAL_NUMBER": "1.3.6.1.2.1.47.1.1.1.1.11.1000"\n    }, \n    "starttemplate": {\n        "delineator": "^", \n        "value": "hostname {{ autohostname }}\\n!\\nsnmp-server community {{ community }} RO\\n!\\nend"\n    }, \n    "suffix": "-confg", \n    "templates": {\n        "LONG_TEMPLATE": {\n            "delineator": "^", \n            "value": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} {{ vl1_netmask }}\\n no shut\\n!\\n!{% for interface in range(1,49) %}\\ninterface GigabitEthernet1/0/{{interface}}\\n description User Port (VLAN 1)\\n switchport access vlan 1\\n switchport mode access\\n no shutdown\\n!{% endfor %}\\n!\\nip domain-name test.com\\n!\\nusername admin privilege 15 secret password123\\n!\\naaa new-model\\n!\\n!\\naaa authentication login CONSOLE local\\naaa authorization console\\naaa authorization exec default local if-authenticated\\n!\\ncrypto key generate rsa modulus 2048\\n!\\nip ssh version 2\\n!\\nline vty 0 15\\nlogin authentication default\\ntransport input ssh\\nline console 0\\nlogin authentication CONSOLE\\nend"\n        }, \n        "SHORT_TEMPLATE": {\n            "delineator": "^", \n            "value": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} 255.255.255.0\\n no shut\\n!\\nend"\n        }\n    }, \n    "tftproot": "/etc/ztp/tftproot/"\n}'''
+	defaultconfig = '''{\n    "associations": {\n        "SERIAL100": "SHORT_TEMPLATE", \n        "STACK1": "LONG_TEMPLATE"\n    }, \n    "community": "secretcommunity", \n    "default-keystore": "DEFAULT_VALUES", \n    "default-template": "LONG_TEMPLATE", \n    "delay-keystore": 1000, \n    "dhcpd": {}, \n    "dhcpd-options": {\n        "ztp-tftp-address": {\n            "code": 150, \n            "type": "ip-address"\n        }\n    }, \n    "external-keystores": {}, \n    "external-templates": {}, \n    "file-cache-timeout": 10, \n    "idarrays": {\n        "STACK1": [\n            "SERIAL1", \n            "SERIAL2", \n            "SERIAL3"\n        ]\n    }, \n    "image-supression": 3600, \n    "imagediscoveryfile": "freeztp_ios_upgrade", \n    "imagefile": "cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin", \n    "initialfilename": "network-confg", \n    "integrations": {}, \n    "keyvalstore": {\n        "DEFAULT_VALUES": {\n            "hostname": "UNKNOWN_HOST", \n            "vl1_ip_address": "dhcp"\n        }, \n        "SERIAL100": {\n            "hostname": "SOMEDEVICE", \n            "vl1_ip_address": "10.0.0.201"\n        }, \n        "STACK1": {\n            "hostname": "CORESWITCH", \n            "vl1_ip_address": "10.0.0.200", \n            "vl1_netmask": "255.255.255.0"\n        }\n    }, \n    "logging": {\n        "merged-config-to-custom-file": "disable", \n        "merged-config-to-mainlog": "enable"\n    }, \n    "snmpoid": {\n        "WS_C2960_SERIAL_NUMBER": "1.3.6.1.2.1.47.1.1.1.1.11.1001", \n        "WS_C3850_SERIAL_NUMBER": "1.3.6.1.2.1.47.1.1.1.1.11.1000"\n    }, \n    "starttemplate": {\n        "delineator": "^", \n        "value": "hostname {{ autohostname }}\\n!\\nsnmp-server community {{ community }} RO\\n!\\nend"\n    }, \n    "suffix": "-confg", \n    "templates": {\n        "LONG_TEMPLATE": {\n            "delineator": "^", \n            "value": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} {{ vl1_netmask }}\\n no shut\\n!\\n!{% for interface in range(1,49) %}\\ninterface GigabitEthernet1/0/{{interface}}\\n description User Port (VLAN 1)\\n switchport access vlan 1\\n switchport mode access\\n no shutdown\\n!{% endfor %}\\n!\\nip domain-name test.com\\n!\\nusername admin privilege 15 secret password123\\n!\\naaa new-model\\n!\\n!\\naaa authentication login CONSOLE local\\naaa authorization console\\naaa authorization exec default local if-authenticated\\n!\\ncrypto key generate rsa modulus 2048\\n!\\nip ssh version 2\\n!\\nline vty 0 15\\nlogin authentication default\\ntransport input ssh\\nline console 0\\nlogin authentication CONSOLE\\nend"\n        }, \n        "SHORT_TEMPLATE": {\n            "delineator": "^", \n            "value": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} 255.255.255.0\\n no shut\\n!\\nend"\n        }\n    }, \n    "tftproot": "/etc/ztp/tftproot/"\n}'''
 	def minor_update_script(self):
 		newconfigkeys = {
 		"integrations": {},
@@ -1659,6 +1668,20 @@ class installer:
 			console("\n\nInstalling some new dependencies...\n")
 			os.system("pip install requests")
 			os.system("pip install requests_toolbelt")
+	def snmp_name_fix(self):
+		console("\n\nChecking for incompatible SNMP OID names")
+		changes = False
+		for objname in dict(config.running["snmpoid"]):
+			newobjname = objname.replace("-", "_")
+			if newobjname != objname:
+				changes = True
+				console("    Replacing SNMPOID name {} with {}".format(objname, newobjname))
+				config.running["snmpoid"].update({newobjname: config.running["snmpoid"][objname]})
+				del config.running["snmpoid"][objname]
+		if changes:
+			config.save()
+		else:
+			console("    Nothing to update")
 	def copy_binary(self):
 		binpath = "/bin/"
 		binname = "ztp"
@@ -1877,11 +1900,6 @@ _ztp_complete()
 		  COMPREPLY=( $(compgen -W "start stop restart" -- $cur) )
 		fi
 		;;
-	  dhcpd)
-		if [ "$prev2" == "service" ]; then
-		  COMPREPLY=( $(compgen -W "start stop restart" -- $cur) )
-		fi
-		;;
 	  all)
 		if [ "$prev2" == "service" ]; then
 		  COMPREPLY=( $(compgen -W "start stop restart" -- $cur) )
@@ -2060,6 +2078,9 @@ _ztp_complete()
 	  dhcpd)
 		if [ "$prev2" == "show" ]; then
 		  COMPREPLY=( $(compgen -W "leases" -- $cur) )
+		fi
+		if [ "$prev2" == "service" ]; then
+		  COMPREPLY=( $(compgen -W "start stop restart" -- $cur) )
 		fi
 		if [ "$prev2" == "set" ]; then
 		  local ids=$(for id in `ztp hidden show dhcpd-scopes`; do echo $id ; done)
@@ -3423,6 +3444,7 @@ def interpreter():
 			inst.install_completion()
 			inst.create_service()
 			inst.minor_update_script()
+			inst.snmp_name_fix()
 			console("\n")
 			osd.service_control("status", "ztp")
 			console("\n")
