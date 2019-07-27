@@ -1860,7 +1860,7 @@ _ztp_complete()
 		COMPREPLY=( $(compgen -W "merge-test initial-merge default-keystore-test snmp-test dhcp-option-125 dhcpd-commit auto-dhcpd ipc-console integration-setup integration-test external-keystore-test keystore-csv-export" -- $cur) )
 		;;
 	  "service")
-		COMPREPLY=( $(compgen -W "start stop restart status" -- $cur) )
+		COMPREPLY=( $(compgen -W "start stop restart status freeztp dhcpd all" -- $cur) )
 		;;
 	  *)
 		;;
@@ -1870,6 +1870,21 @@ _ztp_complete()
 	  show)
 		if [ "$prev2" == "hidden" ]; then
 		  COMPREPLY=( $(compgen -W "keystores keys idarrays idarray snmpoids templates external-templates associations all_ids imagefiles dhcpd-options dhcpd-option-types dhcpd-option dhcpd-scopes integrations integration-types integration-opts integration-keys external-keystores external-keystore-types external-keystore-opts external-keystore-keys" -- $cur) )
+		fi
+		;;
+	  freeztp)
+		if [ "$prev2" == "service" ]; then
+		  COMPREPLY=( $(compgen -W "start stop restart" -- $cur) )
+		fi
+		;;
+	  dhcpd)
+		if [ "$prev2" == "service" ]; then
+		  COMPREPLY=( $(compgen -W "start stop restart" -- $cur) )
+		fi
+		;;
+	  all)
+		if [ "$prev2" == "service" ]; then
+		  COMPREPLY=( $(compgen -W "start stop restart" -- $cur) )
 		fi
 		;;
 	  config)
@@ -3758,23 +3773,65 @@ def interpreter():
 	##### SERVICE #####
 	elif arguments == "service":
 		console(" - service (start|stop|restart|status)            |  Start, Stop, or Restart the installed ZTP service")
-	elif arguments == "service start":
+	elif arguments == "service start" or arguments == "service freeztp start":
 		log("#########################################################")
 		log("Starting the ZTP Service")
 		osd.service_control("start", "ztp")
 		osd.service_control("status", "ztp")
 		log("#########################################################")
-	elif arguments == "service stop":
+	elif arguments == "service stop" or arguments == "service freeztp stop":
 		log("#########################################################")
 		log("Stopping the ZTP Service")
 		osd.service_control("stop", "ztp")
 		osd.service_control("status", "ztp")
 		log("#########################################################")
-	elif arguments == "service restart":
+	elif arguments == "service restart" or arguments == "service freeztp restart":
 		log("#########################################################")
 		log("Restarting the ZTP Service")
 		osd.service_control("restart", "ztp")
 		osd.service_control("status", "ztp")
+		log("#########################################################")
+	elif arguments == "service dhcpd start":
+		log("#########################################################")
+		log("Starting the ZTP Service")
+		osd.service_control("start", osd.DHCPSVC)
+		osd.service_control("status", osd.DHCPSVC)
+		log("#########################################################")
+	elif arguments == "service dhcpd stop":
+		log("#########################################################")
+		log("Stopping the ZTP Service")
+		osd.service_control("stop", osd.DHCPSVC)
+		osd.service_control("status", osd.DHCPSVC)
+		log("#########################################################")
+	elif arguments == "service dhcpd restart":
+		log("#########################################################")
+		log("Restarting the ZTP Service")
+		osd.service_control("restart", osd.DHCPSVC)
+		osd.service_control("status", osd.DHCPSVC)
+		log("#########################################################")
+	elif arguments == "service all start":
+		log("#########################################################")
+		log("Starting the ZTP Service")
+		osd.service_control("start", "ztp")
+		osd.service_control("start", osd.DHCPSVC)
+		osd.service_control("status", "ztp")
+		osd.service_control("status", osd.DHCPSVC)
+		log("#########################################################")
+	elif arguments == "service all stop":
+		log("#########################################################")
+		log("Stopping the ZTP Service")
+		osd.service_control("stop", "ztp")
+		osd.service_control("stop", osd.DHCPSVC)
+		osd.service_control("status", "ztp")
+		osd.service_control("status", osd.DHCPSVC)
+		log("#########################################################")
+	elif arguments == "service all restart":
+		log("#########################################################")
+		log("Restarting the ZTP Service")
+		osd.service_control("restart", "ztp")
+		osd.service_control("restart", osd.DHCPSVC)
+		osd.service_control("status", "ztp")
+		osd.service_control("status", osd.DHCPSVC)
 		log("#########################################################")
 	elif arguments == "service status":
 		osd.service_control("status", "ztp")
@@ -3854,7 +3911,7 @@ def interpreter():
 		console(" - request external-keystore-test <store_name>                 |  Perform a test import of external-keystore data and print as set keystore config")
 		console(" - request keystore-csv-export <file_name>                     |  Export the current keystore, idarray, and association config as CSV")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
-		console(" - service (start|stop|restart|status)                         |  Start, Stop, or Restart the installed ZTP service")
+		console(" - service (start|stop|restart|status|freeztp|dhcpd|all)       |  Start, Stop, or Restart the installed services")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console(" - version                                                     |  Show the current version of ZTP")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
