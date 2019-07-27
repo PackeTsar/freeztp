@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "v1.2.0"
+version = "v1.2.0b"
 
 
 ##### Import native modules #####
@@ -2257,26 +2257,19 @@ _ztp_complete()
 	  if [ "$prev3" == "dhcpd" ]; then
 		if [ "$prev" == "subnet" ]; then
 		  COMPREPLY=( $(compgen -W "<ipv4_subnet_value> -" -- $cur) )
-		fi
-		if [ "$prev" == "first-address" ]; then
+		elif [ "$prev" == "first-address" ]; then
 		  COMPREPLY=( $(compgen -W "<first_address_to_lease> -" -- $cur) )
-		fi
-		if [ "$prev" == "last-address" ]; then
+		elif [ "$prev" == "last-address" ]; then
 		  COMPREPLY=( $(compgen -W "<last_address_to_lease> -" -- $cur) )
-		fi
-		if [ "$prev" == "gateway" ]; then
+		elif [ "$prev" == "gateway" ]; then
 		  COMPREPLY=( $(compgen -W "<gateway_ipv4_address> -" -- $cur) )
-		fi
-		if [ "$prev" == "dns-servers" ]; then
+		elif [ "$prev" == "dns-servers" ]; then
 		  COMPREPLY=( $(compgen -W "<first_dns_ipv4_address> 8.8.8.8" -- $cur) )
-		fi
-		if [ "$prev" == "domain-name" ]; then
+		elif [ "$prev" == "domain-name" ]; then
 		  COMPREPLY=( $(compgen -W "<dns_search_domain> -" -- $cur) )
-		fi
-		if [ "$prev" == "lease-time" ]; then
+		elif [ "$prev" == "lease-time" ]; then
 		  COMPREPLY=( $(compgen -W "<lease_time_in_seconds> -" -- $cur) )
-		fi
-		if [ "$prev" == "imagediscoveryfile-option" ]; then
+		elif [ "$prev" == "imagediscoveryfile-option" ]; then
 		  COMPREPLY=( $(compgen -W "enable disable" -- $cur) )
 		else
 		  local typ=$(for k in `ztp hidden show dhcpd-option $prev`; do echo $k ; done)
