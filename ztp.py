@@ -662,6 +662,10 @@ class config_factory:
 					console("\t-"+var)
 				console("\n")
 			kvalues = self.pull_keystore_values(path, identity)
+			snmpinfo = {"matched": "FAKEMATCHEDSERIAL"}
+			for oid in config.running["snmpoid"]:
+				snmpinfo.update({oid: "{}_FAKESERIAL".format(oid)})
+			kvalues.update({"snmpinfo": snmpinfo})
 			log("cfact.merge_test: Merging with values:\n{}".format(json.dumps(kvalues, indent=4)))
 			console("##############################")
 			console(j2template.render(kvalues))
