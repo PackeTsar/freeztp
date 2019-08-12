@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "v1.3.0a"
+version = "v1.3.0b"
 
 
 ##### Import native modules #####
@@ -1355,6 +1355,14 @@ class config_manager:
 		for arrayname in list(self.running["idarrays"]):
 			for member in self.running["idarrays"][arrayname]:
 				console(member)
+	def hidden_list_array_name_options(self):
+		done = []
+		for arrayname in list(self.running["idarrays"]):
+			done.append(arrayname)
+			console(arrayname)
+		for keystorename in list(self.running["keyvalstore"]):
+			if keystorename not in done:
+				console(keystorename)
 	def hidden_list_snmpoid(self):
 		for oid in self.running["snmpoid"]:
 			console(oid)
@@ -1908,7 +1916,7 @@ _ztp_complete()
 	case "$prev" in
 	  show)
 		if [ "$prev2" == "hidden" ]; then
-		  COMPREPLY=( $(compgen -W "keystores keys idarrays idarray snmpoids templates external-templates associations all_ids imagefiles dhcpd-options dhcpd-option-types dhcpd-option dhcpd-scopes integrations integration-types integration-opts integration-keys external-keystores external-keystore-types external-keystore-opts external-keystore-keys" -- $cur) )
+		  COMPREPLY=( $(compgen -W "keystores keys idarrays idarray idarray-nameoptions snmpoids templates external-templates associations all_ids imagefiles dhcpd-options dhcpd-option-types dhcpd-option dhcpd-scopes integrations integration-types integration-opts integration-keys external-keystores external-keystore-types external-keystore-opts external-keystore-keys" -- $cur) )
 		fi
 		;;
 	  freeztp)
@@ -2036,11 +2044,12 @@ _ztp_complete()
 		fi
 		;;
 	  idarray)
-		local arrays=$(for id in `ztp hidden show idarrays`; do echo $id ; done)
 		if [ "$prev2" == "set" ]; then
-		  COMPREPLY=( $(compgen -W "${arrays} <new_array_name> -" -- $cur) )
+		  local options=$(for id in `ztp hidden show idarray-nameoptions`; do echo $id ; done)
+		  COMPREPLY=( $(compgen -W "${options} <new_array_name> -" -- $cur) )
 		fi
 		if [ "$prev2" == "clear" ]; then
+		  local arrays=$(for id in `ztp hidden show idarrays`; do echo $id ; done)
 		  COMPREPLY=( $(compgen -W "${arrays}" -- $cur) )
 		fi
 		;;
@@ -3472,6 +3481,7 @@ def interpreter():
 		console(" - hidden show keys <keystore>                    |  Show a list of configured keys under a keystore")
 		console(" - hidden show idarrays                           |  Show a list of configured IDArrays")
 		console(" - hidden show idarray members                    |  Show a list of members in an IDArray")
+		console(" - hidden show idarray-nameoptions                |  Show a list of options for new or existing IDArrays")
 		console(" - hidden show snmpoids                           |  Show a list of configured SNMP OIDs")
 		console(" - hidden show templates                          |  Show a list of configured templates")
 		console(" - hidden show external-templates                 |  Show a list of configured external-templates")
@@ -3496,6 +3506,8 @@ def interpreter():
 		config.hidden_list_arrays()
 	elif arguments == "hidden show idarray members":
 		config.hidden_list_array_members()
+	elif arguments == "hidden show idarray-nameoptions":
+		config.hidden_list_array_name_options()
 	elif arguments == "hidden show snmpoids":
 		config.hidden_list_snmpoid()
 	elif arguments == "hidden show templates":
