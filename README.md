@@ -5,7 +5,7 @@ A Zero-Touch Provisioning system built for Cisco Catalyst switches.
 
 -----------------------------------------
 ##   VERSION   ##
-The version of FreeZTP documented here is: **v1.3.0**
+The version of FreeZTP documented here is: **v1.3.1**
 
 
 -----------------------------------------
@@ -592,6 +592,16 @@ Once setup, you can send a test message to the integration destination using the
 
 **Added Features in V1.2.0 --> V1.3.0:**
   - *DHCPD Service Control*: ZTP previously had no capability to start/stop/restart the DHCPD service running on the OS other than when committing DHCP configurations. A command-set has been added under `ztp service` extending it with `(freeztp|dhcpd|all)` and allowing `(start|stop|restart)` under each
+
+
+### v1.3.1
+**Bug Fixes in V1.3.0 --> V1.3.1:**
+  - *Clear downloads not working when service running*: The `ztp clear downloads` command would not work while the service was running in the background. When the service is running, this will be performed through the IPC. Adjusted some IPC timing to make it work properly.
+  - *The snmpinfo.XXX variables cause merge-test fail*: If `snmpinfo.something` was used in a template and a merge-test was run on that template, it would cause a Jinja2 failure due to the attribute not existing. Code was added to generate a fake version of the `snmpinfo` attribute and inject it into the merge test results
+  - *Merge-test with unknown ID fails*: The `merge_test()` function assumed a tupled output from `get_keystore_id()` and would receive a None when nothing was matched. Processing was modified to fail gracefully when nothing was matched. `get_keystore_id()` logging was also improved to better show order of operations for searching an ID
+  - *Missing Keystore names with set idarray command*: When issuing `ztp set idarray` and hitting TAB, only the existing IDArray names would appear, making it harder to create a new IDArray to match a Keystore name. Code was added to list both IDArray and Keystore names when using `set`, but only list IDArray names when using `clear`
+  - *New DHCP scope creation not including ZTP address*: When creating a new scope with something like `ztp set dhcpd TESTSCOPE subnet 10.0.0.0/24`, the `imagediscoveryfile-option` and `lease-time` values would be added to the scope automatically, but not the `ztp-tftp-address`. Some of the `auto_dhcpd()` code was reused to detect current interfaces and add the interface IP address as long as only one interface was present
+
 
 
 -----------------------------------------
