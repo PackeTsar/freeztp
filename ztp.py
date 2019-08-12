@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "v1.3.0"
+version = "v1.3.0a"
 
 
 ##### Import native modules #####
@@ -1027,7 +1027,23 @@ class config_manager:
 		if "dhcpd" not in list(self.running):
 			self.running.update({"dhcpd": {}})
 		if scope not in self.running["dhcpd"]:
-			self.running["dhcpd"].update({scope: {"imagediscoveryfile-option": "enable", "lease-time": 3600}})
+			console("INFO: New scope creation detected. Adding a few commands automatically")
+			scopedict = {}
+			cmds = []
+			ips = self.filter_ips(self.get_addresses())  # Get current interface addresses
+			if len(ips) == 1:
+				myip = ips[0][1].encode()
+				console("INFO: Detected ZTP server IP: {}".format(myip))
+				cmds.append("ztp set dhcpd {} ztp-tftp-address {}".format(scope, myip))
+				scopedict.update({"ztp-tftp-address": myip})
+			else:
+				console("INFO: Could not detect ZTP server IP. To set IP for this scope, use: ztp set dhcpd {} ztp-tftp-address <ip-address>".format(scope))
+			cmds.append("ztp set dhcpd {} lease-time 3600".format(scope))
+			cmds.append("ztp set dhcpd {} imagediscoveryfile-option enable".format(scope))
+			scopedict.update({"imagediscoveryfile-option": "enable", "lease-time": 3600})
+			self.running["dhcpd"].update({scope: scopedict})
+			for cmd in cmds:
+				console("    Injecting Command: {}".format(cmd))
 		###############
 		if setting in checks:
 			check = checks[setting](value)
