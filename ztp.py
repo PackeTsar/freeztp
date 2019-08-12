@@ -551,25 +551,34 @@ class config_factory:
 			identifier = idens[identifier]
 			if not silent:
 				log("cfact.get_keystore_id: Checking Keystores and IDArrays for (%s)" % identifier)
+				log("cfact.get_keystore_id: Checking Keystore names for (%s)" % identifier)
 			if identifier in list(config.running["keyvalstore"]):
 				if not silent:
 					log("cfact.get_keystore_id: ID (%s) resolved directly to a keystore" % identifier)
 				return (identifier, identifier)
 			else:
+				if not silent:
+					log("cfact.get_keystore_id: ID (%s) not found in keystore names, checking local IDArrays" % identifier)
 				for arrayname in list(config.running["idarrays"]):
 					if identifier in config.running["idarrays"][arrayname]:
 						if not silent:
 							log("cfact.get_keystore_id: ID '%s' resolved to arrayname '%s'" % (identifier, arrayname))
 						return (arrayname, identifier)
+				if not silent:
+					log("cfact.get_keystore_id: ID (%s) not found in local IDArrays, checking external Keystore names" % identifier)
 				if identifier in list(external_keystores.data["keyvalstore"]):
 					if not silent:
 						log("cfact.get_keystore_id: ID (%s) resolved directly to an external-keystore" % identifier)
 					return (identifier, identifier)
+				if not silent:
+					log("cfact.get_keystore_id: ID (%s) not found in external Keystore names, checking external IDArrays" % identifier)
 				for arrayname in list(external_keystores.data["idarrays"]):
 					if identifier in external_keystores.data["idarrays"][arrayname]:
 						if not silent:
 							log("cfact.get_keystore_id: ID '%s' resolved to arrayname '%s' in an external-keystore" % (identifier, arrayname))
 						return (arrayname, identifier)
+				if not silent:
+					log("cfact.get_keystore_id: ID (%s) not found in external IDArrays. ID Lookup failed!" % identifier)
 	def get_template(self, identity):
 		log("cfact.get_template: Looking up association for identity (%s)" % identity)
 		response = False
@@ -614,7 +623,12 @@ class config_factory:
 				log("cfact.get_template: Default-template is set to None")
 		return response
 	def merge_test(self, iden, template):
-		identity, identifier = self.get_keystore_id({"Merge Test":iden})
+		idtup = self.get_keystore_id({"Merge Test":iden})
+		if not idtup:
+			log("ID '%s' cannot be found!" % iden)
+			log("To check for usage of a default keystore use: ztp request default-keystore-test")
+			return None
+		identity, identifier = idtup
 		if identity in config.running["keyvalstore"]:
 			path = config.running
 		else:
