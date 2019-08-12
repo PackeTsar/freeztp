@@ -537,22 +537,22 @@ Once setup, you can send a test message to the integration destination using the
 
 ### v1.0.1
 **Bug Fixes in V1.0.0 --> V1.0.1:**
-- *ISSUE #20*: The command `ztp show ztp dhcpd leases` would throw an exception is the `uid` key is not present in the DHCP lease reader.
+- **ISSUE #20**: The command `ztp show ztp dhcpd leases` would throw an exception is the `uid` key is not present in the DHCP lease reader.
 
 
 ### v1.1.0
 **Bug Fixes in V1.0.0 --> V1.1.0:**
-- *ISSUE #27*: The command `ztp request external-keystore-test` shows some extraneous data at the top. Removed an unneeded print statement.
-- *ISSUE #32*: The command `ztp show provisioning` would show epoch time. Now it will show local time.
+- **ISSUE #27**: The command `ztp request external-keystore-test` shows some extraneous data at the top. Removed an unneeded print statement.
+- **ISSUE #32**: The command `ztp show provisioning` would show epoch time. Now it will show local time.
 
 **Added Features in V1.0.1 --> V1.1.0:**
-- *External Keystores*: A repository of FreeZTP Keystore, IDArray, and Association data which can be stored and accessed from an external data source. See the [External Keystores](#external-keystores) section for more information.
-- *External Templates*: Jinja2 templates can now be saved as files and referenced from the FreeZTP config in the form of `set external-template <template_name> file <filepath>`. External-templates are loaded when the ZTP service is started and kept in memory. The service must be restarted for any file changes to take effect
-- *Integrations*: 3rd party hooks which can be leveraged for notifications, etc. See the [Integrations](#integrations) section for more information.
-- *IDArray Values for Merging*: You can now insert IDArray values into your templates one of two ways (seen below). You can now also see the list of values available for merging in a log message right before the merge happens (use `ztp request merge-test` to test and see this).
+- **External Keystores**: A repository of FreeZTP Keystore, IDArray, and Association data which can be stored and accessed from an external data source. See the [External Keystores](#external-keystores) section for more information.
+- **External Templates**: Jinja2 templates can now be saved as files and referenced from the FreeZTP config in the form of `set external-template <template_name> file <filepath>`. External-templates are loaded when the ZTP service is started and kept in memory. The service must be restarted for any file changes to take effect
+- **Integrations**: 3rd party hooks which can be leveraged for notifications, etc. See the [Integrations](#integrations) section for more information.
+- **IDArray Values for Merging**: You can now insert IDArray values into your templates one of two ways (seen below). You can now also see the list of values available for merging in a log message right before the merge happens (use `ztp request merge-test` to test and see this).
   - Using the variables `{{ idarray_1 }}`, `{{ idarray_2 }}`, etc... will present the string values of the idarray entries for Jinja2 merging
   - Using the variable `{{ idarray }}` will present a list of IDArray values to the Jinja2 merge
-- *Custom Logging*: There are new logging functions available:
+- **Custom Logging**: There are new logging functions available:
   - Logging of merged configs to the main log file can be enabled or disabled using `ztp set logging merged-config-to-mainlog (enable|disable)`
   - You can enable logging of merged configs to a custom filename/path using `ztp set logging merged-config-to-custom-file '<filepath>'`
     - This filepath can be dynamically generated using the Jinja2 format. And example of this is `ztp set logging merged-config-to-custom-file '/etc/ztp/merged-logs/{{ temp_id }}'`. You can also use the variables in the folder names and ZTP will create the appropriate directories.
@@ -577,30 +577,30 @@ Once setup, you can send a test message to the integration destination using the
 ### v1.2.0
 **Bug Fixes in V1.1.0 --> V1.2.0:**
 - External template object names would not populate for autocomplete when configuring an association. For example `ztp set association id MYKEYSTORE template <tab>` would not show external template objects as options.
-- *ISSUE #45*: Jinja2 templates would not allow the use of `include` statements. Jinja2 handling was rewritten to include this functionality. Jinja2 templates can now be included with the `{% include '/root/BASE_CONFIG.txt' %}` syntax.
+- **ISSUE #45**: Jinja2 templates would not allow the use of `include` statements. Jinja2 handling was rewritten to include this functionality. Jinja2 templates can now be included with the `{% include '/root/BASE_CONFIG.txt' %}` syntax.
 
 **Added Features in V1.1.0 --> V1.2.0:**
-- *Custom DHCPD-Options*: You can now add custom DHCPD option types using the syntax `ztp set dhcpd-option <obj-name>`
+- **Custom DHCPD-Options**: You can now add custom DHCPD option types using the syntax `ztp set dhcpd-option <obj-name>`
   - An example option can be `ztp set dhcpd-option ntp-server code 42 type ip-address`
   - This will make the option name `ntp-server` available for use in the configured DHCPD scopes so you can set the value, like `ztp set dhcpd SOMESCOPE ntp-server 10.0.0.1`
 
 
 ### v1.3.0
 **Bug Fixes in V1.2.0 --> V1.3.0:**
-  - *DHCPD Autocomplete Bug (#50)*: Using autocomplete to see the DHCPD scope attribute options after a scope name (ie: `ztp set dhcpd INTERFACE-ENS160 first-address <TAB>`) would throw an exception due to the completion script being faulty. Repaired the if/then logic in the completion script and tested functionality
-  - *SNMP Information Not Included in Merges (#49)*: SNMP information was not being included in template merges to make it available for use in the templates. SNMP data is now available in templates by using `{{ snmpinfo.<oid_obj_name> }}`. You can also call up the discovered SNMP value used to match a keystore with `{{ snmpinfo.matched }}`
+  - **DHCPD Autocomplete Bug (#50)**: Using autocomplete to see the DHCPD scope attribute options after a scope name (ie: `ztp set dhcpd INTERFACE-ENS160 first-address <TAB>`) would throw an exception due to the completion script being faulty. Repaired the if/then logic in the completion script and tested functionality
+  - **SNMP Information Not Included in Merges (#49)**: SNMP information was not being included in template merges to make it available for use in the templates. SNMP data is now available in templates by using `{{ snmpinfo.<oid_obj_name> }}`. You can also call up the discovered SNMP value used to match a keystore with `{{ snmpinfo.matched }}`
 
 **Added Features in V1.2.0 --> V1.3.0:**
-  - *DHCPD Service Control*: ZTP previously had no capability to start/stop/restart the DHCPD service running on the OS other than when committing DHCP configurations. A command-set has been added under `ztp service` extending it with `(freeztp|dhcpd|all)` and allowing `(start|stop|restart)` under each
+  - **DHCPD Service Control**: ZTP previously had no capability to start/stop/restart the DHCPD service running on the OS other than when committing DHCP configurations. A command-set has been added under `ztp service` extending it with `(freeztp|dhcpd|all)` and allowing `(start|stop|restart)` under each
 
 
 ### v1.3.1
 **Bug Fixes in V1.3.0 --> V1.3.1:**
-  - *Clear downloads not working when service running*: The `ztp clear downloads` command would not work while the service was running in the background. When the service is running, this will be performed through the IPC. Adjusted some IPC timing to make it work properly.
-  - *The snmpinfo.XXX variables cause merge-test fail*: If `snmpinfo.something` was used in a template and a merge-test was run on that template, it would cause a Jinja2 failure due to the attribute not existing. Code was added to generate a fake version of the `snmpinfo` attribute and inject it into the merge test results
-  - *Merge-test with unknown ID fails*: The `merge_test()` function assumed a tupled output from `get_keystore_id()` and would receive a None when nothing was matched. Processing was modified to fail gracefully when nothing was matched. `get_keystore_id()` logging was also improved to better show order of operations for searching an ID
-  - *Missing Keystore names with set idarray command*: When issuing `ztp set idarray` and hitting TAB, only the existing IDArray names would appear, making it harder to create a new IDArray to match a Keystore name. Code was added to list both IDArray and Keystore names when using `set`, but only list IDArray names when using `clear`
-  - *New DHCP scope creation not including ZTP address*: When creating a new scope with something like `ztp set dhcpd TESTSCOPE subnet 10.0.0.0/24`, the `imagediscoveryfile-option` and `lease-time` values would be added to the scope automatically, but not the `ztp-tftp-address`. Some of the `auto_dhcpd()` code was reused to detect current interfaces and add the interface IP address as long as only one interface was present
+  - **Clear downloads not working when service running**: The `ztp clear downloads` command would not work while the service was running in the background. When the service is running, this will be performed through the IPC. Adjusted some IPC timing to make it work properly.
+  - **The snmpinfo.XXX variables cause merge-test fail**: If `snmpinfo.something` was used in a template and a merge-test was run on that template, it would cause a Jinja2 failure due to the attribute not existing. Code was added to generate a fake version of the `snmpinfo` attribute and inject it into the merge test results
+  - **Merge-test with unknown ID fails**: The `merge_test()` function assumed a tupled output from `get_keystore_id()` and would receive a None when nothing was matched. Processing was modified to fail gracefully when nothing was matched. `get_keystore_id()` logging was also improved to better show order of operations for searching an ID
+  - **Missing Keystore names with set idarray command**: When issuing `ztp set idarray` and hitting TAB, only the existing IDArray names would appear, making it harder to create a new IDArray to match a Keystore name. Code was added to list both IDArray and Keystore names when using `set`, but only list IDArray names when using `clear`
+  - **New DHCP scope creation not including ZTP address**: When creating a new scope with something like `ztp set dhcpd TESTSCOPE subnet 10.0.0.0/24`, the `imagediscoveryfile-option` and `lease-time` values would be added to the scope automatically, but not the `ztp-tftp-address`. Some of the `auto_dhcpd()` code was reused to detect current interfaces and add the interface IP address as long as only one interface was present
 
 
 
