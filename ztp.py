@@ -2799,9 +2799,13 @@ class tracking_class:
 		if not nested:
 			try:
 				client = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+				console("Service Running. Clearing downloads with IPC")
 				client.connect(('localhost', 10000))
+				time.sleep(0.1)
 				client.send("clear downloads\n")
+				time.sleep(0.1)
 				client.send("exit\n")
+				time.sleep(0.1)
 				client.close()
 			except socket.error:
 				console("Service not running. Clearing store.")
