@@ -325,7 +325,7 @@ event manager applet sw_upgrade
 -----------------------------------------
 ## Use-case: Automated IOS-XE Stack Renumbering
 
-###### Author: [derek-shnosh](https://github.com/derek-shnosh), Rev: 5, Date: 2018.1217, FreeZTP v1.1.0
+###### Author: [derek-shnosh](https://github.com/derek-shnosh), Rev: 5b, Date: 2019.0823, FreeZTP v1.1.0
 
 ### Preamble
 
@@ -361,9 +361,9 @@ In this use-case, FreeZTP's `idarray` variables are being used to define stack m
 !-- EEM applet to renumber switches accordingly (ALL SUBSEQUENT LINES ARE REQUIRED).
 !---- SW_COUNT (count of serials found in IDARRAY): {%set sw_count=idarray|count%}{{sw_count}}
 event manager applet sw_stack
-  event syslog occurs 1 pattern "%SYS-5-CONFIG_I: Configured from tftp" maxrun 60
-  action 00.00 syslog msg "\n     ## FreeZTP configuration received via TFTP, run 'sw_stack' EEM applet in 120s."
-  action 00.01 wait 120
+  event syslog occurs 1 pattern "%SYS-5-CONFIG_I: Configured from tftp" maxrun 75
+  action 00.00 syslog msg "\n     ## FreeZTP configuration received via TFTP, run 'sw_stack' EEM applet in 15s."
+  action 00.01 wait 15
   action 00.02 cli command "enable"
   action 00.03 cli command "show mod | i ^.[1-9]"
   action 00.04 set stack "$_cli_result"
@@ -531,9 +531,9 @@ Switch  Ports    Model                Serial No.   MAC address     Hw Ver.      
 !-- EEM applet to renumber switches accordingly (ALL SUBSEQUENT LINES ARE REQUIRED).
 !---- SW_COUNT (count of serials found in IDARRAY): 4
 event manager applet sw_stack
-  event syslog occurs 1 pattern "%SYS-5-CONFIG_I: Configured from tftp" maxrun 60
-  action 00.00 syslog msg "\n     ## FreeZTP configuration received via TFTP, run 'sw_stack' EEM applet in 120s."
-  action 00.01 wait 120
+  event syslog occurs 1 pattern "%SYS-5-CONFIG_I: Configured from tftp" maxrun 75
+  action 00.00 syslog msg "\n     ## FreeZTP configuration received via TFTP, run 'sw_stack' EEM applet in 15s."
+  action 00.01 wait 15
   action 00.02 cli command "enable"
   action 00.03 cli command "show mod | i ^.[1-9]"
   action 00.04 set stack "$_cli_result"
@@ -705,7 +705,7 @@ Loading ZTP-23D9F46EC4-confg from 172.17.251.251 (via Vlan1): !
 ...
 *Oct 17 2018 12:45:34.347 PDT: %SYS-5-CONFIG_I: Configured from tftp://172.17.251.251/ZTP-23D9F46EC4-confg by console
 *Oct 17 2018 12:45:34.365 PDT: %HA_EM-6-LOG: sw_stack: 
-     ## FreeZTP configuration received via TFTP, run 'sw_stack' EEM applet in 120s.
+     ## FreeZTP configuration received via TFTP, run 'sw_stack' EEM applet in 15s.
 ...
 *Oct 17 2018 12:47:34.376 PDT: %HA_EM-6-LOG: sw_stack: 
      ## Checking all switches' version and stack membership, adjusting where necessary.
