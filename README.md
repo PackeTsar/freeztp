@@ -54,13 +54,17 @@ Make sure you are logged in as root or are able to `sudo su` to install and oper
 	- **CentOS 7:** [CentOS Minimal Server - Post-Install Setup][centos-post-install]
 		- Make sure to install Git for a CentOS install
 			- `sudo yum install git -y`
+		- Install Python2 PIP
+			- `sudo yum install python2-pip`
 	- **CentOS 8:**
 		- Make sure to install Git for a CentOS install
 			- `sudo yum install git -y`
-		- Install Python2
+		- Install Python2 PIP
 			- `sudo yum install python2-pip`
-		- Create `python` symlink
+		- Create `python` Symlink
 			- `sudo ln -s /usr/bin/python2.7 /usr/bin/python`
+		- Create `pip` Symlink
+			- `sudo ln -s /usr/bin/pip2 /usr/bin/pip`
 	- **Ubuntu 16:** [Ubuntu Minimal Server - Post-Install Setup][ubuntu-post-install]
 		- Make sure to install python-pip and git for Ubuntu
 			- `sudo apt install -y python-pip`
