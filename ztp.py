@@ -53,8 +53,8 @@ class os_detect:
 		elif "debian" in distlist[0].lower():
 			return "debian"
 		else:
-			console("Unsupported OS Type! Please create an issue at https://github.com/PackeTsar/freeztp/issues and include below information.")
-			console(platform.linux_distribution())
+			print("Unsupported OS Type! Please create an issue at https://github.com/PackeTsar/freeztp/issues and include below information.")
+			print(platform.linux_distribution())
 			sys.exit()
 	def _make_names(self):
 		if self._dist == "centos":
