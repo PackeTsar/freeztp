@@ -60,7 +60,7 @@ Make sure you are logged in as root or are able to `sudo su` to install and oper
 		- Install Python2
 			- `sudo yum install python2-pip`
 		- Create `python` symlink
-			`sudo ln -s /usr/bin/python2.7 /usr/bin/python`
+			- `sudo ln -s /usr/bin/python2.7 /usr/bin/python`
 	- **Ubuntu 16:** [Ubuntu Minimal Server - Post-Install Setup][ubuntu-post-install]
 		- Make sure to install python-pip and git for Ubuntu
 			- `sudo apt install -y python-pip`
