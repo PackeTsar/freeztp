@@ -48,6 +48,8 @@ class os_detect:
 		distlist = platform.linux_distribution()
 		if "centos" in distlist[0].lower():
 			return "centos"
+		elif "red hat" in distlist[0].lower():
+			return "rhel"
 		elif "ubuntu" in distlist[0].lower():
 			return "ubuntu"
 		elif "debian" in distlist[0].lower():
@@ -58,6 +60,12 @@ class os_detect:
 			sys.exit()
 	def _make_names(self):
 		if self._dist == "centos":
+			self.DHCPSVC = "dhcpd"
+			self.DHCPPKG = "dhcp"
+			self.PIPPKG = "python2-pip"
+			self.PKGDIR = "/usr/lib/python2.7/site-packages/"
+			self.DHCPLEASES = "/var/lib/dhcpd/dhcpd.leases"
+		elif self._dist == "rhel":
 			self.DHCPSVC = "dhcpd"
 			self.DHCPPKG = "dhcp"
 			self.PIPPKG = "python2-pip"
