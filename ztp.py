@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "dev1.3.1c"
+version = "dev1.3.1d"
 
 
 ##### Import native modules #####
@@ -1933,7 +1933,7 @@ _ztp_complete()
 		COMPREPLY=( $(compgen -W "config run status version log downloads dhcpd provisioning" -- $cur) )
 		;;
 	  hidden)
-		COMPREPLY=( $(compgen -W "show" -- $cur) )
+		COMPREPLY=( $(compgen -W "reset-config show" -- $cur) )
 		;;
 	  "set")
 		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile file-cache-timeout integration external-keystore template external-template keystore idarray association default-keystore default-template imagefile image-supression delay-keystore dhcpd-option dhcpd logging" -- $cur) )
@@ -3525,6 +3525,8 @@ def interpreter():
 		else:
 			console("Install/upgrade cancelled")
 	elif arguments == "hidden" or arguments == "hidden show":
+		console("NOTE: These hidden commands are mostly meant to display information for use in TAB autocomplete")
+		console(" - hidden reset-config                            |  Replace the ZTP config with the default configuration")
 		console(" - hidden show keystores                          |  Show a list of configured keystores")
 		console(" - hidden show keys <keystore>                    |  Show a list of configured keys under a keystore")
 		console(" - hidden show idarrays                           |  Show a list of configured IDArrays")
@@ -3546,6 +3548,9 @@ def interpreter():
 		console(" - hidden show integration-keys <svc_name>        |  Show a list of keys configured on an integration")
 		console(" - hidden show external-keystores                 |  Show a list of keys configured for external-keystores")
 		console(" - hidden show external-keystore-types            |  Show a list of available external-keystore types")
+	elif arguments == "hidden reset-config":
+		inst = installer()
+		inst.create_configfile()
 	elif arguments == "hidden show keystores":
 		config.hidden_list_ids()
 	elif arguments[:16] == "hidden show keys" and len(sys.argv) >= 4:
