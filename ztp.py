@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "dev1.3.1e"
+version = "dev1.3.1f"
 
 
 ##### Import native modules #####
@@ -2641,7 +2641,7 @@ class tracking_class:
 				self.sthread.start()
 	def _maintain_store(self):
 		while True:
-			time.sleep(1)
+			time.sleep(10)
 			### Update all downloads in memory (self._master)
 			for session in self._master:
 				self._master[session].update_percent()
