@@ -2970,7 +2970,13 @@ class tracking_class:
 	def show_provisioning(self):
 		data = self.provdb.recall()
 		tabledata = []
-		for each in data:
+		####################################
+		tlist = []
+		for timestamp in data:
+			tlist.append(timestamp)
+		tlist.sort(reverse=True)
+		####################################
+		for each in tlist:
 			if type(data[each]["Real IDs"]) == type({}):
 				real = ""
 				for id in data[each]["Real IDs"]:
