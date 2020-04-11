@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "dev1.3.1d"
+version = "dev1.3.1e"
 
 
 ##### Import native modules #####
@@ -2795,8 +2795,9 @@ class tracking_class:
 	def show_downloads(self, args):
 		data = []
 		d = self.store.recall()
+		print(d)
 		dlist = list(d)
-		dlist.sort()
+		dlist.sort(reverse=True)
 		for dload in dlist:
 			data.append(d[dload])
 		return make_table([u'time', u'ipaddr', u'filename', u'filesize', u'bytessent', u'percent', u'rate', u'active'], data)
@@ -2889,7 +2890,7 @@ class tracking_class:
 		d = client.recv(100000)
 		d = json.loads(d)
 		dlist = list(d)
-		dlist.sort()
+		dlist.sort(reverse=True)
 		for dload in dlist:
 			data.append(d[dload])
 		return make_table([u'time', u'ipaddr', u'filename', u'filesize', u'bytessent', u'percent', u'rate', u'active'], data)
