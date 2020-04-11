@@ -2891,7 +2891,7 @@ class tracking_class:
 		d = json.loads(d)
 		dlist = list(d)
 		dlist.sort(reverse=True)
-		for dload in dlist:
+		for dload in dlist[:20]:
 			data.append(d[dload])
 		return make_table([u'time', u'ipaddr', u'filename', u'filesize', u'bytessent', u'percent', u'rate', u'active'], data)
 	def show_downloads_live(self, args):
