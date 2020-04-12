@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "dev1.3.1f"
+version = "dev1.3.1g"
 
 
 ##### Import native modules #####
@@ -2403,13 +2403,29 @@ _ztp_complete()
 complete -F _ztp_complete ztp &&
 bind 'set show-all-if-ambiguous on'"""
 		##### BASH SCRIPT DATA STOP #####
+		##### Remove legacy script file #####
+		if os.path.isfile('/etc/profile.d/ztp-complete.sh'):
+			console("Legacy completion file detected at /etc/profile.d/ztp-complete.sh... Removing...")
+			os.remove('/etc/profile.d/ztp-complete.sh')
+			console("    Removed!")
 		##### Place script file #####
-		installpath = '/etc/profile.d/ztp-complete.sh'
+		installpath = '/etc/bash_completion.d/ztp_completion'
 		f = open(installpath, 'w')
 		f.write(bash_complete_script)
 		f.close()
-		os.system('chmod 777 /etc/profile.d/ztp-complete.sh')
-		console("Auto-complete script installed to /etc/profile.d/ztp-complete.sh")
+		os.system('chmod 777 /etc/bash_completion.d/ztp_completion')
+		console("Auto-complete script installed to /etc/bash_completion.d/ztp_completion")
+		##### Run script file from profile #####
+		rcfilepath = os.path.join(os.path.expanduser("~") , ".bashrc")
+		f = open(rcfilepath, 'r')
+		rcfile = f.read()
+		f.close()
+		if "source /etc/bash_completion.d/ztp_completion" not in rcfile:
+			console("Adding completion file to user profile in {}".format(rcfilepath))
+			f = open(rcfilepath, 'a')
+			f.write("\n\n\n# FreeZTP BASH Completion\nsource /etc/bash_completion.d/ztp_completion")
+			f.close()
+
 
 
 # Overwrite of a TFTPY function to notify when downloads complete
