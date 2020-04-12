@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "dev1.3.1g"
+version = "dev1.3.1h"
 
 
 ##### Import native modules #####
@@ -560,6 +560,7 @@ class config_factory:
 		vals = self.pull_keystore_values(path, keystoreid)
 		if snmpinfo:
 			vals.update({"snmpinfo": snmpinfo})
+		vals = self._global_keystore_merge(vals)
 		log("cfact.merge_final_config: Merging with values:\n{}".format(json.dumps(vals, indent=4)))
 		return (template.render(vals), vals)
 	def get_keystore_id(self, idens, silent=False):
@@ -692,7 +693,7 @@ class config_factory:
 			console("##############################")
 	def pull_keystore_values(self, path, keystore_id):
 		if keystore_id not in path["idarrays"]:
-			return path["keyvalstore"][keystore_id]
+			return self._global_keystore_merge(path["keyvalstore"][keystore_id])
 		else:
 			log("cfact.pull_keystore_values: Inserting IDArray keys")
 			base_vals = dict(path["keyvalstore"][keystore_id])
@@ -705,7 +706,27 @@ class config_factory:
 				if key not in base_vals:
 					base_vals.update({key: value})
 				index += 1
-			return base_vals
+			return self._global_keystore_merge(base_vals)
+	def _global_keystore_merge(self, ksdata):
+		keystoredata = dict(ksdata)
+		log("cfact._global_lookup: Checking if a global-keystore is configured and ready...")
+		if config.running["global-keystore"]:  # If a global keystore ID is set
+			kid = config.running["global-keystore"]
+			log("cfact._global_lookup: A global-keystore is configured ({}), checking if it exists in local config".format(kid))
+			if kid in config.running["keyvalstore"]:
+				log("cfact._global_lookup: Global keystore exists in local config. Adding and returning")
+				keystoredata[kid] = config.running["keyvalstore"][kid]
+				return keystoredata
+			elif kid in external_keystores.data["keyvalstore"]:
+				log("cfact._global_lookup: Global keystore exists in external keystore. Returning")
+				keystoredata[kid] = external_keystores.data["keyvalstore"][kid]
+				return keystoredata
+			else:
+				log("cfact._global_lookup: Global keystore doesn't exist. Returning keystore data unchanged")
+				return keystoredata
+		else:
+			log("cfact._global_lookup: Global-keystore configured as none. Discarding")
+			return keystoredata
 
 
 ##### SNMP Querying object: It is instantiated by the config_factory      #####
@@ -862,7 +883,7 @@ class config_manager:
 			iden = args[4]
 			template = args[6]
 			self.set_association(iden, template)
-		elif setting == "default-keystore" or setting == "default-template":
+		elif setting == "default-keystore" or setting == "default-template" or setting == "global-keystore":
 			if value.lower() == "none":
 				value = None
 			self.running[setting] = value
@@ -1217,6 +1238,7 @@ class config_manager:
 			associationlist.append("ztp set association id %s template %s" % (association, template))
 		############
 		dkeystore = "ztp set default-keystore %s"  % str(self.running["default-keystore"])
+		gkeystore = "ztp set global-keystore %s"  % str(self.running["global-keystore"])
 		dtemplate = "ztp set default-template %s"  % str(self.running["default-template"])
 		imagefile = "ztp set imagefile %s"  % str(self.running["imagefile"])
 		imagesup = "ztp set image-supression %s"  % str(self.running["image-supression"])
@@ -1270,6 +1292,8 @@ class config_manager:
 			configtext += cmd + "\n"
 		configtext += "#\n#\n#\n"
 		configtext += dkeystore
+		configtext += "\n"
+		configtext += gkeystore
 		configtext += "\n"
 		configtext += dtemplate
 		configtext += "\n"
@@ -1708,6 +1732,7 @@ class installer:
 		"integrations": {},
 		"external-keystores": {},
 		"external-templates": {},
+		"global-keystore": None,
 		"logging": {
 			"merged-config-to-mainlog": "enable",
 			"merged-config-to-custom-file": "disable"
@@ -1936,7 +1961,7 @@ _ztp_complete()
 		COMPREPLY=( $(compgen -W "reset-config show" -- $cur) )
 		;;
 	  "set")
-		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile file-cache-timeout integration external-keystore template external-template keystore idarray association default-keystore default-template imagefile image-supression delay-keystore dhcpd-option dhcpd logging" -- $cur) )
+		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile file-cache-timeout integration external-keystore template external-template keystore idarray association default-keystore global-keystore default-template imagefile image-supression delay-keystore dhcpd-option dhcpd logging" -- $cur) )
 		;;
 	  "clear")
 		COMPREPLY=( $(compgen -W "keystore idarray snmpoid integration external-keystore template external-template association dhcpd-option dhcpd log downloads provisioning" -- $cur) )
@@ -2101,6 +2126,12 @@ _ztp_complete()
 		fi
 		;;
 	  default-keystore)
+		if [ "$prev2" == "set" ]; then
+		  local ids=$(for id in `ztp hidden show keystores`; do echo $id ; done)
+		  COMPREPLY=( $(compgen -W "${ids} <keystore-id> None" -- $cur) )
+		fi
+		;;
+	  global-keystore)
 		if [ "$prev2" == "set" ]; then
 		  local ids=$(for id in `ztp hidden show keystores`; do echo $id ; done)
 		  COMPREPLY=( $(compgen -W "${ids} <keystore-id> None" -- $cur) )
@@ -2811,7 +2842,6 @@ class tracking_class:
 	def show_downloads(self, args):
 		data = []
 		d = self.store.recall()
-		print(d)
 		dlist = list(d)
 		dlist.sort(reverse=True)
 		for dload in dlist:
@@ -3691,6 +3721,7 @@ def interpreter():
 		console(" - set idarray <arrayname> <id's>                              |  Create an ID array to allow multiple real ids to match one keystore id")
 		console(" - set association id <id/arrayname> template <template_name>  |  Associate a keystore id or an idarray to a specific named template")
 		console(" - set default-keystore (none|keystore-id)                     |  Set a last-resort keystore and template for when target identification fails")
+		console(" - set global-keystore (none|keystore-id)                      |  Set a keystore to be injected into all merges")
 		console(" - set default-template (none|template_name)                   |  Set a last-resort template for when no keystore/template association is found")
 		console(" - set imagefile <binary_image_file_name>                      |  Set the image file name to be used for upgrades (must be in tftp root dir)")
 		console(" - set image-supression <seconds-to-supress>                   |  Set the seconds to supress a second image download preventing double-upgrades")
@@ -3742,6 +3773,8 @@ def interpreter():
 		console(" - set association id <id/arrayname> template <template_name>  |  Associate a keystore id or an idarray to a specific named template")
 	elif (arguments[:20] == "set default-keystore" and len(sys.argv) < 4) or arguments == "default-keystore":
 		console(" - set default-keystore (none|keystore-id)        |  Set a last-resort keystore and template for when target identification fails")
+	elif (arguments[:19] == "set global-keystore" and len(sys.argv) < 4) or arguments == "global-keystore":
+		console(" - set global-keystore (none|keystore-id)         |  Set a keystore to be injected into all merges")
 	elif (arguments[:20] == "set default-template" and len(sys.argv) < 4) or arguments == "default-template":
 		console(" - set default-template (none|template_name)      |  Set a last-resort template for when no keystore/template association is found")
 	elif arguments == "set imagefile":
@@ -4001,6 +4034,7 @@ def interpreter():
 		console(" - set idarray <arrayname> <id_#1> <id_#2> ...                 |  Create an ID array to allow multiple real ids to match one keystore id")
 		console(" - set association id <id/arrayname> template <template_name>  |  Associate a keystore id or an idarray to a specific named template")
 		console(" - set default-keystore (none|keystore-id)                     |  Set a last-resort keystore and template for when target identification fails")
+		console(" - set global-keystore (none|keystore-id)                      |  Set a keystore to be injected into all merges")
 		console(" - set default-template (none|template_name)                   |  Set a last-resort template for when no keystore/template association is found")
 		console(" - set imagefile <binary_image_file_name>                      |  Set the image file name to be used for upgrades (must be in tftp root dir)")
 		console(" - set image-supression <seconds-to-supress>                   |  Set the seconds to supress a second image download preventing double-upgrades")
