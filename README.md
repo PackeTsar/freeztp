@@ -598,34 +598,35 @@ Once setup, you can send a test message to the integration destination using the
 
 ### v1.3.0
 **Bug Fixes in V1.2.0 --> V1.3.0:**
-	- **DHCPD Autocomplete Bug (#50)**: Using autocomplete to see the DHCPD scope attribute options after a scope name (ie: `ztp set dhcpd INTERFACE-ENS160 first-address <TAB>`) would throw an exception due to the completion script being faulty. Repaired the if/then logic in the completion script and tested functionality
-	- **SNMP Information Not Included in Merges (#49)**: SNMP information was not being included in template merges to make it available for use in the templates. SNMP data is now available in templates by using `{{ snmpinfo.<oid_obj_name> }}`. You can also call up the discovered SNMP value used to match a keystore with `{{ snmpinfo.matched }}`
+- **DHCPD Autocomplete Bug (#50)**: Using autocomplete to see the DHCPD scope attribute options after a scope name (ie: `ztp set dhcpd INTERFACE-ENS160 first-address <TAB>`) would throw an exception due to the completion script being faulty. Repaired the if/then logic in the completion script and tested functionality
+- **SNMP Information Not Included in Merges (#49)**: SNMP information was not being included in template merges to make it available for use in the templates. SNMP data is now available in templates by using `{{ snmpinfo.<oid_obj_name> }}`. You can also call up the discovered SNMP value used to match a keystore with `{{ snmpinfo.matched }}`
 
 **Added Features in V1.2.0 --> V1.3.0:**
-	- **DHCPD Service Control**: ZTP previously had no capability to start/stop/restart the DHCPD service running on the OS other than when committing DHCP configurations. A command-set has been added under `ztp service` extending it with `(freeztp|dhcpd|all)` and allowing `(start|stop|restart)` under each
+- **DHCPD Service Control**: ZTP previously had no capability to start/stop/restart the DHCPD service running on the OS other than when committing DHCP configurations. A command-set has been added under `ztp service` extending it with `(freeztp|dhcpd|all)` and allowing `(start|stop|restart)` under each
 
 
 ### v1.3.1
 **Bug Fixes in V1.3.0 --> V1.3.1:**
-	- **Clear downloads not working when service running**: The `ztp clear downloads` command would not work while the service was running in the background. When the service is running, this will be performed through the IPC. Adjusted some IPC timing to make it work properly.
-	- **The snmpinfo.XXX variables cause merge-test fail**: If `snmpinfo.something` was used in a template and a merge-test was run on that template, it would cause a Jinja2 failure due to the attribute not existing. Code was added to generate a fake version of the `snmpinfo` attribute and inject it into the merge test results
-	- **Merge-test with unknown ID fails**: The `merge_test()` function assumed a tupled output from `get_keystore_id()` and would receive a None when nothing was matched. Processing was modified to fail gracefully when nothing was matched. `get_keystore_id()` logging was also improved to better show order of operations for searching an ID
-	- **Missing Keystore names with set idarray command**: When issuing `ztp set idarray` and hitting TAB, only the existing IDArray names would appear, making it harder to create a new IDArray to match a Keystore name. Code was added to list both IDArray and Keystore names when using `set`, but only list IDArray names when using `clear`
-	- **New DHCP scope creation not including ZTP address**: When creating a new scope with something like `ztp set dhcpd TESTSCOPE subnet 10.0.0.0/24`, the `imagediscoveryfile-option` and `lease-time` values would be added to the scope automatically, but not the `ztp-tftp-address`. Some of the `auto_dhcpd()` code was reused to detect current interfaces and add the interface IP address as long as only one interface was present
+- **Clear downloads not working when service running**: The `ztp clear downloads` command would not work while the service was running in the background. When the service is running, this will be performed through the IPC. Adjusted some IPC timing to make it work properly.
+- **The snmpinfo.XXX variables cause merge-test fail**: If `snmpinfo.something` was used in a template and a merge-test was run on that template, it would cause a Jinja2 failure due to the attribute not existing. Code was added to generate a fake version of the `snmpinfo` attribute and inject it into the merge test results
+- **Merge-test with unknown ID fails**: The `merge_test()` function assumed a tupled output from `get_keystore_id()` and would receive a None when nothing was matched. Processing was modified to fail gracefully when nothing was matched. `get_keystore_id()` logging was also improved to better show order of operations for searching an ID
+- **Missing Keystore names with set idarray command**: When issuing `ztp set idarray` and hitting TAB, only the existing IDArray names would appear, making it harder to create a new IDArray to match a Keystore name. Code was added to list both IDArray and Keystore names when using `set`, but only list IDArray names when using `clear`
+- **New DHCP scope creation not including ZTP address**: When creating a new scope with something like `ztp set dhcpd TESTSCOPE subnet 10.0.0.0/24`, the `imagediscoveryfile-option` and `lease-time` values would be added to the scope automatically, but not the `ztp-tftp-address`. Some of the `auto_dhcpd()` code was reused to detect current interfaces and add the interface IP address as long as only one interface was present
 
 
 ### v1.4.0
 **Bug Fixes in V1.3.1 --> V1.4.0:**
-	- (#41) **Rasperian GUI broken after FreeZTP install**: The FreeZTP completion script installation location would break GUI profile logins due to incompatibility with sh (vs bash). This would cause an error to be thrown and fail profile logins. The location and installation method of the completion script has been changed to prevent this. Also, an upgrade to v1.4.0 or later will remove the legacy script fixing a broken profile.
-	- (#35 and #36) **Limit 'show downloads live' to 20 lines**: The `show downloads live` command will now limit output to 20 lines to prevent data overruns and bad display output.
-	- (#26) **Malformed CSVs will cause a crash**: A malformed CSV will now cause an error to be thrown and CSV data will be partially discarded. Any valid CSV data will still be obtained and processed.
-	- (#22) **pdb file corruption (on Raspberry Pi's)**: This is likely due to a maintenance routine writing against the pdb file very frequently which is interrupted when the machine loses power. This used to be set to run every second, but now will run every 10 seconds.
-	- (#47) **Downloads and provisioning time sorting**: `show downloads`, `show downloads live`, and `show provisioning` will now all sort by inverted time; showing the newest entries at the top.
-	- (#56) **Non-existent keystores cause crash**: If an IDArray is configured with a name not matching a keystore, the FreeZTP service would crash. Now if the IDArray points to a non-existent keystore, the match against the IDArray will be discarded and the system will revert to the default-keystore.
-	- (#59) **Red Hat Enterprise Linux (RHEL) unsupported**: OS recognition of RHEL7 and RHEL8 have been added to support those platforms.
+
+- (#41) **Rasperian GUI broken after FreeZTP install**: The FreeZTP completion script installation location would break GUI profile logins due to incompatibility with sh (vs bash). This would cause an error to be thrown and fail profile logins. The location and installation method of the completion script has been changed to prevent this. Also, an upgrade to v1.4.0 or later will remove the legacy script fixing a broken profile.
+- (#35 and #36) **Limit 'show downloads live' to 20 lines**: The `show downloads live` command will now limit output to 20 lines to prevent data overruns and bad display output.
+- (#26) **Malformed CSVs will cause a crash**: A malformed CSV will now cause an error to be thrown and CSV data will be partially discarded. Any valid CSV data will still be obtained and processed.
+- (#22) **pdb file corruption (on Raspberry Pi's)**: This is likely due to a maintenance routine writing against the pdb file very frequently which is interrupted when the machine loses power. This used to be set to run every second, but now will run every 10 seconds.
+- (#47) **Downloads and provisioning time sorting**: `show downloads`, `show downloads live`, and `show provisioning` will now all sort by inverted time; showing the newest entries at the top.
+- (#56) **Non-existent keystores cause crash**: If an IDArray is configured with a name not matching a keystore, the FreeZTP service would crash. Now if the IDArray points to a non-existent keystore, the match against the IDArray will be discarded and the system will revert to the default-keystore.
+- (#59) **Red Hat Enterprise Linux (RHEL) unsupported**: OS recognition of RHEL7 and RHEL8 have been added to support those platforms.
 
 **Added Features in V1.3.1 --> V1.4.0:**
-	- (#64) **Global Keystore**: Users are able to define a keystore which will have its contents injected into all merges, regardless of which keystore is matched. The global keystore data will be passed into the matched keystore data under a subordinate key; this key will be equal to the global-keystore ID. See below for an example configuration of this feature. With the below config, the `somevalue` value would be retrieved in a Jinja2 template by using `{{ GLOBAL.somekey}}`. The default setting for `global-keystore` is `none` which disables it.
+- (#64) **Global Keystore**: Users are able to define a keystore which will have its contents injected into all merges, regardless of which keystore is matched. The global keystore data will be passed into the matched keystore data under a subordinate key; this key will be equal to the global-keystore ID. See below for an example configuration of this feature. With the below config, the `somevalue` value would be retrieved in a Jinja2 template by using `{{ GLOBAL.somekey}}`. The default setting for `global-keystore` is `none` which disables it.
 
 ```
 ztp set keystore GLOBAL ztp_ip_address 10.0.0.10
