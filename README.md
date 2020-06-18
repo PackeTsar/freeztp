@@ -547,11 +547,13 @@ Once setup, you can send a test message to the integration destination using the
 ##   VERSIONS   ##
 
 ### v1.0.1
+
 **Bug Fixes in V1.0.0 --> V1.0.1:**
 - **ISSUE #20**: The command `ztp show ztp dhcpd leases` would throw an exception is the `uid` key is not present in the DHCP lease reader.
 
 
 ### v1.1.0
+
 **Bug Fixes in V1.0.0 --> V1.1.0:**
 - **ISSUE #27**: The command `ztp request external-keystore-test` shows some extraneous data at the top. Removed an unneeded print statement.
 - **ISSUE #32**: The command `ztp show provisioning` would show epoch time. Now it will show local time.
@@ -586,6 +588,7 @@ Once setup, you can send a test message to the integration destination using the
 
 
 ### v1.2.0
+
 **Bug Fixes in V1.1.0 --> V1.2.0:**
 - External template object names would not populate for autocomplete when configuring an association. For example `ztp set association id MYKEYSTORE template <tab>` would not show external template objects as options.
 - **ISSUE #45**: Jinja2 templates would not allow the use of `include` statements. Jinja2 handling was rewritten to include this functionality. Jinja2 templates can now be included with the `{% include '/root/BASE_CONFIG.txt' %}` syntax.
@@ -597,6 +600,7 @@ Once setup, you can send a test message to the integration destination using the
 
 
 ### v1.3.0
+
 **Bug Fixes in V1.2.0 --> V1.3.0:**
 - **DHCPD Autocomplete Bug (#50)**: Using autocomplete to see the DHCPD scope attribute options after a scope name (ie: `ztp set dhcpd INTERFACE-ENS160 first-address <TAB>`) would throw an exception due to the completion script being faulty. Repaired the if/then logic in the completion script and tested functionality
 - **SNMP Information Not Included in Merges (#49)**: SNMP information was not being included in template merges to make it available for use in the templates. SNMP data is now available in templates by using `{{ snmpinfo.<oid_obj_name> }}`. You can also call up the discovered SNMP value used to match a keystore with `{{ snmpinfo.matched }}`
@@ -606,6 +610,7 @@ Once setup, you can send a test message to the integration destination using the
 
 
 ### v1.3.1
+
 **Bug Fixes in V1.3.0 --> V1.3.1:**
 - **Clear downloads not working when service running**: The `ztp clear downloads` command would not work while the service was running in the background. When the service is running, this will be performed through the IPC. Adjusted some IPC timing to make it work properly.
 - **The snmpinfo.XXX variables cause merge-test fail**: If `snmpinfo.something` was used in a template and a merge-test was run on that template, it would cause a Jinja2 failure due to the attribute not existing. Code was added to generate a fake version of the `snmpinfo` attribute and inject it into the merge test results
@@ -638,6 +643,7 @@ ztp set global-keystore GLOBAL
 
 
 ### v1.4.1
+
 **Bug Fixes in V1.4.0 --> V1.4.1:**
 	- (#68) **Merge with local IDArray referencing external keystore fails**: A merge or merge-test against a real-ID contained in a local IDArray, where the local IDArray references an externally-stored keystore would fail to find the keystore. This appears to have been due to a fix made for #56. The function has been fixed and tested.
 	- (#69) **IDArray injection with local IDArray referencing external keystore fails**: A merge or merge-test against a real-ID contained in a local IDArray, where the local IDArray references an externally-stored keystore would fail to inject the values of the local IDArray into the merge or merge-test. The pull_keystore_values() function has been extended to cover this use case.
