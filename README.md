@@ -636,6 +636,13 @@ ztp set global-keystore GLOBAL
 ```
 
 
+### v1.4.1
+**Bug Fixes in V1.4.0 --> V1.4.1:**
+	- (#68) **Merge with local IDArray referencing external keystore fails**: A merge or merge-test against a real-ID contained in a local IDArray, where the local IDArray references an externally-stored keystore would fail to find the keystore. This appears to have been due to a fix made for #56. The function has been fixed and tested.
+	- (#69) **IDArray injection with local IDArray referencing external keystore fails**: A merge or merge-test against a real-ID contained in a local IDArray, where the local IDArray references an externally-stored keystore would fail to inject the values of the local IDArray into the merge or merge-test. The pull_keystore_values() function has been extended to cover this use case.
+
+
+
 
 -----------------------------------------
 ##   CONTRIBUTING   ##
