@@ -549,16 +549,19 @@ Once setup, you can send a test message to the integration destination using the
 ### v1.0.1
 
 **Bug Fixes in V1.0.0 --> V1.0.1:**
+
 - **ISSUE #20**: The command `ztp show ztp dhcpd leases` would throw an exception is the `uid` key is not present in the DHCP lease reader.
 
 
 ### v1.1.0
 
 **Bug Fixes in V1.0.0 --> V1.1.0:**
+
 - **ISSUE #27**: The command `ztp request external-keystore-test` shows some extraneous data at the top. Removed an unneeded print statement.
 - **ISSUE #32**: The command `ztp show provisioning` would show epoch time. Now it will show local time.
 
 **Added Features in V1.0.1 --> V1.1.0:**
+
 - **External Keystores**: A repository of FreeZTP Keystore, IDArray, and Association data which can be stored and accessed from an external data source. See the [External Keystores](#external-keystores) section for more information.
 - **External Templates**: Jinja2 templates can now be saved as files and referenced from the FreeZTP config in the form of `set external-template <template_name> file <filepath>`. External-templates are loaded when the ZTP service is started and kept in memory. The service must be restarted for any file changes to take effect
 - **Integrations**: 3rd party hooks which can be leveraged for notifications, etc. See the [Integrations](#integrations) section for more information.
@@ -590,10 +593,12 @@ Once setup, you can send a test message to the integration destination using the
 ### v1.2.0
 
 **Bug Fixes in V1.1.0 --> V1.2.0:**
+
 - External template object names would not populate for autocomplete when configuring an association. For example `ztp set association id MYKEYSTORE template <tab>` would not show external template objects as options.
 - **ISSUE #45**: Jinja2 templates would not allow the use of `include` statements. Jinja2 handling was rewritten to include this functionality. Jinja2 templates can now be included with the `{% include '/root/BASE_CONFIG.txt' %}` syntax.
 
 **Added Features in V1.1.0 --> V1.2.0:**
+
 - **Custom DHCPD-Options**: You can now add custom DHCPD option types using the syntax `ztp set dhcpd-option <obj-name>`
 	- An example option can be `ztp set dhcpd-option ntp-server code 42 type ip-address`
 	- This will make the option name `ntp-server` available for use in the configured DHCPD scopes so you can set the value, like `ztp set dhcpd SOMESCOPE ntp-server 10.0.0.1`
@@ -602,16 +607,19 @@ Once setup, you can send a test message to the integration destination using the
 ### v1.3.0
 
 **Bug Fixes in V1.2.0 --> V1.3.0:**
+
 - **DHCPD Autocomplete Bug (#50)**: Using autocomplete to see the DHCPD scope attribute options after a scope name (ie: `ztp set dhcpd INTERFACE-ENS160 first-address <TAB>`) would throw an exception due to the completion script being faulty. Repaired the if/then logic in the completion script and tested functionality
 - **SNMP Information Not Included in Merges (#49)**: SNMP information was not being included in template merges to make it available for use in the templates. SNMP data is now available in templates by using `{{ snmpinfo.<oid_obj_name> }}`. You can also call up the discovered SNMP value used to match a keystore with `{{ snmpinfo.matched }}`
 
 **Added Features in V1.2.0 --> V1.3.0:**
+
 - **DHCPD Service Control**: ZTP previously had no capability to start/stop/restart the DHCPD service running on the OS other than when committing DHCP configurations. A command-set has been added under `ztp service` extending it with `(freeztp|dhcpd|all)` and allowing `(start|stop|restart)` under each
 
 
 ### v1.3.1
 
 **Bug Fixes in V1.3.0 --> V1.3.1:**
+
 - **Clear downloads not working when service running**: The `ztp clear downloads` command would not work while the service was running in the background. When the service is running, this will be performed through the IPC. Adjusted some IPC timing to make it work properly.
 - **The snmpinfo.XXX variables cause merge-test fail**: If `snmpinfo.something` was used in a template and a merge-test was run on that template, it would cause a Jinja2 failure due to the attribute not existing. Code was added to generate a fake version of the `snmpinfo` attribute and inject it into the merge test results
 - **Merge-test with unknown ID fails**: The `merge_test()` function assumed a tupled output from `get_keystore_id()` and would receive a None when nothing was matched. Processing was modified to fail gracefully when nothing was matched. `get_keystore_id()` logging was also improved to better show order of operations for searching an ID
@@ -620,6 +628,7 @@ Once setup, you can send a test message to the integration destination using the
 
 
 ### v1.4.0
+
 **Bug Fixes in V1.3.1 --> V1.4.0:**
 
 - ([#41](https://github.com/PackeTsar/freeztp/issues/41)) **Rasperian GUI broken after FreeZTP install**: The FreeZTP completion script installation location would break GUI profile logins due to incompatibility with sh (vs bash). This would cause an error to be thrown and fail profile logins. The location and installation method of the completion script has been changed to prevent this. Also, an upgrade to v1.4.0 or later will remove the legacy script fixing a broken profile.
@@ -631,6 +640,7 @@ Once setup, you can send a test message to the integration destination using the
 - ([#59](https://github.com/PackeTsar/freeztp/issues/59)) **Red Hat Enterprise Linux (RHEL) unsupported**: OS recognition of RHEL7 and RHEL8 have been added to support those platforms.
 
 **Added Features in V1.3.1 --> V1.4.0:**
+
 - ([#64](https://github.com/PackeTsar/freeztp/issues/64)) **Global Keystore**: Users are able to define a keystore which will have its contents injected into all merges, regardless of which keystore is matched. The global keystore data will be passed into the matched keystore data under a subordinate key; this key will be equal to the global-keystore ID. See below for an example configuration of this feature. With the below config, the `somevalue` value would be retrieved in a Jinja2 template by using `{{ GLOBAL.somekey}}`. The default setting for `global-keystore` is `none` which disables it.
 
 ```
@@ -645,8 +655,9 @@ ztp set global-keystore GLOBAL
 ### v1.4.1
 
 **Bug Fixes in V1.4.0 --> V1.4.1:**
-	- (#68) **Merge with local IDArray referencing external keystore fails**: A merge or merge-test against a real-ID contained in a local IDArray, where the local IDArray references an externally-stored keystore would fail to find the keystore. This appears to have been due to a fix made for #56. The function has been fixed and tested.
-	- (#69) **IDArray injection with local IDArray referencing external keystore fails**: A merge or merge-test against a real-ID contained in a local IDArray, where the local IDArray references an externally-stored keystore would fail to inject the values of the local IDArray into the merge or merge-test. The pull_keystore_values() function has been extended to cover this use case.
+
+- ([#68](https://github.com/PackeTsar/freeztp/issues/68)) **Merge with local IDArray referencing external keystore fails**: A merge or merge-test against a real-ID contained in a local IDArray, where the local IDArray references an externally-stored keystore would fail to find the keystore. This appears to have been due to a fix made for #56. The function has been fixed and tested.
+- ([#69](https://github.com/PackeTsar/freeztp/issues/69)) **IDArray injection with local IDArray referencing external keystore fails**: A merge or merge-test against a real-ID contained in a local IDArray, where the local IDArray references an externally-stored keystore would fail to inject the values of the local IDArray into the merge or merge-test. The pull_keystore_values() function has been extended to cover this use case.
 
 
 
