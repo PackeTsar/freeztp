@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "v1.4.0a"
+version = "v1.4.0b"
 
 
 ##### Import native modules #####
@@ -695,13 +695,22 @@ class config_factory:
 			console(j2template.render(kvalues))
 			console("##############################")
 	def pull_keystore_values(self, path, keystore_id):
-		if keystore_id not in path["idarrays"]:
+		if (keystore_id not in path["idarrays"]) and (keystore_id not in list(config.running["idarrays"])):
 			return self._global_keystore_merge(path["keyvalstore"][keystore_id])
 		else:
 			log("cfact.pull_keystore_values: Inserting IDArray keys")
 			base_vals = dict(path["keyvalstore"][keystore_id])
-			ida_vals = path["idarrays"][keystore_id]
+			# Grab values from selected path first
+			if keystore_id in path["idarrays"]:
+				ida_vals = path["idarrays"][keystore_id]
+			else:  # Otherwise grab from local config
+				ida_vals = config.running["idarrays"][keystore_id]
+			# If it doesn't exist at all, inject it
 			if "idarray" not in base_vals:
+				base_vals.update({"idarray": ida_vals})
+			# It it exists but is empty
+			elif not base_vals["idarray"]:
+				# Replace empty data with the local data
 				base_vals.update({"idarray": ida_vals})
 			index = 1
 			for value in ida_vals:
