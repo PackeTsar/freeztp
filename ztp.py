@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "v1.4.0"
+version = "v1.4.0a"
 
 
 ##### Import native modules #####
@@ -580,11 +580,14 @@ class config_factory:
 					if identifier in config.running["idarrays"][arrayname]:
 						if not silent:
 							log("cfact.get_keystore_id: ID '%s' resolved to arrayname '%s'" % (identifier, arrayname))
-							if arrayname in list(config.running["keyvalstore"]):
-								log("cfact.get_keystore_id: Keystore with name '%s' has been found" % arrayname)
-								return (arrayname, identifier)
-							else:
-								log("cfact.get_keystore_id: A keystore matching arrayname '%s' cannot be found. Discarding IDArray match" % arrayname)
+						if arrayname in list(config.running["keyvalstore"]):
+							log("cfact.get_keystore_id: Keystore with name '%s' has been found" % arrayname)
+							return (arrayname, identifier)
+						elif arrayname in list(external_keystores.data["keyvalstore"]):
+							log("cfact.get_keystore_id: Keystore with name '%s' has been found in an external-keystore" % arrayname)
+							return (arrayname, identifier)
+						else:
+							log("cfact.get_keystore_id: A keystore matching arrayname '%s' cannot be found. Discarding IDArray match" % arrayname)
 				if not silent:
 					log("cfact.get_keystore_id: ID (%s) not found in local IDArrays, checking external Keystore names" % identifier)
 				if identifier in list(external_keystores.data["keyvalstore"]):
