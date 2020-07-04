@@ -11,6 +11,8 @@ Some usage tips and tricks from real world FreeZTP deployments.
 1. [Use-case: Provisioning Without Vlan1](#use-case-provisioning-without-vlan1)
 2. [Use-case: Upgrade IOS-XE 3.7.x to 16.3.6](#use-case-upgrade-ios-xe-37x-to-1636)
 3. [Use-case: Automated IOS-XE Stack Renumbering](#use-case-automated-ios-xe-stack-renumbering)
+4. [Tip: Advanced Jinja Syntax](#tip-advanced-jinja-syntax)
+5. [Use Case: Multi-Platform IOS / IOS-XE Upgrade](#use-case-multi-platform-ios--ios-xe-upgrade)
 
 
 -----------------------------------------
@@ -722,8 +724,612 @@ Loading ZTP-23D9F46EC4-confg from 172.17.251.251 (via Vlan1): !
 ```
 
 
+## Tip: Advanced Jinja Syntax
+
+###### Author: [Paul S. Chapman](https://github.com/pschapman), Rev: 1, Date: 2020.0704, FreeZTP v1.3.1 and later
+
+For pratical purposes, having fewer baseline templates in a deployment means less maintenance for common settings.  These advanced Jinja 2 templating tricks can make this possible.  The examples presented below will show a combination of Jinja 2 and Cisco configuration and the expected post-merge output.
+
+### In-line Jinja Variables
+
+Sometimes it may be desirable to use custom variable for Jinja to use during its processing of the template.  This example shows how to take a variable from ZTP and place it in another variable used by Jinja.
+
+**ZTP Configuration**
+
+```
+ztp set keystore myswitch model1 c9300-48uxm
+```
+
+**Jinja 2 Example**
+
+```
+{%set switch=model1%}
+banner login You've connected to a {{switch}}
+```
+
+**Post-merge Result**
+
+```
+banner login You've connected to a c9300-48uxm
+```
+
+### Dictionaries
+
+Dictionaries follow a combination of Python and Jinja syntax.
+
+**Jinja 2 Example**
+
+```
+{%set hostdata={"name":"myswitch1","ip":"192.0.2.14"%}
+banner login You've connected to {{hostdata.name}} at {{hostdata.ip}}
+```
+
+**Post-merge Result**
+
+```
+banner login You've connected to myswitch1 at 192.0.2.14
+```
+
+### Substrings (Indexes)
+
+Substrings follow common python style in the form `var[x:x]`.
+
+**Jinja 2 Example**
+
+```
+!{%set model1="c9300-48uxm"%}
+!{%set prefix=model1[:5]%}
+banner login You've connected to a {{prefix}}
+```
+
+**Post-merge Result**
+
+```
+banner login You've connected to a c9300
+```
+
+### Text Formatting
+
+In many cases, python style formatting can be applied as a method in the form of `var.method()`.
+
+**Jinja 2 Example**
+
+```
+{%set model1="c9300-48uxm"%}
+banner login You've connected to a {{model1.upper()}}
+```
+
+**Post-merge Result**
+
+```
+banner login You've connected to a C9300-48UXM
+```
+
+### Conditional Lists
+
+Lists can be created in the usual python style, `var=["item1","item2",...]`.  Lists can also be manipulated with standard python methods like `var.append("item3")`
+
+This example shows how to extend a list based on whether or not a variable exists.
+
+```
+{% set o = listvar.append( var ) if var %}
+```
+
+Where
+- '`if var`' is a Jinja 2 style condition.  In this case, if the variable contains data, then proceed with the `set` portion of the statement
+- '`listvar.append( var )`' extends the list
+- '`o = `' sets the operation result code to a discardable variable so that it does not show up in the merged config
+
+**ZTP Configuration**
+
+```
+ztp set keystore myswitch model1 c9300-48uxm
+ztp set keystore myswitch model2 c9300-48u
+```
+
+**Jinja 2 Example**
+
+```
+!{% set models = [] %}
+!{% set o = models.append( model1 ) if model1 %}
+!{% set o = models.append( model2 ) if model2 %}
+!{% set o = models.append( model3 ) if model3 %}
+!{% set o = models.append( model4 ) if model4 %}
+```
+
+**Post-merge Result** (Contents of variable)
+
+Note that no blank items exist from model3 and model4
+
+`models=["c9300-48uxm","c9300-48u"]`
+
+### Conditional Logic
+
+Conditional logic can be used to include or exclude portions of the template.
+
+**ZTP Configuration**
+
+`ztp set keystore myswitch model1 c9300`
+
+**Jinja 2 Example**
+
+```
+!{% if model1[:5] == "c9300" %}
+system mtu 9198
+!{% else %}
+system mtu jumbo 9198
+!{% endif %}
+```
+
+**Post-merge Result** (Assuming all other criteria are met for myswitch keystore to be used)
+
+```
+!
+system mtu 9198
+!
+```
+
+### Looping Logic (with conditional logic and conditional list)
+
+For practical purposes, looping logic is particularly useful to bring variable configurations together (e.g. switch stacks with mixed models, multi model support, etc.)
+
+**ZTP Configuration**
+
+```
+ztp set keystore myswitch1 model1 c9300-48uxm
+ztp set keystore myswitch1 model2 c9300-48u
+#
+ztp set keystore myswitch2 model1 ws-c3560cx-12pc-s
+```
+
+**Jinja 2 Example**
+
+```
+!{% set models = [] %}
+!{% set o = models.append( model1 ) if model1 %}
+!{% set o = models.append( model2 ) if model2 %}
+!{% set o = models.append( model3 ) if model3 %}
+!
+!{% for model in models %}{% if model[:5] == "c9300" %}
+switch {{ loop.index }} provision {{ model }}
+!{% endif %}{% endfor %}
+```
+
+**Post-merge Result - myswitch1**
+
+```
+!
+!
+!
+!
+!
+!
+switch 1 provision c9300-48uxm
+!
+switch 2 provision c9300-48u
+```
+
+**Post-merge Result - myswitch2**
+
+```
+!
+!
+!
+!
+!
+!
+!
+```
 
 
+## Use Case: Multi-Platform IOS / IOS-XE Upgrade
+
+###### Author: [Paul S. Chapman](https://github.com/pschapman), Rev: 1, Date: 2020.0704, FreeZTP v1.4.1
+
+### Purpose
+
+This is an expansion on the switch upgrade EEM presented by Derek Schnosh.  The goal is to provide an autmation set that can upgrade a wide list of Cisco Catalyst platforms including 3560CX, 3850, 9300, 94xx, 9500, and Industrial Ethernet platforms.  To support these platforms, the automation must be able to account for variations in file system names (flash vs bootflash), installation methods (request platform, install add, archive, and bootvar), and boot cadences.
+
+### Field Usage
+
+1000+ switch deployment.  Switches would be taken to the field new-in-box and configured by ZTP.  Inventory for project contained a mix of 5 different Cisco Catalyst models, each having unique port names (e.g. TeX/0/X, TwX/0/X, GiX/0/X, Gi0/X, etc.), file system names, and upgrade methodologies.  Actual serial numbers, stack/standalone arrangement, hostname, and IP would be unknown until time of deployment.  Additional non-ZTP automation was used to dynamically aquire data from field techs and update related ZTP Keystores and ID Arrays (not documented here).  
+
+### Methodology
+
+The script suite presented contains 4 basic sections: discovery, upgrade, finalize, and cleanup.
+- Discovery
+  - Acquires
+    - Current OS Version - ZTP must pass new version to config in Jinja merge for comparison and upgrade decision.
+    - HW model of the switch (or stack master) to determine upgrade method
+    - File system name (flash or bootflash) for variations between chassis and fixed config switches
+    - Module count to set necessary pauses in script.  (Single supervisor chassis automatically 1.)
+  - Start upgrade if needed, otherwise start finalize
+- Upgrade determines install method, then executes install
+  - Method 1: `request platform software package upgrade...`
+  - Method 2: `install add file...`
+  - Method 3: `archive download-sw...`
+    - Integrated removal of old OS
+  - Method 4: Change boot statement in configuration
+    - Pre-remove old OS before installing new
+- Finalize
+  - Remove legacy OS if installed via `request` or `install` commands
+  - Add supplementary configuration (items which may be initially undesireable in main config, like AAA)
+- Cleanup
+  - Presented as a cron job that runs at midnight, but could be triggered another way
+    - In this case, it allowed for other cron-based scripts to be cleaned off the switch a few hours after deployment.
+
+### Tested Platforms and Versions
+
+- ZTP version 1.4.1 (examples use new global keystore feature)
+- Cisco Catalyst 9300 (24U / 24UX / 48U / 48UXM) in stacked and standalone configurations
+  - Versions: 16.6.6, 16.9.3, 16.9.3s, 16.11.1, 16.12.1s
+- Cisco Catalyst 94xx in single- and dual-supervisor configurations
+  - Version: 16.9.3, 16.12.1s
+- Cisco Catalyst 3560CX (8PC / 8PD / 12PC)
+  - Versions: 15.2(6)E1, 15.2(7)E, 15.2(7)E0s
+
+### Notes
+
+- Based on testing it is expected that scripts will work on Catalyst 3850, IE-3200, IE-3400, and IE-4010
+- Comments in the form `action ### comment <note>` added throughout suite to help provide clarity
+- All EEM applets configured with `event none` to allow manual execution during testing / troubleshooting
+  - Where needed compound triggers are used to allow `event none` to be present
+- Simplified action tags were adopted to reduce line length
+  - All tags end in 0 to allow insertion of additional commands (typically in troubleshooting)
+- While all efforts have been made to reduce time from initial boot to ready, testing shows time is consistently 18-25 minutes for Catalyst 9K and 25-35 minutes for Catalyst 3560cx
+  - Variation typically due to slow speed writing to flash, particularly on the 3560
+  - Both jumbo and standard frame configurations were tested
+  - Apache was installed on ZTP server to provide HTTP download
+
+### Implementation
+
+The sample leverages ZTP keystores to provide variables that are consumed in the configuration merge.
+- OS File Name
+- OS Version
+- ZTP server IP (optional) - allow baseline portability between environments (prod / test)
+- Environment (Optional) - allow dynamic add/remove of command groups based on prod / test concept
+
+#### ZTP Configuration
+
+This is a minimal configuration which shows variables provided by ZTP and consumed by Jinja 2 templating.  Actual usage could be altered to used External Keystores or other features.
+
+```
+ztp set keystore GLOBAL ztp_env test
+ztp set keystore GLOBAL ztp_ip_addr 10.254.64.20
+ztp set keystore GLOBAL c9300_ver 16.9.3s
+ztp set keystore GLOBAL c9300_image cat9k_iosxe.16.09.03s.SPA.bin
+ztp set keystore GLOBAL c3560cx_ver 15.2(7)e0s
+ztp set keystore GLOBAL c3560cx_image c3560cx-universalk9-tar.152-7.E0s.tar
+ztp set global-keystore GLOBAL
+#
+ztp set keystore myswitch1 model1 c9300-48uxm
+#
+ztp set keystore myswitch2 model1 ws-c3560cx-12pc-s
+#
+ztp set association myswitch1 template SWITCH_BASELINE
+ztp set association myswitch2 template SWITCH_BASELINE
+```
+
+#### Baseline Jinja Components
+
+Place these commands anywhere above the EEM scripts.
+- Uses Jinja 2 if-else-endif logic
+  - `model1[:5]` takes first 5 characters from string passed from ZTP
+- `GLOBAL.c9300_ver` or `GLOBAL.c3560cx_ver` --> `image.ver`
+- `GLOBAL.c9300_image` or `GLOBAL.c3560cx_image` --> `image.bin`
+- `image.ver` and `image.bin` are standard variables used through EEM scripts
+
+```
+!{% if model1[:5] == "c9300" %}
+!---- {%set image={"bin":GLOBAL.c9300_image,"ver":GLOBAL.c9300_ver}%}
+!{% else %}
+!---- {%set image={"bin":GLOBAL.c3560cx_image,"ver":GLOBAL.c3560cx_ver}%}
+!{% endif %}
+```
+
+### EEM Scripts
+
+#### Initial Global Commands
+
+```
+event manager environment q "
+event manager history size events 50
+```
+
+#### Discovery
+
+```
+event manager applet system_check authorization bypass
+ event tag 1 syslog occurs 1 pattern "Configured from tftp://{{ GLOBAL.ztp_ip_addr }}" maxrun 210
+ event tag 2 none
+ trigger
+  correlate event 1 or event 2
+ action 0010 wait 30
+ action 0020 cli command "enable"
+ action 0030 syslog priority informational msg "## Configuration received via TFTP."
+ action 0040 comment Init variables
+ action 0050 set upgrade_required "false"
+ action 0060 set module_ctr 0
+ action 0070 set sup_count 0
+ action 0080 syslog priority informational msg "## Gathering information."
+ action 0090 comment Disable auto-execution of this script.
+ action 0100 cli command "conf t"
+ action 0110 cli command "event manager applet system_check authorization bypass"
+ action 0120 cli command " event tag 1 none maxrun 960"
+ action 0130 cli command "end"
+ action 0140 comment ##### Get Model #####
+ action 0150 comment Get system model from show version (for stacks, gets master)
+ action 0160 cli command "show version | in \)\ processor"
+ action 0170 comment Regex matches cisco + model name
+ action 0180 regexp "[cC]isco\ [a-zA-Z0-9\-]+" "$_cli_result" regexp_match
+ action 0190 comment Remove cisco from string to isolate model, then put in all lower case
+ action 0200 string replace $regexp_match 0 5 ""
+ action 0210 string tolower "$_string_result"
+ action 0220 set result "$_string_result"
+ action 0230 comment Store model name for future applets
+ action 0240 cli command "conf t"
+ action 0250 cli command "event manager environment system_model $result"
+ action 0260 cli command "end"
+ action 0270 syslog priority informational msg "## System Model: $system_model"
+ action 0280 comment ##### Get Version #####
+ action 0290 comment Get system version from SNMP
+ action 0300 info type snmp oid 1.3.6.1.2.1.1.1.0 get-type exact
+ action 0310 comment Regex matches version + version name
+ action 0320 regexp "[vV]ersion\ [a-zA-Z0-9\.\(\)]+" "$_info_snmp_value" regexp_match
+ action 0330 comment Remove word version from string to isolate value, then put in lower case
+ action 0340 string replace $regexp_match 0 7 ""
+ action 0350 string tolower "$_string_result"
+ action 0360 set system_version "$_string_result"
+ action 0370 if $system_version ne "{{image.ver.lower()}}"
+ action 0380  set upgrade_required "true"
+ action 0390 end
+ action 0400 syslog priority informational msg "## System Version: $system_version"
+ action 0410 syslog priority informational msg "## ZTP Version: {{image.ver}}"
+ action 0420 comment ##### Get File System #####
+ action 0430 cli command "show file systems | in \*"
+ action 0440 regexp "boot" $_cli_result
+ action 0450 cli command "configure terminal"
+ action 0460 comment Set fs env var based on presence or absence of word boot
+ action 0470 if $_regexp_result eq 1
+ action 0480  cli command "event manager environment fs bootflash"
+ action 0490 else
+ action 0500  cli command "event manager environment fs flash"
+ action 0510 end
+ action 0520 cli command "end"
+ action 0530 syslog priority informational msg "## File System: $fs"
+ action 0540 comment ##### Get Module Count #####
+ action 0550 comment Get module for alt script timings. Single sup chassis gets count of 1.
+ action 0560 comment Stacks & dual-sup modular chassis log RF-5-RF_TERMINAL_STATE when ready.
+ action 0570 comment Standalone & single sup chassis are ready at SYS-5-RESTART.
+ action 0580 cli command "show module"
+ action 0590 comment Match gives result of 1 if ^ found in output
+ action 0600 string match "*^*" "$_cli_result"
+ action 0610 if $_string_result eq "0"
+ action 0620  comment Stack, stackable, or modular chassis found
+ action 0630  syslog priority informational msg "## Pausing 90s for post-boot processes."
+ action 0640  wait 90
+ action 0650  comment Run command again in case additional stack members came online
+ action 0660  cli command "show module | include ^\ *[0-9]+\ "
+ action 0670  set modules $_cli_result
+ action 0680  foreach line $modules "\n"
+ action 0690   string match nocase "*supervisor*" "$line"
+ action 0700   if $_string_result eq "1"
+ action 0710    increment sup_count 1
+ action 0720   end
+ action 0730   comment Check current line for MAC address (ignore if not present (e.g. switch prompt))
+ action 0740   regexp "[0-9a-fA-F]+\.[0-9a-fA-F]+\.[0-9a-fA-F]+\ " $line
+ action 0750   if $_regexp_result eq "1"
+ action 0760    increment module_ctr 1
+ action 0770   end
+ action 0780  end
+ action 0790  if $sup_count eq 1
+ action 0800   comment Single sup chassis found. Statically set module count to 1.
+ action 0810   set module_ctr 1
+ action 0820  end
+ action 0830  syslog priority informational msg "## Modules in switch: \n$modules"
+ action 0840 else
+ action 0850  comment Non-stackable, standalone chassis found. Statically set module count to 1.
+ action 0860  syslog priority informational msg "## Pausing 30s for post-boot processes."
+ action 0870  wait 30
+ action 0880  set module_ctr 1
+ action 0890 end
+ action 0900 comment Store module count for future applets
+ action 0910 cli command "conf t"
+ action 0920 cli command "event manager environment module_count $module_ctr"
+ action 0930 cli command "end"
+ action 0940 syslog priority informational msg "## Module Count: $module_count"
+ action 0950 comment ##### Prepare for Next Applet #####
+ action 0960 if $upgrade_required eq "false"
+ action 0970  cli command "conf t"
+ action 0980  cli command "event manager environment os_upgraded no"
+ action 0990  cli command "end"
+ action 1000  syslog priority informational msg "## Job Complete. Starting Finalize applet."
+ action 1010  cli command "event manager run system_finalize"
+ action 1020 else
+ action 1030  syslog priority informational msg "## Switches require an upgrade to version {{image.ver}}."
+ action 1040  cli command "conf t"
+ action 1050  cli command "event manager environment os_upgraded yes"
+ action 1060  cli command "event manager applet system_finalize authorization bypass"
+ action 1070  if $module_ctr gt 1
+ action 1080   syslog priority informational msg "## Configuring multi-module trigger for Finalize applet"
+ action 1090   cli command " event tag 1 syslog occurs 1 pattern $q%RF-5-RF_TERMINAL_STATE$q maxrun 630"
+ action 1100  else
+ action 1110   syslog priority informational msg "## Configuring single-module trigger for Finalize applet"
+ action 1120   cli command " event tag 1 syslog occurs 1 pattern $q%SYS-5-RESTART$q maxrun 630"
+ action 1130  end
+ action 1140  cli command "end"
+ action 1150  cli command "write mem" pattern "confirm|#"
+ action 1160  cli command ""
+ action 1170  syslog priority informational msg "## Job Complete. Starting upgrade."
+ action 1180  cli command "event manager run system_upgrade"
+ action 1190 end
+```
+
+#### Upgrade
+
+```
+event manager applet system_upgrade authorization bypass
+ event none maxrun 1800
+ action 010 set download_first 0
+ action 020 set short_model 0
+ action 030 cli command "enable"
+ action 040 regexp "(c9300|c9404r|c9407r|c9410r|c9500|c3850|ie-3200|ie-3400)" $system_model short_model
+ action 050 comment #### Get Install & Cleanup Method #####
+ action 060 cli command "conf t"
+ action 070 regexp "(c9300|c3850)" $short_model
+ action 080 if $_regexp_result eq "1"
+ action 090  comment IOS-XE Fixed configuration switch upgrade method
+ action 100  cli command "event manager environment install_method request"
+ action 110  set download_first 1
+ action 120 end
+ action 130 regexp "(c9404r|c9407r|c9410r|c9500)" $short_model
+ action 140 if $_regexp_result eq "1"
+ action 150  comment IOS-XE Chassis / vStackwise install method
+ action 160  cli command "event manager environment install_method install"
+ action 170  set download_first 1
+ action 180 end
+ action 190 regexp "(ie-3200|ie-3400)" $short_model
+ action 200 if $_regexp_result eq "1"
+ action 210  comment IOS Direct replacement of boot variable
+ action 220  cli command "event manager environment install_method bootvar"
+ action 230  set download_first 1
+ action 240 end
+ action 250 comment Check if install_method env var exists
+ action 260 handle-error type ignore
+ action 270 set test $install_method
+ action 280 if $_error eq FH_EMEMORY
+ action 290  comment Var absent.  All other switches use archive method
+ action 300  handle-error type exit
+ action 310  comment IOS Tarball install method.  Auto removes old image from switch
+ action 320  cli command "event manager environment install_method archive"
+ action 330 end
+ action 340 cli command "end"
+ action 350 handle-error type exit
+ action 360 syslog priority informational msg "## Installation Method: $install_method"
+ action 370 comment ##### Load OS #####
+ action 380 if $download_first eq "1"
+ action 390  syslog priority informational msg "## Downloading image..."
+ action 400  comment HTTP may offer better download performance for large images.
+ action 410  comment Server address and image from jinja merge.
+ action 420  comment Delete previous download, if present, to prevent script hang
+ action 430  cli command "delete /force $fs:{{image.bin}}"
+ action 440  cli command "copy http://{{GLOBAL.ztp_ip_addr}}/{{image.bin}} $fs:" pattern "Destination|#"
+ action 450  cli command ""
+ action 460 end
+ action 470 comment Save before install to prevent unwanted save prompts
+ action 480 cli command "write mem" pattern "confirm|#"
+ action 490 cli command ""
+ action 500 if $install_method eq "request"
+ action 510  syslog priority informational msg "## Upgrading..."
+ action 520  cli command "request platform software package install switch all file $fs:{{image.bin}} force new auto-copy verbose" pattern "proceed|#"
+ action 530  cli command "y"
+ action 540  reload
+ action 550 elseif $install_method eq "install"
+ action 560  syslog priority informational msg "## Upgrading..."
+ action 570  comment WARNING - Do not use ISSU method.  Allow entire chassis to reboot.
+ action 580  cli command "install add file $fs:{{image.bin}} activate commit" pattern "proceed|#"
+ action 590  cli command "y"
+ action 600 elseif $install_method eq "bootvar"
+ action 610  syslog priority informational msg "## Upgrading..."
+ action 620  comment Get booted image from SNMP, then delete to clear space
+ action 630  info type snmp oid 1.3.6.1.2.1.16.19.6.0 get-type exact
+ action 640  cli command "delete /force $_info_snmp_value"
+ action 650  cli command "conf t"
+ action 660  cli command "no boot manual"
+ action 670  cli command "no boot system"
+ action 680  cli command "boot system $fs:{{image.bin}}"
+ action 690  cli command "end"
+ action 700  cli command "write mem" pattern "confirm|#"
+ action 710  cli command ""
+ action 720  reload
+ action 730 elseif $install_method eq "archive"
+ action 740  syslog priority informational msg "## Downloading and Upgrading..."
+ action 750  cli command "archive download-sw /imageonly /overwrite /allow-feature-upgrade http://{{GLOBAL.ztp_ip_addr}}/{{image.bin}}"
+ action 760  reload
+ action 770 end
+```
+
+#### Finalize
+
+```
+event manager applet system_finalize authorization bypass
+ event tag 1 none maxrun 630
+ event tag 2 none
+ trigger
+  correlate event 1 or event 2
+ action 010 syslog priority informational msg "## Starting Finalize..."
+ action 020 cli command "enable"
+ action 030 if $os_upgraded eq "yes"
+ action 040  if $module_count gt 1
+ action 050   comment Stack or dual-sup. Applet triggered at Bulk Sync. Start immediately.
+ action 060   syslog priority informational msg "## Stack rebooted to new image. SSO Terminal State reached."
+ action 070  else
+ action 080   comment Standalone switch. Applet triggered at boot.  Pause for boot processes to complete.
+ action 090   syslog priority informational msg "## Switch rebooted to new image. Waiting 60s."
+ action 100   wait 60
+ action 110  end
+ action 120  syslog priority informational msg "## Removing unused packages..."
+ action 130 if $install_method eq "request"
+ action 140  cli command "request platform software package clean switch all" pattern "proceed|#"
+ action 150  cli command "y"
+ action 160 elseif $install_method eq "install"
+ action 170  cli command "install remove inactive" pattern "\[y\/n\]|#"
+ action 180  cli command "y"
+ action 190 end
+ action 200  syslog priority informational msg "## Unused packages have been removed."
+ action 210 end
+ action 220 syslog priority informational msg "## Applying supplemental configuration."
+ action 230 cli command "conf t"
+**! Demonstration of prod / test
+{% if GLOBAL.ztp_env == "prod" %}**
+ action 240 cli command "errdisable recovery interval 900"
+ action 250 cli command "no logging console"
+ action 260 cli command "aaa authentication login default group TACACS-SERVERS local"
+ action 270 cli command "aaa authorization exec default group TACACS-SERVERS local if-authenticated"
+ action 280 cli command "aaa authorization commands 15 default group TACACS-SERVERS local if-authenticated"
+ action 290 cli command "aaa accounting exec default start-stop group TACACS-SERVERS"
+ action 300 cli command "aaa accounting commands 15 default start-stop group TACACS-SERVERS"
+ action 310 cli command "line vty 0 15"
+ action 320 cli command " access-class 30 in"
+**{% endif %}**
+ action 330 cli command "no snmp-server community secretcommunity RO"
+ action 340 cli command "interface Vlan1"
+ action 350 cli command " description UNUSED. SHUTDOWN."
+ action 360 cli command " no ip address"
+ action 370 cli command " shutdown"
+ action 380 cli command "end"
+ action 390 cli command "write mem" pattern "confirm|#"
+ action 400 cli command ""
+ action 410 syslog priority informational msg "## Job complete."
+```
+
+#### Cleanup
+
+```
+event manager applet clean_applets authorization bypass
+ event tag 1 timer cron name clean_applets_cron cron-entry "0 0 * * *" maxrun 60
+ event tag 2 none
+ trigger
+  correlate event 1 or event 2
+ action 010 syslog priority informational msg "## Starting Cleanup applet."
+ action 020 cli command "enable"
+ action 030 cli command "conf t"
+ action 040 cli command "no event manager environment q"
+ action 050 cli command "no event manager environment system_model"
+ action 060 cli command "no event manager environment module_count"
+ action 070 cli command "no event manager environment fs"
+ action 080 cli command "no event manager environment install_method"
+ action 090 cli command "no event manager environment os_upgraded"
+ action 100 cli command "no event manager applet system_check"
+ action 110 cli command "no event manager applet system_upgrade"
+ action 120 cli command "no event manager applet system_finalize"
+ action 130 cli command "no event manager applet set_stack_priority"
+ action 140 cli command "end"
+ action 150 cli command "write mem" pattern "confirm|#"
+ action 160 cli command ""
+ action 170 cli command "exit"
+ action 180 syslog priority informational msg "## Cleanup applet complete."
+```
 
 
 
