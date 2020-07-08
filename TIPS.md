@@ -1040,7 +1040,7 @@ event manager history size events 50
 
 ```
 event manager applet system_check authorization bypass
- event tag 1 syslog occurs 1 pattern "Configured from tftp://{{ GLOBAL.ztp_ip_addr }}" maxrun 210
+ event tag 1 syslog occurs 1 pattern "Configured from tftp://{{ GLOBAL.ztp_ip_addr }}" maxrun 300
  event tag 2 none
  trigger
   correlate event 1 or event 2
@@ -1051,118 +1051,129 @@ event manager applet system_check authorization bypass
  action 0050 set upgrade_required "false"
  action 0060 set module_ctr 0
  action 0070 set sup_count 0
- action 0080 syslog priority informational msg "## Gathering information."
- action 0090 comment Disable auto-execution of this script.
- action 0100 cli command "conf t"
- action 0110 cli command "event manager applet system_check authorization bypass"
- action 0120 cli command " event tag 1 none maxrun 960"
- action 0130 cli command "end"
- action 0140 comment ##### Get Model #####
- action 0150 comment Get system model from show version (for stacks, gets master)
- action 0160 cli command "show version | in \)\ processor"
- action 0170 comment Regex matches cisco + model name
- action 0180 regexp "[cC]isco\ [a-zA-Z0-9\-]+" "$_cli_result" regexp_match
- action 0190 comment Remove cisco from string to isolate model, then put in all lower case
- action 0200 string replace $regexp_match 0 5 ""
- action 0210 string tolower "$_string_result"
- action 0220 set result "$_string_result"
- action 0230 comment Store model name for future applets
- action 0240 cli command "conf t"
- action 0250 cli command "event manager environment system_model $result"
- action 0260 cli command "end"
- action 0270 syslog priority informational msg "## System Model: $system_model"
- action 0280 comment ##### Get Version #####
- action 0290 comment Get system version from SNMP
- action 0300 info type snmp oid 1.3.6.1.2.1.1.1.0 get-type exact
- action 0310 comment Regex matches version + version name
- action 0320 regexp "[vV]ersion\ [a-zA-Z0-9\.\(\)]+" "$_info_snmp_value" regexp_match
- action 0330 comment Remove word version from string to isolate value, then put in lower case
- action 0340 string replace $regexp_match 0 7 ""
- action 0350 string tolower "$_string_result"
- action 0360 set system_version "$_string_result"
- action 0370 if $system_version ne "{{image.ver.lower()}}"
- action 0380  set upgrade_required "true"
- action 0390 end
- action 0400 syslog priority informational msg "## System Version: $system_version"
- action 0410 syslog priority informational msg "## ZTP Version: {{image.ver}}"
- action 0420 comment ##### Get File System #####
- action 0430 cli command "show file systems | in \*"
- action 0440 regexp "boot" $_cli_result
- action 0450 cli command "configure terminal"
- action 0460 comment Set fs env var based on presence or absence of word boot
- action 0470 if $_regexp_result eq 1
- action 0480  cli command "event manager environment fs bootflash"
- action 0490 else
- action 0500  cli command "event manager environment fs flash"
- action 0510 end
- action 0520 cli command "end"
- action 0530 syslog priority informational msg "## File System: $fs"
- action 0540 comment ##### Get Module Count #####
- action 0550 comment Get module for alt script timings. Single sup chassis gets count of 1.
- action 0560 comment Stacks & dual-sup modular chassis log RF-5-RF_TERMINAL_STATE when ready.
- action 0570 comment Standalone & single sup chassis are ready at SYS-5-RESTART.
- action 0580 cli command "show module"
- action 0590 comment Match gives result of 1 if ^ found in output
- action 0600 string match "*^*" "$_cli_result"
- action 0610 if $_string_result eq "0"
- action 0620  comment Stack, stackable, or modular chassis found
- action 0630  syslog priority informational msg "## Pausing 90s for post-boot processes."
- action 0640  wait 90
- action 0650  comment Run command again in case additional stack members came online
- action 0660  cli command "show module | include ^\ *[0-9]+\ "
- action 0670  set modules $_cli_result
- action 0680  foreach line $modules "\n"
- action 0690   string match nocase "*supervisor*" "$line"
- action 0700   if $_string_result eq "1"
- action 0710    increment sup_count 1
- action 0720   end
- action 0730   comment Check current line for MAC address (ignore if not present (e.g. switch prompt))
- action 0740   regexp "[0-9a-fA-F]+\.[0-9a-fA-F]+\.[0-9a-fA-F]+\ " $line
- action 0750   if $_regexp_result eq "1"
- action 0760    increment module_ctr 1
- action 0770   end
- action 0780  end
- action 0790  if $sup_count eq 1
- action 0800   comment Single sup chassis found. Statically set module count to 1.
- action 0810   set module_ctr 1
- action 0820  end
- action 0830  syslog priority informational msg "## Modules in switch: \n$modules"
- action 0840 else
- action 0850  comment Non-stackable, standalone chassis found. Statically set module count to 1.
- action 0860  syslog priority informational msg "## Pausing 30s for post-boot processes."
- action 0870  wait 30
- action 0880  set module_ctr 1
- action 0890 end
- action 0900 comment Store module count for future applets
- action 0910 cli command "conf t"
- action 0920 cli command "event manager environment module_count $module_ctr"
- action 0930 cli command "end"
- action 0940 syslog priority informational msg "## Module Count: $module_count"
- action 0950 comment ##### Prepare for Next Applet #####
- action 0960 if $upgrade_required eq "false"
- action 0970  cli command "conf t"
- action 0980  cli command "event manager environment os_upgraded no"
- action 0990  cli command "end"
- action 1000  syslog priority informational msg "## Job Complete. Starting Finalize applet."
- action 1010  cli command "event manager run system_finalize"
- action 1020 else
- action 1030  syslog priority informational msg "## Switches require an upgrade to version {{image.ver}}."
- action 1040  cli command "conf t"
- action 1050  cli command "event manager environment os_upgraded yes"
- action 1060  cli command "event manager applet system_finalize authorization bypass"
- action 1070  if $module_ctr gt 1
- action 1080   syslog priority informational msg "## Configuring multi-module trigger for Finalize applet"
- action 1090   cli command " event tag 1 syslog occurs 1 pattern $q%RF-5-RF_TERMINAL_STATE$q maxrun 630"
- action 1100  else
- action 1110   syslog priority informational msg "## Configuring single-module trigger for Finalize applet"
- action 1120   cli command " event tag 1 syslog occurs 1 pattern $q%SYS-5-RESTART$q maxrun 630"
- action 1130  end
- action 1140  cli command "end"
- action 1150  cli command "write mem" pattern "confirm|#"
- action 1160  cli command ""
- action 1170  syslog priority informational msg "## Job Complete. Starting upgrade."
- action 1180  cli command "event manager run system_upgrade"
- action 1190 end
+ action 0080 set loop_ctr 0
+ action 0090 syslog priority informational msg "## Gathering information."
+ action 0100 comment Disable auto-execution of this script.
+ action 0110 cli command "configure terminal"
+ action 0120 cli command "event manager applet system_check authorization bypass"
+ action 0130 cli command " event tag 1 none maxrun 960"
+ action 0140 cli command "end"
+ action 0150 comment ##### Get Model #####
+ action 0160 comment Get system model from show version (for stacks, gets master)
+ action 0170 cli command "show version | in \)\ processor"
+ action 0180 comment Regex matches cisco + model name
+ action 0190 regexp "[cC]isco\ [a-zA-Z0-9\-]+" "$_cli_result" regexp_match
+ action 0200 comment Remove cisco from string to isolate model, then put in all lower case
+ action 0210 string replace $regexp_match 0 5 ""
+ action 0220 string tolower "$_string_result"
+ action 0230 set result "$_string_result"
+ action 0240 comment Store model name for future applets
+ action 0250 cli command "configure terminal"
+ action 0260 cli command "event manager environment system_model $result"
+ action 0270 cli command "end"
+ action 0280 syslog priority informational msg "## System Model: $system_model"
+ action 0290 comment ##### Get Version #####
+ action 0300 comment Get system version from SNMP
+ action 0310 info type snmp oid 1.3.6.1.2.1.1.1.0 get-type exact
+ action 0320 comment Regex matches version + version name
+ action 0330 regexp "[vV]ersion\ [a-zA-Z0-9\.\(\)]+" "$_info_snmp_value" regexp_match
+ action 0340 comment Remove word version from string to isolate value, then put in lower case
+ action 0350 string replace $regexp_match 0 7 ""
+ action 0360 string tolower "$_string_result"
+ action 0370 set system_version "$_string_result"
+ action 0380 if $system_version ne "{{image.ver.lower()}}"
+ action 0390  set upgrade_required "true"
+ action 0400 end
+ action 0410 syslog priority informational msg "## System Version: $system_version"
+ action 0420 syslog priority informational msg "## ZTP Version: {{image.ver}}"
+ action 0430 comment ##### Get File System #####
+ action 0440 cli command "show file systems | in \*"
+ action 0450 regexp "boot" $_cli_result
+ action 0460 cli command "configure terminal"
+ action 0470 comment Set fs env var based on presence or absence of word boot
+ action 0480 if $_regexp_result eq 1
+ action 0490  cli command "event manager environment fs bootflash"
+ action 0500 else
+ action 0510  cli command "event manager environment fs flash"
+ action 0520 end
+ action 0530 cli command "end"
+ action 0540 syslog priority informational msg "## File System: $fs"
+ action 0550 comment ##### Get Module Count #####
+ action 0560 comment Get module for alt script timings. Single sup chassis gets count of 1.
+ action 0570 comment Stacks & dual-sup modular chassis log RF-5-RF_TERMINAL_STATE when ready.
+ action 0580 comment Standalone & single sup chassis are ready at SYS-5-RESTART.
+ action 0590  cli command "show module | include ^\ *[0-9]+\ "
+ action 0600 comment Look for ^ from command failure (non-stackable switches)
+ action 0610 string match "*^*" "$_cli_result"
+ action 0620 if $_string_result eq "1"
+ action 0630  comment Non-stackable, standalone chassis found. Statically set module count to 1.
+ action 0640  syslog priority informational msg "## Pausing 30s for post-boot processes."
+ action 0650  wait 30
+ action 0660  set module_ctr 1
+ action 0670 else
+ action 0680  comment Stack, stackable, or modular chassis found
+ action 0690  set modules $_cli_result
+ action 0700  foreach line $modules "\n"
+ action 0710   string match nocase "*supervisor*" "$line"
+ action 0720   if $_string_result eq "1"
+ action 0730    increment sup_count 1
+ action 0740   end
+ action 0750   comment Check current line for MAC address (ignore if not present (e.g. switch prompt))
+ action 0760   regexp "[0-9a-fA-F]+\.[0-9a-fA-F]+\.[0-9a-fA-F]+\ " $line
+ action 0770   if $_regexp_result eq "1"
+ action 0780    increment module_ctr 1
+ action 0790   end
+ action 0800  end
+ action 0810  if $sup_count eq 1
+ action 0820   comment Single sup chassis found. Statically set module count to 1.
+ action 0830   set module_ctr 1
+ action 0840  end
+ action 0850  syslog priority informational msg "## Modules in switch: \n$modules"
+ action 0860  comment Pause script as needed to allow SSO to complete
+ action 0870  if $module_ctr gt "1"
+ action 0880   syslog priority informational msg "## Pausing up to 210s for SSO."
+ action 0890   while $loop_ctr lt 42
+ action 0900    cli command "show logging | in RF-5-RF_TERMINAL_STATE"
+ action 0910    regexp "RF-5-RF_TERMINAL_STATE" $_cli_result
+ action 0920    if $_regexp_result eq "1"
+ action 0930     break
+ action 0940    else
+ action 0950     increment loop_ctr 1
+ action 0960     wait 5
+ action 0970    end
+ action 0980   end
+ action 0990  end
+ action 1000 end
+ action 1010 comment Store module count for future applets
+ action 1020 cli command "configure terminal"
+ action 1030 cli command "event manager environment module_count $module_ctr"
+ action 1040 cli command "end"
+ action 1050 syslog priority informational msg "## Module Count: $module_count"
+ action 1060 comment ##### Prepare for Next Applet #####
+ action 1070 if $upgrade_required eq "false"
+ action 1080  cli command "configure terminal"
+ action 1090  cli command "event manager environment os_upgraded no"
+ action 1100  cli command "end"
+ action 1110  syslog priority informational msg "## Job Complete. Starting Finalize applet."
+ action 1120  cli command "event manager run system_finalize"
+ action 1130 else
+ action 1140  syslog priority informational msg "## Switches require an upgrade to version {{image.ver}}."
+ action 1150  cli command "configure terminal"
+ action 1160  cli command "event manager environment os_upgraded yes"
+ action 1170  cli command "event manager applet system_finalize authorization bypass"
+ action 1180  if $module_ctr gt 1
+ action 1190   syslog priority informational msg "## Configuring multi-module trigger for Finalize applet"
+ action 1200   cli command " event tag 1 syslog occurs 1 pattern $q%RF-5-RF_TERMINAL_STATE$q maxrun 630"
+ action 1210  else
+ action 1220   syslog priority informational msg "## Configuring single-module trigger for Finalize applet"
+ action 1230   cli command " event tag 1 syslog occurs 1 pattern $q%SYS-5-RESTART$q maxrun 630"
+ action 1240  end
+ action 1250  cli command "end"
+ action 1260  cli command "write mem" pattern "confirm|#"
+ action 1270  cli command ""
+ action 1280  syslog priority informational msg "## Job Complete. Starting upgrade."
+ action 1290  cli command "event manager run system_upgrade"
+ action 1300 end
 ```
 
 #### Upgrade
@@ -1259,6 +1270,40 @@ event manager applet system_finalize authorization bypass
   correlate event 1 or event 2
  action 010 syslog priority informational msg "## Starting Finalize..."
  action 020 cli command "enable"
+ action 030 syslog priority informational msg "## Applying supplemental configuration."
+ action 040 cli command "configure terminal"
+{% if GLOBAL.ztp_env == "prod" %}
+ action 050 cli command "errdisable recovery interval 900"
+ action 060 cli command "no logging console"
+ action 070 cli command "aaa authentication login default group TACACS-SERVERS local"
+ action 080 cli command "aaa authorization exec default group TACACS-SERVERS local if-authenticated"
+ action 090 cli command "aaa authorization commands 15 default group TACACS-SERVERS local if-authenticated"
+ action 100 cli command "aaa accounting exec default start-stop group TACACS-SERVERS"
+ action 110 cli command "aaa accounting commands 15 default start-stop group TACACS-SERVERS"
+ action 120 cli command "line vty 0 15"
+ action 130 cli command " access-class 30 in"
+{% endif %}
+ action 140 cli command "no snmp-server community secretcommunity RO"
+ action 150 cli command "interface Vlan1"
+ action 160 cli command " description UNUSED. SHUTDOWN."
+ action 170 cli command " no ip address"
+ action 180 cli command " shutdown"
+ action 190 cli command "end"
+ action 200 cli command "write mem" pattern "confirm|#"
+ action 210 cli command ""
+ action 220 syslog priority informational msg "## Job complete."
+```
+
+#### Cleanup
+
+```
+event manager applet system_clean authorization bypass
+ event tag 1 timer cron name system_clean_cron cron-entry "0 0 * * *" maxrun 60
+ event tag 2 none
+ trigger
+  correlate event 1 or event 2
+ action 010 syslog priority informational msg "## Starting Cleanup applet."
+ action 020 cli command "enable"
  action 030 if $os_upgraded eq "yes"
  action 040  if $module_count gt 1
  action 050   comment Stack or dual-sup. Applet triggered at Bulk Sync. Start immediately.
@@ -1269,66 +1314,36 @@ event manager applet system_finalize authorization bypass
  action 100   wait 60
  action 110  end
  action 120  syslog priority informational msg "## Removing unused packages..."
- action 130 if $install_method eq "request"
- action 140  cli command "request platform software package clean switch all" pattern "proceed|#"
- action 150  cli command "y"
- action 160 elseif $install_method eq "install"
- action 170  cli command "install remove inactive" pattern "\[y\/n\]|#"
- action 180  cli command "y"
- action 190 end
+ action 130  if $install_method eq "request"
+ action 140   cli command "request platform software package clean switch all" pattern "proceed|#"
+ action 150   cli command "y"
+ action 160  elseif $install_method eq "install"
+ action 170   cli command "install remove inactive" pattern "\[y\/n\]|#"
+ action 180   cli command "y"
+ action 190  end
  action 200  syslog priority informational msg "## Unused packages have been removed."
  action 210 end
- action 220 syslog priority informational msg "## Applying supplemental configuration."
- action 230 cli command "conf t"
-**! Demonstration of prod / test
-{% if GLOBAL.ztp_env == "prod" %}**
- action 240 cli command "errdisable recovery interval 900"
- action 250 cli command "no logging console"
- action 260 cli command "aaa authentication login default group TACACS-SERVERS local"
- action 270 cli command "aaa authorization exec default group TACACS-SERVERS local if-authenticated"
- action 280 cli command "aaa authorization commands 15 default group TACACS-SERVERS local if-authenticated"
- action 290 cli command "aaa accounting exec default start-stop group TACACS-SERVERS"
- action 300 cli command "aaa accounting commands 15 default start-stop group TACACS-SERVERS"
- action 310 cli command "line vty 0 15"
- action 320 cli command " access-class 30 in"
-**{% endif %}**
- action 330 cli command "no snmp-server community secretcommunity RO"
- action 340 cli command "interface Vlan1"
- action 350 cli command " description UNUSED. SHUTDOWN."
- action 360 cli command " no ip address"
- action 370 cli command " shutdown"
+ action 220 syslog priority informational msg "## Removing EEM applets and environment variables."
+ action 230 cli command "configure terminal"
+ action 240 cli command "no event manager environment q"
+ action 250 cli command "no event manager environment system_model"
+ action 260 cli command "no event manager environment module_count"
+ action 270 cli command "no event manager environment fs"
+ action 280 cli command "no event manager environment install_method"
+ action 290 cli command "no event manager environment os_upgraded"
+ action 300 cli command "no event manager applet system_check"
+ action 310 cli command "no event manager applet system_upgrade"
+ action 320 cli command "no event manager applet system_finalize"
+ action 330 cli command "no event manager applet set_stack_priority"
+ action 340 cli command "no event manager applet convert_trunk"
+ action 350 cli command "no event manager applet system_clean"
+ action 360 cli command "no event manager applet log_ruckus_lldp_discovery"
+ action 370 cli command "no event manager applet reconfig_ruckus_ports"
  action 380 cli command "end"
  action 390 cli command "write mem" pattern "confirm|#"
  action 400 cli command ""
- action 410 syslog priority informational msg "## Job complete."
-```
-
-#### Cleanup
-
-```
-event manager applet clean_applets authorization bypass
- event tag 1 timer cron name clean_applets_cron cron-entry "0 0 * * *" maxrun 60
- event tag 2 none
- trigger
-  correlate event 1 or event 2
- action 010 syslog priority informational msg "## Starting Cleanup applet."
- action 020 cli command "enable"
- action 030 cli command "conf t"
- action 040 cli command "no event manager environment q"
- action 050 cli command "no event manager environment system_model"
- action 060 cli command "no event manager environment module_count"
- action 070 cli command "no event manager environment fs"
- action 080 cli command "no event manager environment install_method"
- action 090 cli command "no event manager environment os_upgraded"
- action 100 cli command "no event manager applet system_check"
- action 110 cli command "no event manager applet system_upgrade"
- action 120 cli command "no event manager applet system_finalize"
- action 130 cli command "no event manager applet set_stack_priority"
- action 140 cli command "end"
- action 150 cli command "write mem" pattern "confirm|#"
- action 160 cli command ""
- action 170 cli command "exit"
- action 180 syslog priority informational msg "## Cleanup applet complete."
+ action 410 cli command "exit"
+ action 420 syslog priority informational msg "## Cleanup applet complete."
 ```
 
 
