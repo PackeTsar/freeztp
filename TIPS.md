@@ -1264,7 +1264,7 @@ event manager applet system_upgrade authorization bypass
 
 ```
 event manager applet system_finalize authorization bypass
- event tag 1 none maxrun 630
+ event tag 1 none maxrun 120
  event tag 2 none
  trigger
   correlate event 1 or event 2
@@ -1298,7 +1298,7 @@ event manager applet system_finalize authorization bypass
 
 ```
 event manager applet system_clean authorization bypass
- event tag 1 timer cron name system_clean_cron cron-entry "0 0 * * *" maxrun 60
+ event tag 1 timer cron name system_clean_cron cron-entry "0 0 * * *" maxrun 630
  event tag 2 none
  trigger
   correlate event 1 or event 2
