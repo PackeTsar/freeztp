@@ -672,14 +672,14 @@ class config_factory:
 					quit()
 				else:
 					env = j2.Environment(loader=j2.FileSystemLoader('/'))
+					my_filters = {name: function 
+						for name, function in getmembers(nstam_ipaddr)
+					      	if isfunction(function)}
+					env.filters.update(my_filters)
 					j2template = env.from_string(templatedata)
 					ast = env.parse(templatedata)
 			elif template == "initial":
 				env = j2.Environment(loader=j2.FileSystemLoader('/'))
-				my_filters = {name: function 
-					      for name, function in getmembers(nstam_ipaddr)
-					      	if isfunction(function)}
-				env.filters.update(my_filters)
 				j2template = env.from_string(self.baseconfig)
 				ast = j2template.parse(self.baseconfig)
 			templatevarlist = list(meta.find_undeclared_variables(ast))
