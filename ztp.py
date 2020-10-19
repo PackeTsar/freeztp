@@ -3410,7 +3410,7 @@ class external_keystore_main:
 				id = row["keystore_id"]
 				array_keys = []
 				for key in row.keys():
-					if row[key]:
+					if row[key] or row[key]==0:
 						if key == "association":
 							association_commands.append("ztp set association id %s template %s" % (id, row[key]))
 						elif key[:7] == "idarray":
@@ -3490,7 +3490,7 @@ class external_keystore_main:
 							unordered_arrays = {}
 							ordered_keys = []
 							for key in row:
-								if row[key]:
+								if row[key] or row[key]==0:
 									if key == "association":
 										associations.update({id: row[key]})
 									if key[:7] == "idarray":
