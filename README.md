@@ -69,12 +69,13 @@ Make sure you are logged in as root or are able to `sudo su` to install and oper
 		- Make sure to install python-pip and git for Ubuntu
 			- `sudo apt install -y python-pip`
 			- `sudo apt-get install -y git`
-	- **Ubuntu 20:**
+	- **Ubuntu 18 or 20:**
 		- Install Git and Curl Clients
 			- `apt install git`
 			- `apt install curl`
 		- Install Python2 and create a symlink for it
 			- `sudo apt install python2`
+				- Use `sudo apt-get install python-pip` on Ubuntu 18
 			- `sudo ln -s /usr/bin/python2.7 /usr/bin/python`
 		- Install PIP for Python2
 			- `curl https://bootstrap.pypa.io/pip/2.7/get-pip.py --output get-pip.py`
