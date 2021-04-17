@@ -981,6 +981,12 @@ The script suite presented contains 4 basic sections: discovery, upgrade, finali
   - Both jumbo and standard frame configurations were tested
   - Apache was installed on ZTP server to provide HTTP download
 
+### Changes (2021-04-17)
+- Order of operations change in system_check to fix stack detection issues.
+- Migrated embedded Jinja2 substitutions to event manager environment variables (global). This improves readability and simplifies manual configuration when ZTP variables are not available.
+- Added Catalyst 9200 to system_upgrade (uses `install` method)
+- Changed example ZTP configuration to use "c9k" and "c9klite".  `c9k_image` covers all Catalyst 9K except ones that use the "lite" image (e.g. Catalyst 9200).
+
 ### Implementation
 
 The sample leverages ZTP keystores to provide variables that are consumed in the configuration merge.
@@ -996,8 +1002,9 @@ This is a minimal configuration which shows variables provided by ZTP and consum
 ```
 ztp set keystore GLOBAL ztp_env test
 ztp set keystore GLOBAL ztp_ip_addr 10.254.64.20
-ztp set keystore GLOBAL c9300_ver 16.9.3s
-ztp set keystore GLOBAL c9300_image cat9k_iosxe.16.09.03s.SPA.bin
+ztp set keystore GLOBAL c9k_ver 16.9.3s
+ztp set keystore GLOBAL c9k_image cat9k_iosxe.16.09.03s.SPA.bin
+ztp set keystore GLOBAL c9klite_image cat9k_iosxe.16.09.03s.SPA.bin
 ztp set keystore GLOBAL c3560cx_ver 15.2(7)e0s
 ztp set keystore GLOBAL c3560cx_image c3560cx-universalk9-tar.152-7.E0s.tar
 ztp set global-keystore GLOBAL
@@ -1015,13 +1022,15 @@ ztp set association myswitch2 template SWITCH_BASELINE
 Place these commands anywhere above the EEM scripts.
 - Uses Jinja 2 if-else-endif logic
   - `model1[:5]` takes first 5 characters from string passed from ZTP
-- `GLOBAL.c9300_ver` or `GLOBAL.c3560cx_ver` --> `image.ver`
-- `GLOBAL.c9300_image` or `GLOBAL.c3560cx_image` --> `image.bin`
+- `GLOBAL.c9k_ver` or `GLOBAL.c3560cx_ver` --> `image.ver`
+- `GLOBAL.c9k_image` or `GLOBAL.c9klite_image` or `GLOBAL.c3560cx_image` --> `image.bin`
 - `image.ver` and `image.bin` are standard variables used through EEM scripts
 
 ```
-!{% if model1[:5] == "c9300" %}
-!---- {%set image={"bin":GLOBAL.c9300_image,"ver":GLOBAL.c9300_ver}%}
+!{% if model1[:5] == "c9200" %}
+! {%set image={"bin":GLOBAL.c9klite_image,"ver":GLOBAL.c9k_ver}%}
+!{% elif model1[:2] == "c9" %}
+! {%set image={"bin":GLOBAL.c9k_image,"ver":GLOBAL.c9k_ver}%}
 !{% else %}
 !---- {%set image={"bin":GLOBAL.c3560cx_image,"ver":GLOBAL.c3560cx_ver}%}
 !{% endif %}
@@ -1033,6 +1042,10 @@ Place these commands anywhere above the EEM scripts.
 
 ```
 event manager environment q "
+event manager environment ver {{image.ver}}
+event manager environment lver {{image.ver.lower()}}
+event manager environment image {{image.bin}}
+event manager environment ztp_ip {{GLOBAL.ztp_ip_addr}}
 event manager history size events 50
 ```
 
@@ -1040,7 +1053,7 @@ event manager history size events 50
 
 ```
 event manager applet system_check authorization bypass
- event tag 1 syslog occurs 1 pattern "Configured from tftp://{{ GLOBAL.ztp_ip_addr }}" maxrun 300
+ event tag 1 syslog occurs 1 pattern "Configured from tftp://$ztp_ip" maxrun 300
  event tag 2 none
  trigger
   correlate event 1 or event 2
@@ -1053,102 +1066,102 @@ event manager applet system_check authorization bypass
  action 0070 set sup_count 0
  action 0080 set loop_ctr 0
  action 0090 syslog priority informational msg "## Gathering information."
- action 0100 comment Disable auto-execution of this script.
- action 0110 cli command "configure terminal"
- action 0120 cli command "event manager applet system_check authorization bypass"
- action 0130 cli command " event tag 1 none maxrun 960"
- action 0140 cli command "end"
- action 0150 comment ##### Get Model #####
- action 0160 comment Get system model from show version (for stacks, gets master)
- action 0170 cli command "show version | in \)\ processor"
- action 0180 comment Regex matches cisco + model name
- action 0190 regexp "[cC]isco\ [a-zA-Z0-9\-]+" "$_cli_result" regexp_match
- action 0200 comment Remove cisco from string to isolate model, then put in all lower case
- action 0210 string replace $regexp_match 0 5 ""
- action 0220 string tolower "$_string_result"
- action 0230 set result "$_string_result"
- action 0240 comment Store model name for future applets
- action 0250 cli command "configure terminal"
- action 0260 cli command "event manager environment system_model $result"
- action 0270 cli command "end"
- action 0280 syslog priority informational msg "## System Model: $system_model"
- action 0290 comment ##### Get Version #####
- action 0300 comment Get system version from SNMP
- action 0310 info type snmp oid 1.3.6.1.2.1.1.1.0 get-type exact
- action 0320 comment Regex matches version + version name
- action 0330 regexp "[vV]ersion\ [a-zA-Z0-9\.\(\)]+" "$_info_snmp_value" regexp_match
- action 0340 comment Remove word version from string to isolate value, then put in lower case
- action 0350 string replace $regexp_match 0 7 ""
- action 0360 string tolower "$_string_result"
- action 0370 set system_version "$_string_result"
- action 0380 if $system_version ne "{{image.ver.lower()}}"
- action 0390  set upgrade_required "true"
- action 0400 end
- action 0410 syslog priority informational msg "## System Version: $system_version"
- action 0420 syslog priority informational msg "## ZTP Version: {{image.ver}}"
- action 0430 comment ##### Get File System #####
- action 0440 cli command "show file systems | in \*"
- action 0450 regexp "boot" $_cli_result
- action 0460 cli command "configure terminal"
- action 0470 comment Set fs env var based on presence or absence of word boot
- action 0480 if $_regexp_result eq 1
- action 0490  cli command "event manager environment fs bootflash"
- action 0500 else
- action 0510  cli command "event manager environment fs flash"
- action 0520 end
- action 0530 cli command "end"
- action 0540 syslog priority informational msg "## File System: $fs"
- action 0550 comment ##### Get Module Count #####
- action 0560 comment Get module for alt script timings. Single sup chassis gets count of 1.
- action 0570 comment Stacks & dual-sup modular chassis log RF-5-RF_TERMINAL_STATE when ready.
- action 0580 comment Standalone & single sup chassis are ready at SYS-5-RESTART.
- action 0590  cli command "show module | include ^\ *[0-9]+\ "
- action 0600 comment Look for ^ from command failure (non-stackable switches)
- action 0610 string match "*^*" "$_cli_result"
- action 0620 if $_string_result eq "1"
- action 0630  comment Non-stackable, standalone chassis found. Statically set module count to 1.
- action 0640  syslog priority informational msg "## Pausing 30s for post-boot processes."
- action 0650  wait 30
- action 0660  set module_ctr 1
- action 0670 else
- action 0680  comment Stack, stackable, or modular chassis found
- action 0690  set modules $_cli_result
- action 0700  foreach line $modules "\n"
- action 0710   string match nocase "*supervisor*" "$line"
- action 0720   if $_string_result eq "1"
- action 0730    increment sup_count 1
- action 0740   end
- action 0750   comment Check current line for MAC address (ignore if not present (e.g. switch prompt))
- action 0760   regexp "[0-9a-fA-F]+\.[0-9a-fA-F]+\.[0-9a-fA-F]+\ " $line
- action 0770   if $_regexp_result eq "1"
- action 0780    increment module_ctr 1
- action 0790   end
- action 0800  end
- action 0810  if $sup_count eq 1
- action 0820   comment Single sup chassis found. Statically set module count to 1.
- action 0830   set module_ctr 1
- action 0840  end
- action 0850  syslog priority informational msg "## Modules in switch: \n$modules"
- action 0860  comment Pause script as needed to allow SSO to complete
- action 0870  if $module_ctr gt "1"
- action 0880   syslog priority informational msg "## Pausing up to 210s for SSO."
- action 0890   while $loop_ctr lt 42
- action 0900    cli command "show logging | in RF-5-RF_TERMINAL_STATE"
- action 0910    regexp "RF-5-RF_TERMINAL_STATE" $_cli_result
- action 0920    if $_regexp_result eq "1"
- action 0930     break
- action 0940    else
- action 0950     increment loop_ctr 1
- action 0960     wait 5
- action 0970    end
- action 0980   end
- action 0990  end
- action 1000 end
- action 1010 comment Store module count for future applets
- action 1020 cli command "configure terminal"
- action 1030 cli command "event manager environment module_count $module_ctr"
+ action 0100 comment ##### Get Module Count #####
+ action 0110 comment Get module for alt script timings. Single sup chassis gets count of 1.
+ action 0120 comment Stacks & dual-sup modular chassis log RF-5-RF_TERMINAL_STATE when ready.
+ action 0130 comment Standalone & single sup chassis are ready at SYS-5-RESTART.
+ action 0140 cli command "show module | include ^\ *[0-9]+\ "
+ action 0150 comment Look for ^ from command failure (non-stackable switches)
+ action 0160 string match "*^*" "$_cli_result"
+ action 0170 if $_string_result eq "1"
+ action 0180  comment Non-stackable, standalone chassis found. Statically set module count to 1.
+ action 0190  syslog priority informational msg "## Pausing 30s for post-boot processes."
+ action 0200  wait 30
+ action 0210  set module_ctr 1
+ action 0220 else
+ action 0230  comment Stack, stackable, or modular chassis found
+ action 0240  set modules $_cli_result
+ action 0250  foreach line $modules "\n"
+ action 0260   string match nocase "*supervisor*" "$line"
+ action 0270   if $_string_result eq "1"
+ action 0280    increment sup_count 1
+ action 0290   end
+ action 0300   comment Check current line for MAC address (ignore if not present (e.g. switch prompt))
+ action 0310   regexp "[0-9a-fA-F]+\.[0-9a-fA-F]+\.[0-9a-fA-F]+\ " $line
+ action 0320   if $_regexp_result eq "1"
+ action 0330    increment module_ctr 1
+ action 0340   end
+ action 0350  end
+ action 0360  if $sup_count eq 1
+ action 0370   comment Single sup chassis found. Statically set module count to 1.
+ action 0380   set module_ctr 1
+ action 0390  end
+ action 0400  syslog priority informational msg "## Modules in switch: \n$modules"
+ action 0410  comment Pause script as needed to allow SSO to complete
+ action 0420  if $module_ctr gt "1"
+ action 0430   syslog priority informational msg "## Pausing up to 210s for SSO."
+ action 0440   while $loop_ctr lt 42
+ action 0450    cli command "show logging | in RF-5-RF_TERMINAL_STATE"
+ action 0460    regexp "RF-5-RF_TERMINAL_STATE" $_cli_result
+ action 0470    if $_regexp_result eq "1"
+ action 0480     break
+ action 0490    else
+ action 0500     increment loop_ctr 1
+ action 0510     wait 5
+ action 0520    end
+ action 0530   end
+ action 0540  end
+ action 0550 end
+ action 0560 comment Store module count for future applets
+ action 0570 cli command "configure terminal"
+ action 0580 cli command "event manager environment module_count $module_ctr"
+ action 0590 cli command "end"
+ action 0600 syslog priority informational msg "## Module Count: $module_count"
+ action 0610 comment ##### Disable Autorun of Current Applet #####
+ action 0620 cli command "configure terminal"
+ action 0630 cli command "event manager applet system_check authorization bypass"
+ action 0640 cli command " event tag 1 none maxrun 960"
+ action 0650 cli command "end"
+ action 0660 comment ##### Get Model #####
+ action 0670 comment Get system model from show version (for stacks, gets master)
+ action 0680 cli command "show version | in \)\ processor"
+ action 0690 comment Regex matches cisco + model name
+ action 0700 regexp "[cC]isco\ [a-zA-Z0-9\-]+" "$_cli_result" regexp_match
+ action 0710 comment Remove cisco from string to isolate model, then put in all lower case
+ action 0720 string replace $regexp_match 0 5 ""
+ action 0730 string tolower "$_string_result"
+ action 0740 set result "$_string_result"
+ action 0750 comment Store model name for future applets
+ action 0760 cli command "configure terminal"
+ action 0770 cli command "event manager environment system_model $result"
+ action 0780 cli command "end"
+ action 0790 syslog priority informational msg "## System Model: $system_model"
+ action 0800 comment ##### Get Version #####
+ action 0810 comment Get system version from SNMP
+ action 0820 info type snmp oid 1.3.6.1.2.1.1.1.0 get-type exact
+ action 0830 comment Regex matches version + version name
+ action 0840 regexp "[vV]ersion\ [a-zA-Z0-9\.\(\)]+" "$_info_snmp_value" regexp_match
+ action 0850 comment Remove word version from string to isolate value, then put in lower case
+ action 0860 string replace $regexp_match 0 7 ""
+ action 0870 string tolower "$_string_result"
+ action 0880 set system_version "$_string_result"
+ action 0890 if $system_version ne "$lver"
+ action 0900  set upgrade_required "true"
+ action 0910 end
+ action 0920 syslog priority informational msg "## System Version: $system_version"
+ action 0930 syslog priority informational msg "## ZTP Version: $ver"
+ action 0940 comment ##### Get File System #####
+ action 0950 cli command "show file systems | in \*"
+ action 0960 regexp "boot" $_cli_result
+ action 0970 cli command "configure terminal"
+ action 0980 comment Set fs env var based on presence or absence of word boot
+ action 0990 if $_regexp_result eq 1
+ action 1000  cli command "event manager environment fs bootflash"
+ action 1010 else
+ action 1020  cli command "event manager environment fs flash"
+ action 1030 end
  action 1040 cli command "end"
- action 1050 syslog priority informational msg "## Module Count: $module_count"
+ action 1050 syslog priority informational msg "## File System: $fs"
  action 1060 comment ##### Prepare for Next Applet #####
  action 1070 if $upgrade_required eq "false"
  action 1080  cli command "configure terminal"
@@ -1157,7 +1170,7 @@ event manager applet system_check authorization bypass
  action 1110  syslog priority informational msg "## Job Complete. Starting Finalize applet."
  action 1120  cli command "event manager run system_finalize"
  action 1130 else
- action 1140  syslog priority informational msg "## Switches require an upgrade to version {{image.ver}}."
+ action 1140  syslog priority informational msg "## Switches require an upgrade to version $ver."
  action 1150  cli command "configure terminal"
  action 1160  cli command "event manager environment os_upgraded yes"
  action 1170  cli command "event manager applet system_finalize authorization bypass"
@@ -1184,16 +1197,16 @@ event manager applet system_upgrade authorization bypass
  action 010 set download_first 0
  action 020 set short_model 0
  action 030 cli command "enable"
- action 040 regexp "(c9300|c9404r|c9407r|c9410r|c9500|c3850|ie-3200|ie-3400)" $system_model short_model
+ action 040 regexp "(c9200|c9300|c9404r|c9407r|c9410r|c9500|c3850|ie-3200|ie-3400)" $system_model short_model
  action 050 comment #### Get Install & Cleanup Method #####
- action 060 cli command "conf t"
+ action 060 cli command "configure terminal"
  action 070 regexp "(c9300|c3850)" $short_model
  action 080 if $_regexp_result eq "1"
  action 090  comment IOS-XE Fixed configuration switch upgrade method
  action 100  cli command "event manager environment install_method request"
  action 110  set download_first 1
  action 120 end
- action 130 regexp "(c9404r|c9407r|c9410r|c9500)" $short_model
+ action 130 regexp "(c9200|c9404r|c9407r|c9410r|c9500)" $short_model
  action 140 if $_regexp_result eq "1"
  action 150  comment IOS-XE Chassis / vStackwise install method
  action 160  cli command "event manager environment install_method install"
@@ -1223,8 +1236,8 @@ event manager applet system_upgrade authorization bypass
  action 400  comment HTTP may offer better download performance for large images.
  action 410  comment Server address and image from jinja merge.
  action 420  comment Delete previous download, if present, to prevent script hang
- action 430  cli command "delete /force $fs:{{image.bin}}"
- action 440  cli command "copy http://{{GLOBAL.ztp_ip_addr}}/{{image.bin}} $fs:" pattern "Destination|#"
+ action 430  cli command "delete /force $fs:$image"
+ action 440  cli command "copy http://$ztp_ip/$image $fs:" pattern "Destination|#"
  action 450  cli command ""
  action 460 end
  action 470 comment Save before install to prevent unwanted save prompts
@@ -1232,30 +1245,30 @@ event manager applet system_upgrade authorization bypass
  action 490 cli command ""
  action 500 if $install_method eq "request"
  action 510  syslog priority informational msg "## Upgrading..."
- action 520  cli command "request platform software package install switch all file $fs:{{image.bin}} force new auto-copy verbose" pattern "proceed|#"
+ action 520  cli command "request platform software package install switch all file $fs:$image force new auto-copy verbose" pattern "proceed|#"
  action 530  cli command "y"
  action 540  reload
  action 550 elseif $install_method eq "install"
  action 560  syslog priority informational msg "## Upgrading..."
  action 570  comment WARNING - Do not use ISSU method.  Allow entire chassis to reboot.
- action 580  cli command "install add file $fs:{{image.bin}} activate commit" pattern "proceed|#"
+ action 580  cli command "install add file $fs:$image activate commit" pattern "proceed|#"
  action 590  cli command "y"
  action 600 elseif $install_method eq "bootvar"
  action 610  syslog priority informational msg "## Upgrading..."
  action 620  comment Get booted image from SNMP, then delete to clear space
  action 630  info type snmp oid 1.3.6.1.2.1.16.19.6.0 get-type exact
  action 640  cli command "delete /force $_info_snmp_value"
- action 650  cli command "conf t"
+ action 650  cli command "configure terminal"
  action 660  cli command "no boot manual"
  action 670  cli command "no boot system"
- action 680  cli command "boot system $fs:{{image.bin}}"
+ action 680  cli command "boot system $fs:$image"
  action 690  cli command "end"
  action 700  cli command "write mem" pattern "confirm|#"
  action 710  cli command ""
  action 720  reload
  action 730 elseif $install_method eq "archive"
  action 740  syslog priority informational msg "## Downloading and Upgrading..."
- action 750  cli command "archive download-sw /imageonly /overwrite /allow-feature-upgrade http://{{GLOBAL.ztp_ip_addr}}/{{image.bin}}"
+ action 750  cli command "archive download-sw /imageonly /overwrite /allow-feature-upgrade http://$ztp_ip/$image"
  action 760  reload
  action 770 end
 ```
@@ -1326,25 +1339,112 @@ event manager applet system_clean authorization bypass
  action 220 syslog priority informational msg "## Removing EEM applets and environment variables."
  action 230 cli command "configure terminal"
  action 240 cli command "no event manager environment q"
- action 250 cli command "no event manager environment system_model"
- action 260 cli command "no event manager environment module_count"
- action 270 cli command "no event manager environment fs"
- action 280 cli command "no event manager environment install_method"
- action 290 cli command "no event manager environment os_upgraded"
- action 300 cli command "no event manager applet system_check"
- action 310 cli command "no event manager applet system_upgrade"
- action 320 cli command "no event manager applet system_finalize"
- action 330 cli command "no event manager applet set_stack_priority"
- action 340 cli command "no event manager applet convert_trunk"
- action 350 cli command "no event manager applet system_clean"
- action 360 cli command "no event manager applet log_ruckus_lldp_discovery"
- action 370 cli command "no event manager applet reconfig_ruckus_ports"
+ action 250 cli command "event manager environment ver"
+ action 260 cli command "event manager environment lver"
+ action 270 cli command "event manager environment image"
+ action 280 cli command "event manager environment ztp_ip"
+ action 290 cli command "no event manager environment system_model"
+ action 300 cli command "no event manager environment module_count"
+ action 310 cli command "no event manager environment fs"
+ action 320 cli command "no event manager environment install_method"
+ action 330 cli command "no event manager environment os_upgraded"
+ action 340 cli command "no event manager applet system_check"
+ action 350 cli command "no event manager applet system_upgrade"
+ action 360 cli command "no event manager applet system_finalize"
+ action 370 cli command "no event manager applet system_clean"
  action 380 cli command "end"
  action 390 cli command "write mem" pattern "confirm|#"
  action 400 cli command ""
  action 410 cli command "exit"
  action 420 syslog priority informational msg "## Cleanup applet complete."
+ ```
+
+## Use Case: Automatic Stack Renumbering - Alternate Method
+
+###### Author: [Paul S. Chapman](https://github.com/pschapman), Rev: 1, Date: 2021.0417, FreeZTP v1.4.1
+
+### Purpose
+
+This is an alternate to the Stack Renumbering presented by Derek Schnosh.  The goal was to provide the same result with minimal requirements from the ZTP Jinja2 merge and a finite EEM script length.
+
+### Methodology
+
+ZTP automatically passes an ordered list of serials to Jinja2 as `idarray`.  Leveraging this, we include or exclude the EEM from the merge based on whether ZTP passes more than 1 serial.
+
 ```
+{% if idarray|length > 1 %}
+...
+{% endif %}
+```
+
+To build our "stack order" list we join the `idarray` into a string using space as the delimiter. The ID array is an ordered list (e.g. `idarray_1` is always the first position in the `idarray` list).  We then set it as an EEM environment variable for use by the script.
+
+```
+{% set stack_order=idarray|join(' ') %}
+event manager environment stack_order {{ stack_order }}
+```
+
+The proposed EEM pulls the list of live switches using the `show module` command and builds an ordered list of serials (e.g. module 1 is item 1 in the list).  Since both serial number lists are ordered, then we can assume that a mismatch for a given position in the order means that switch needs to be renumbered.  The script implements loop counters as `designated_pos` and `current_pos` to keep track of the positions being compared.
+
+### Implementation
+Below is the complete script. It is bounded by `if` / `endif` to dynamically exclude the EEM from standalone switches.
+
+The primary trigger `event tag 1 none` is a place holder. Depending on your needs, substitute the trigger with one appropriate for your deployment.
+
+```
+!{% if idarray|length > 1 %}{% set stack_order=idarray|join(' ') %}
+event manager environment stack_order {{ stack_order }}
+!
+event manager applet stack_reorder authorization bypass
+ event tag 1 none
+ event tag 2 none
+  trigger
+  correlate event 1 or event 2
+ action 010 syslog priority informational msg "## Checking stack order against known order from ZTP."
+ action 020 set designated_pos "0"
+ action 030 set current_pos "0"
+ action 040 set renum "0"
+ action 050 cli command "enable"
+ action 060 comment Get list of modules
+ action 070 cli command "show module | include ^\ *[0-9]+\ "
+ action 080 set modules $_cli_result
+ action 090 foreach line $modules "\n"
+ action 100  comment Extract 4th field (serial number) from line as sub1
+ action 110  regexp "^\ [1-8]\ +[0-9]+\ +[A-Z0-9-]+\ +([A-Z0-9]+)" $line match sub1
+ action 120  if $_regexp_result eq "1"
+ action 130   append member " $sub1"
+ action 140  end
+ action 150 end
+ action 160 comment Remove leading space from list
+ action 170 string trim $member
+ action 180 comment Loop through ordered serial list from ZTP
+ action 190 foreach designated_sn $stack_order
+ action 200  increment designated_pos 1
+ action 210  comment Find matching serial for online switch
+ action 220  foreach current_sn $_string_result
+ action 230   increment current_pos 1
+ action 240   if $designated_sn eq $current_sn
+ action 250    comment When serials match, counters should match. Renumber on mismatch.
+ action 260    if $designated_pos ne $current_pos
+ action 270     cli command "switch $current_pos renumber $designated_pos"
+ action 280     set renum "1"
+ action 290     syslog priority informational msg "## Renumbering switch $current_pos to $designated_pos."
+ action 300    end
+ action 310   end
+ action 320  end
+ action 330  set current_pos "0"
+ action 340 end
+ action 350 if $renum eq "1"
+ action 360  syslog priority informational msg "## Switch order reset. Rebooting in 10s."
+ action 370  wait 10
+ action 380  reload
+ action 390 end
+!{% endif %}
+
+ exit
+do event manager run stack_reorder
+```
+
 
 
 
