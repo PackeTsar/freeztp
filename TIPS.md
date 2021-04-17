@@ -1390,7 +1390,7 @@ The proposed EEM pulls the list of live switches using the `show module` command
 ### Implementation
 Below is the complete script. It is bounded by `if` / `endif` to dynamically exclude the EEM from standalone switches.
 
-The primary trigger `event tag 1 none` is a place holder. Depending on your needs, substitute the trigger with one appropriate for your deployment.
+The primary trigger `event tag 1 none` is a place holder. Depending on your needs, substitute the event with one appropriate for your deployment.
 
 ```
 !{% if idarray|length > 1 %}{% set stack_order=idarray|join(' ') %}
@@ -1442,13 +1442,7 @@ event manager applet stack_reorder authorization bypass
  action 390 end
 !{% endif %}
 
- exit
-do event manager run stack_reorder
 ```
-
-
-
-
 
 [logo]: http://www.packetsar.com/wp-content/uploads/FreeZTP-100.png
 [BugID]: https://i.imgur.com/s2avfF0.png
