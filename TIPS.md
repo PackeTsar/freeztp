@@ -13,6 +13,7 @@ Some usage tips and tricks from real world FreeZTP deployments.
 3. [Use-case: Automated IOS-XE Stack Renumbering](#use-case-automated-ios-xe-stack-renumbering)
 4. [Tip: Advanced Jinja Syntax](#tip-advanced-jinja-syntax)
 5. [Use Case: Multi-Platform IOS / IOS-XE Upgrade](#use-case-multi-platform-ios--ios-xe-upgrade)
+6. [Use Case: Automatic Stack Reordering - Alternate Method](#use-case-automatic-stack-renumbering---alternate-method)
 
 
 -----------------------------------------
@@ -924,7 +925,7 @@ switch 2 provision c9300-48u
 
 ## Use Case: Multi-Platform IOS / IOS-XE Upgrade
 
-###### Author: [Paul S. Chapman](https://github.com/pschapman), Rev: 1, Date: 2020.0704, FreeZTP v1.4.1
+###### Author: [Paul S. Chapman](https://github.com/pschapman), Rev: 1.2, Date: 2021.0417, FreeZTP v1.4.1
 
 ### Purpose
 
