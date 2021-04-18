@@ -1427,19 +1427,21 @@ event manager applet stack_reorder authorization bypass
  action 240   if $designated_sn eq $current_sn
  action 250    comment When serials match, counters should match. Renumber on mismatch.
  action 260    if $designated_pos ne $current_pos
- action 270     cli command "switch $current_pos renumber $designated_pos"
- action 280     set renum "1"
- action 290     syslog priority informational msg "## Renumbering switch $current_pos to $designated_pos."
- action 300    end
- action 310   end
- action 320  end
- action 330  set current_pos "0"
- action 340 end
- action 350 if $renum eq "1"
- action 360  syslog priority informational msg "## Switch order reset. Rebooting in 10s."
- action 370  wait 10
- action 380  reload
- action 390 end
+ action 270     cli command "switch $current_pos renumber $designated_pos" pattern "continue|#"
+ action 280     cli command "y"
+ action 290     set renum "1"
+ action 300     syslog priority informational msg "## Renumbering switch $current_pos to $designated_pos."
+ action 310    end
+ action 320   end
+ action 330  end
+ action 340  set current_pos "0"
+ action 350 end
+ action 360 if $renum eq "1"
+ action 370  cli command "copy running-config startup-config"
+ action 380  syslog priority informational msg "## Switch order reset. Rebooting in 10s."
+ action 390  wait 10
+ action 400  reload
+ action 410 end
 !{% endif %}
 
 ```
