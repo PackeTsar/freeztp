@@ -1437,11 +1437,12 @@ event manager applet stack_reorder authorization bypass
  action 340  set current_pos "0"
  action 350 end
  action 360 if $renum eq "1"
- action 370  cli command "copy running-config startup-config"
- action 380  syslog priority informational msg "## Switch order reset. Rebooting in 10s."
- action 390  wait 10
- action 400  reload
- action 410 end
+ action 370  cli command "copy running-config startup-config" pattern "config|#"
+ action 380  cli command ""
+ action 390  syslog priority informational msg "## Switch order reset. Rebooting in 10s."
+ action 400  wait 10
+ action 410  reload
+ action 420 end
 !{% endif %}
 
 ```
