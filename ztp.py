@@ -3192,13 +3192,61 @@ class integration_spark:
 		self.config.update({dtype["destination type"]: value})
 		return self.config
 
-
 #class integration_gsheet:
 #	name = "gsheet"
 #	options = ["api-key", "sheetId"]
 #	def setup(self):
 #		print("gsheet setup")
 
+class integration_power_automate:
+    name = 'PowerAutomate'
+    options = ['url']
+    def __init__(self, cfg, setup=False):
+        global requests
+        global MultipartEncoder
+        import requests
+        from requests_toolbelt import MultipartEncoder
+        self.config = cfg
+        self.appfilename = (os.path.basename(__file__).lower())
+        self.hostfqdn = (socket.getfqdn().lower())
+        self.src_id = self.appfilename + '.' + self.hostfqdn
+        self.msgtype = 'status'
+    def _post(self, url, payload):
+        payload = MultipartEncoder(fields=payload)
+        headers = {'Content-Type': payload.content_type}
+        response = requests.post(url=url, headers=headers, data=payload)
+        return(self._decode(response))
+    def _decode(self, response):
+        if response.status_code == 200:
+            try:
+                return json.loads(response.text)
+            except Exception as e:
+                console(e)
+                return None
+        else:
+            raise ValueError("Invalid Server Response Status Code: (%s)\n(%s)" % (str(response.status_code), response.text))
+    def send(self, message):
+        log("integration_power_automate.send: Processing message for object (%s)" % self.config["objname"])
+        msgdict = {}
+        if not self.config['url']:
+            raise ValueError("Invalid or Unknown Integration Destination")
+        if message.file != None:
+            msgdict.update({'file-data': message.file.data})
+            msgdict.update({'file-name': message.keystore + '.txt'})
+        htmlmsg = (
+            '<p><strong>freeZTP Provisioning</strong></p>'
+            '<ul><li>Matched Keystore: ' + message.keystore + '</li>'
+            '<li>Real ID: ' + message.realid + '</li>'
+            '<li>IP: ' + message.ip + '</li>'
+            '<li>Temp ID: ' + message.tempid + '</li></ul>'
+            '<span style="display: none">'
+        )
+        msgdict.update({'message': htmlmsg})
+        msgdict.update({'src-id': self.src_id})
+        msgdict.update({'type': self.msgtype})
+        data = json.dumps(msgdict)
+        result = self._post(self.config['url'], data)
+        log("integration_power_automate.send: Message delivery for (%s) complete" % self.config["objname"])
 
 class integration_message:
 	def __init__(self, data={}):
