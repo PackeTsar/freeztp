@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "v1.4.1"
+version = "v1.4.1a"
 
 
 ##### Import native modules #####
@@ -3199,7 +3199,7 @@ class integration_spark:
 #		print("gsheet setup")
 
 class integration_power_automate:
-    name = 'PowerAutomate'
+    name = 'powerautomate'
     options = ['url']
     def __init__(self, cfg, setup=False):
         global requests
@@ -3267,7 +3267,8 @@ class integration_message:
 
 class integration_main:
 	mods = {
-		integration_spark.name: integration_spark
+		integration_spark.name: integration_spark,
+		integration_power_automate.name: integration_power_automate
 	}
 	def __init__(self):
 		self.loaded = False
