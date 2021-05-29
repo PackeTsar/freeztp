@@ -3217,7 +3217,7 @@ class integration_power_automate:
 		response = requests.post(url=url, headers=headers, data=data)
 		return(self._decode(response))
 	def _decode(self, response):
-		if response.status_code >= 200:
+		if response.status_code in range (200,299):
 			try:
 				return json.loads(response.text)
 			except Exception as e:
