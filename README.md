@@ -553,6 +553,14 @@ ztp set integration MY_SPARK_ROOM api-key MyaP1k3y
 
 Once setup, you can send a test message to the integration destination using the command `ztp request integration-test <svc_name>`.
 
+FreeZTP v1.4.1a adds integration for Microsoft Power Automate via webhooks.  Power Automate contains a trigger called "When a HTTP request is received", which generates an Azure webhook.  Data sent from FreeZTP is JSON formatted text and includes a ZTP host identifier, message type (status), message text (HTML), generated config text, and a filename.  Host ID and Status provide data for Power Automate conditions. Message text provides data to deliver to MS Teams. Config text and filename provide data for SharePoint storage.
+
+Use `ztp request integration-setup <svc_name>` as listed above for automated configuration.  Final ZTP configuration will look like:
+
+```
+ztp set integration PA type powerautomate
+ztp set integration PA url https://prod-164.westus.logic.azure.com:443/<extended uri>
+```
 
 -----------------------------------------
 ##   VERSIONS   ##
@@ -670,7 +678,11 @@ ztp set global-keystore GLOBAL
 - ([#68](https://github.com/PackeTsar/freeztp/issues/68)) **Merge with local IDArray referencing external keystore fails**: A merge or merge-test against a real-ID contained in a local IDArray, where the local IDArray references an externally-stored keystore would fail to find the keystore. This appears to have been due to a fix made for #56. The function has been fixed and tested.
 - ([#69](https://github.com/PackeTsar/freeztp/issues/69)) **IDArray injection with local IDArray referencing external keystore fails**: A merge or merge-test against a real-ID contained in a local IDArray, where the local IDArray references an externally-stored keystore would fail to inject the values of the local IDArray into the merge or merge-test. The pull_keystore_values() function has been extended to cover this use case.
 
+### v1.4.1a
 
+**Added Features in V1.4.1 --> V1.4.1a:**
+
+- **MS Power Automate Webhook Integration**: Added new integration to deliver notifications to MS Teams and config files to SharePoint via MS Power Automate.
 
 
 -----------------------------------------
