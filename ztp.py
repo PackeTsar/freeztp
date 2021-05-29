@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "v1.4.1"
+version = "v1.4.1a"
 
 
 ##### Import native modules #####
@@ -3192,13 +3192,79 @@ class integration_spark:
 		self.config.update({dtype["destination type"]: value})
 		return self.config
 
-
 #class integration_gsheet:
 #	name = "gsheet"
 #	options = ["api-key", "sheetId"]
 #	def setup(self):
 #		print("gsheet setup")
 
+class integration_power_automate:
+	name = 'powerautomate'
+	options = ['url']
+	def __init__(self, cfg, setup=False):
+		global requests
+		global MultipartEncoder
+		import requests
+		from requests_toolbelt import MultipartEncoder
+		self.config = cfg
+		self.appfilename = (os.path.basename(__file__).lower())
+		self.hostfqdn = (socket.getfqdn().lower())
+		self.src_id = self.appfilename + '.' + self.hostfqdn
+		self.msgtype = 'status'
+	def _post(self, url, payload):
+		headers = {'Content-Type': 'application/json'}
+		data = json.dumps(payload)
+		response = requests.post(url=url, headers=headers, data=data)
+		return(self._decode(response))
+	def _decode(self, response):
+		if response.status_code in range (200,299):
+			try:
+				return json.loads(response.text)
+			except Exception as e:
+				console(e)
+				return None
+		else:
+			raise ValueError("Invalid Server Response Status Code: (%s)\n(%s)" % (str(response.status_code), response.text))
+	def send(self, message):
+		log("integration_power_automate.send: Processing message for object (%s)" % self.config["objname"])
+		msgdict = {}
+		if not self.config['url']:
+			raise ValueError("Invalid or Unknown Integration Destination")
+		if message.file != None:
+			msgdict.update({'file-data': message.file.data})
+			msgdict.update({'file-name': message.keystore + '.txt'})
+		htmlmsg = (
+			'<p><strong>freeZTP Provisioning</strong></p>'
+			'<ul><li>Matched Keystore: ' + message.keystore + '</li>'
+			'<li>Real ID: ' + message.realid + '</li>'
+			'<li>IP: ' + message.ip + '</li>'
+			'<li>Temp ID: ' + message.tempid + '</li></ul>'
+			'<span style="display: none">'
+		)
+		msgdict.update({'message': htmlmsg})
+		msgdict.update({'src-id': self.src_id})
+		msgdict.update({'type': self.msgtype})
+		result = self._post(self.config['url'], msgdict)
+		log("integration_power_automate.send: Message delivery for (%s) complete" % self.config["objname"])
+	def setup(self):
+		console(
+			'Microsoft Power Automate Integration Wizard Overview:\r\n'
+			'-----------------------------------------------------------------\r\n'
+			'The flow trigger "When a HTTP request is received" will create\r\n'
+			'an Azure Webhook URL. Please provide the URL. This integration\r\n'
+			'sends a JSON string to the target URL in this format:\r\n'
+			'{\r\n'
+			'    "src-id": "<scriptname>.<hostfqdn>",\r\n'
+			'    "type": "status",\r\n'
+			'    "message": "[HTML Formatted Message]",\r\n'
+			'    "file-name": "<keystore_id>.txt",\r\n'
+			'    "file-data": "[Full Config Text]"\r\n'
+			'}\r\n'
+			'\r\n'
+		)
+		url = raw_input("Enter your Power Automate Webhook URL.> ")
+		self.config.update({"url": url})  # Update API key entry
+		return self.config
 
 class integration_message:
 	def __init__(self, data={}):
@@ -3219,7 +3285,8 @@ class integration_message:
 
 class integration_main:
 	mods = {
-		integration_spark.name: integration_spark
+		integration_spark.name: integration_spark,
+		integration_power_automate.name: integration_power_automate
 	}
 	def __init__(self):
 		self.loaded = False

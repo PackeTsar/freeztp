@@ -5,7 +5,7 @@ A Zero-Touch Provisioning system built for Cisco Catalyst switches.
 
 -----------------------------------------
 ##   VERSION   ##
-The version of FreeZTP documented here is: **v1.4.1**
+The version of FreeZTP documented here is: **v1.5.0**
 
 
 -----------------------------------------
@@ -22,9 +22,10 @@ The version of FreeZTP documented here is: **v1.4.1**
 10. [Upgrading](#upgrading)
 11. [External Keystores](#external-keystores)
 12. [Integrations](#integrations)
-13. [Versions](#versions)
-14. [Contributing](#contributing)
-15. [Usage Tips](/TIPS.md)
+13. [Usage Tips](/TIPS.md)
+14. [Versions](#versions)
+15. [Contributing](#contributing)
+
 
 
 -----------------------------------------
@@ -541,9 +542,11 @@ After your CSV is built and the external keystore is configured in the ZTP confi
 
 -----------------------------------------
 ##   INTEGRATIONS   ##
-FreeZTP v1.1.0 introduced some integration features with 3rd parties. The only supported integration at this time is with Cisco Spark (now called Webex Teams). The Spark integration will allow FreeZTP to send provisioning notifications to a Spark room or to a specific account.
+FreeZTP v1.1.0 introduced some integration features with 3rd parties and was expanded in v1.5.0. Supported integrations at this time are Cisco Webex Teams (formerly Cisco Spark) and Microsoft Teams via Microsoft PowerAutomate (credit to [@pschapman](https://github.com/pschapman) for this effort!). These integration options will allow FreeZTP to send messages to a chat room for provisioning notifications.
 
-The easiest way to set up the integration is to use the command `ztp request integration-setup <svc_name>` (the `<svc_name>` is the name of the configuration object FreeZTP will use once the configuration is generated, its name doesnt matter). This command will start a wizard which will walk you through setting up the integration. You can also use the below configuration example to set up the integration yourself.
+The easiest way to set up the integration is to use the command `ztp request integration-setup <svc_name>` (the `<svc_name>` is the name of the configuration object FreeZTP will use once the configuration is generated, its name doesn't matter). This command will start a wizard which will walk you through setting up the integration. You can also use the below configuration examples to set up an integration manually.
+
+### Cisco Webex Teams config
 
 ```
 ztp set integration MY_SPARK_ROOM type spark
@@ -551,7 +554,24 @@ ztp set integration MY_SPARK_ROOM roomId R00m1dsTr1ng
 ztp set integration MY_SPARK_ROOM api-key MyaP1k3y
 ```
 
+
+### Microsoft Teams/PowerAutomate config
+
+```
+ztp set integration PA type powerautomate
+ztp set integration PA url https://prod-164.westus.logic.azure.com:443/<extended uri>
+```
+
 Once setup, you can send a test message to the integration destination using the command `ztp request integration-test <svc_name>`.
+
+### Note about PowerAutomate Integrations
+
+FreeZTP v1.5.0 adds integration for Microsoft Power Automate via webhooks.  Power Automate contains a trigger called "When a HTTP request is received", which generates an Azure webhook.  Data sent from FreeZTP is JSON formatted text and includes a ZTP host identifier, message type (status), message text (HTML), generated config text, and a filename.  Host ID and Status provide data for Power Automate conditions. Message text provides data to deliver to MS Teams. Config text and filename provide data for SharePoint storage.
+
+
+-----------------------------------------
+##   USAGE TIPS   ##
+If you're looking for more powerful ways to use FreeZTP, check out the [Usage Tips](/TIPS.md) page where some of our contributors/maintainers have published advanced usage tips and how-tos.
 
 
 -----------------------------------------
@@ -671,6 +691,11 @@ ztp set global-keystore GLOBAL
 - ([#69](https://github.com/PackeTsar/freeztp/issues/69)) **IDArray injection with local IDArray referencing external keystore fails**: A merge or merge-test against a real-ID contained in a local IDArray, where the local IDArray references an externally-stored keystore would fail to inject the values of the local IDArray into the merge or merge-test. The pull_keystore_values() function has been extended to cover this use case.
 
 
+### v1.5.0
+
+**Added Features in V1.4.1 --> V1.5.0:**
+
+- **Microsoft Power Automate Webhook Integration**: Added new integration to deliver notifications to Microsoft Teams and config files to SharePoint via Microsoft Power Automate. See the [Integrations](#integrations) section for more info.
 
 
 -----------------------------------------
