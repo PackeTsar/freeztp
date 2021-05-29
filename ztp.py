@@ -3249,19 +3249,19 @@ class integration_power_automate:
 		log("integration_power_automate.send: Message delivery for (%s) complete" % self.config["objname"])
 	def setup(self):
 		console(
-			'Microsoft Power Automate Integration Wizard Overview:'
-			'-----------------------------------------------------------------'
-			'The flow trigger "When a HTTP request is received" will create'
-			'an Azure Webhook URL. Please provide the URL. This integration'
-			'sends a JSON string to the target URL in this format:'
-			'{'
-			'    "src-id": "<scriptname>.<hostfqdn>",'
-			'    "type": "status",'
-			'    "message": "[HTML Formatted Message]",'
-			'    "file-name": "<keystore_id>.txt",'
-			'    "file-data": "[Full Config Text]"'
-			'}'
-			' '
+			'Microsoft Power Automate Integration Wizard Overview:\r\n'
+			'-----------------------------------------------------------------\r\n'
+			'The flow trigger "When a HTTP request is received" will create\r\n'
+			'an Azure Webhook URL. Please provide the URL. This integration\r\n'
+			'sends a JSON string to the target URL in this format:\r\n'
+			'{\r\n'
+			'    "src-id": "<scriptname>.<hostfqdn>",\r\n'
+			'    "type": "status",\r\n'
+			'    "message": "[HTML Formatted Message]",\r\n'
+			'    "file-name": "<keystore_id>.txt",\r\n'
+			'    "file-data": "[Full Config Text]"\r\n'
+			'}\r\n'
+			'\r\n'
 		)
 		url = raw_input("Enter your Power Automate Webhook URL.> ")
 		self.config.update({"url": url})  # Update API key entry
