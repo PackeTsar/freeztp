@@ -3212,9 +3212,9 @@ class integration_power_automate:
 		self.src_id = self.appfilename + '.' + self.hostfqdn
 		self.msgtype = 'status'
 	def _post(self, url, payload):
-		payload = MultipartEncoder(fields=payload)
-		headers = {'Content-Type': payload.content_type}
-		response = requests.post(url=url, headers=headers, data=payload)
+		headers = {'Content-Type': 'application/json'}
+		data = json.dumps(payload)
+		response = requests.post(url=url, headers=headers, data=data)
 		return(self._decode(response))
 	def _decode(self, response):
 		if response.status_code == 200:
@@ -3244,8 +3244,7 @@ class integration_power_automate:
 		msgdict.update({'message': htmlmsg})
 		msgdict.update({'src-id': self.src_id})
 		msgdict.update({'type': self.msgtype})
-		data = json.dumps(msgdict)
-		result = self._post(self.config['url'], data)
+		result = self._post(self.config['url'], msgdict)
 		log("integration_power_automate.send: Message delivery for (%s) complete" % self.config["objname"])
 	def setup(self):
 		console(
