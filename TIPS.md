@@ -17,6 +17,12 @@ Some usage tips and tricks from real world FreeZTP deployments.
 
 
 -----------------------------------------
+## EXTERNAL LINKS/TOOLS
+- [FreeZTP Watcher](https://github.com/derek-shnosh/ztp-watcher) by [@derek-shnosh](https://github.com/derek-shnosh)
+- [JotForm Form Import Tool for freeZTP (JFIT-ZTP)](https://github.com/pschapman/JFIT-ZTP) by [@pschapman](https://github.com/pschapman)
+
+
+-----------------------------------------
 ## Use-case: Provisioning Without Vlan1
 
 ###### Author: [derek-shnosh](https://github.com/derek-shnosh), Rev: 1, Date: 2018.1008, FreeZTP v1.1.0
