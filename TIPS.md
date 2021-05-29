@@ -54,7 +54,7 @@ The use of Vlan1 is not required for provisioning. The client switch running the
 
 ### Preamble
 
-IOS-XE 3.7.4 cannot upgrade to 16.3.6 via smart-install because `new force` isn't appended. This workaround utilizes EEM applets in a Jinja2 switch template to download install the updated image. 
+IOS-XE 3.7.4 cannot upgrade to 16.3.6 via smart-install because `new force` isn't appended. This workaround utilizes EEM applets in a Jinja2 switch template to download install the updated image.
 
 #### Switch log output from failure
 
@@ -93,19 +93,19 @@ ERROR: Software Installation Failed: 35 2
 Loading network-confg from 172.17.251.251 (via Vlan1): !
 [OK - 69 bytes]
 Loading ZTP-23CFBA478F-confg from 172.17.251.251 (via Vlan1): !
-[OK - 77012 bytes] 
+[OK - 77012 bytes]
 ```
 
 #### TAC confirmation
 
 > The behavior is expected due to the command syntax difference as you suspected. We documented the behavior in a bug below: [https://bst.cloudapps.cisco.com/bugsearch/bug/CSCvd49193](https://bst.cloudapps.cisco.com/bugsearch/bug/CSCvd49193). The running code 3.7.4E is affected and this issue is fixed on 3.6.8E.
-> 
+>
 > Is it possible for you to try the following?
 >
 > 1- Upgrade from 3.7.4E to 3.6.8E via smart install
-> 
+>
 > 2- Upgrade from 3.6.8E to 16.3.6 via smart install
-> 
+>
 > ![BugID_Screenshot_from_TAC][BugID]
 
 ### Considerations/Notes
@@ -459,7 +459,7 @@ ASW-TR01-01#show switch
 Switch/Stack Mac Address : abcd.ef22.2222 - Local Mac Address
 Mac persistency wait time: Indefinite
                                              H/W   Current
-Switch#   Role    Mac Address     Priority Version  State 
+Switch#   Role    Mac Address     Priority Version  State
 ------------------------------------------------------------
 *1       Active   abcd.ef22.2222     1      V02     Ready               
  2       Standby  abcd.ef44.4444     1      V02     Ready               
@@ -475,7 +475,7 @@ The election process for this example resulted in the switches being numbered as
 
 ```cisco-ios-show
 ASW-TR01-01#show module
-Switch  Ports    Model                Serial No.   MAC address     Hw Ver.       Sw Ver. 
+Switch  Ports    Model                Serial No.   MAC address     Hw Ver.       Sw Ver.
 ------  -----   ---------             -----------  --------------  -------       --------
  1       62     WS-C3850-12X48U-S     FOC22222222  abcd.ef22.2222  V02           03.07.04E   
  2       62     WS-C3850-12X48U-S     FOC44444444  abcd.ef44.4444  V02           03.07.04E   
@@ -494,7 +494,7 @@ Switch  Ports    Model                Serial No.   MAC address     Hw Ver.      
 5. *[EEM Applet `sw_stack` loaded to memory.]*
     1. Waits 120 seconds for the stack redundancy operations to complete.
     2. Executes command `show module | inc ^.[1-9]` *(output as read by EEM for current example)*;
-        > This output is what EEM stores as `$stack` for parsing. All line numbers correlate with the stack's current switch allocation numbers; i.e. first line contains information for switch 1, second line contains information for switch 2, etc... 
+        > This output is what EEM stores as `$stack` for parsing. All line numbers correlate with the stack's current switch allocation numbers; i.e. first line contains information for switch 1, second line contains information for switch 2, etc...
        ```cisco-ios-log
         1       62     WS-C3850-12X48U-S     FOC22222222  abcd.ef22.2222  V02           03.07.04E   
         2       62     WS-C3850-12X48U-S     FOC44444444  abcd.ef44.4444  V02           03.07.04E   
@@ -524,11 +524,11 @@ Switch  Ports    Model                Serial No.   MAC address     Hw Ver.      
 !---- IDARRAY_2 (switch 2 serial number): FOC22222222
 !---- IDARRAY_3 (switch 3 serial number): FOC33333333
 !---- IDARRAY_4 (switch 4 serial number): FOC44444444
-!---- IDARRAY_5 (switch 5 serial number): 
-!---- IDARRAY_6 (switch 6 serial number): 
-!---- IDARRAY_7 (switch 7 serial number): 
-!---- IDARRAY_8 (switch 8 serial number): 
-!---- IDARRAY_9 (switch 9 serial number): 
+!---- IDARRAY_5 (switch 5 serial number):
+!---- IDARRAY_6 (switch 6 serial number):
+!---- IDARRAY_7 (switch 7 serial number):
+!---- IDARRAY_8 (switch 8 serial number):
+!---- IDARRAY_9 (switch 9 serial number):
 !---- IDARRAY (all serials): ['FOC11111111', 'FOC22222222', 'FOC33333333', 'FOC44444444']
 !
 !-- EEM applet to renumber switches accordingly (ALL SUBSEQUENT LINES ARE REQUIRED).
@@ -544,7 +544,7 @@ event manager applet sw_stack
   action 00.06 set error_list ""
   action 00.07 set change_list ""
   action 00.08 set upgrade_list ""
-  
+
   action 01.00 set sw_num "1"
   action 01.01 set pri "16"
   action 01.02 decrement pri 1
@@ -576,7 +576,7 @@ event manager applet sw_stack
   action 01.28   end
   action 01.29  end
   action 01.30 end
-  
+
   action 02.00 set sw_num "2"
   action 02.01 set pri "16"
   action 02.02 decrement pri 2
@@ -608,7 +608,7 @@ event manager applet sw_stack
   action 02.28   end
   action 02.29  end
   action 02.30 end
-  
+
   action 03.00 set sw_num "3"
   action 03.01 set pri "16"
   action 03.02 decrement pri 3
@@ -640,7 +640,7 @@ event manager applet sw_stack
   action 03.28   end
   action 03.29  end
   action 03.30 end
-  
+
   action 04.00 set sw_num "4"
   action 04.01 set pri "16"
   action 04.02 decrement pri 4
@@ -672,7 +672,7 @@ event manager applet sw_stack
   action 04.28   end
   action 04.29  end
   action 04.30 end
-  
+
   action 10.00 wait 5
   action 10.01 if $error_list ne ""
   action 10.02  syslog msg "\n     ## The following errors occurred; $error_list"
@@ -698,7 +698,7 @@ event manager applet sw_stack
 Below is an abbreviated and sanitized log output from 4 stacked switches, real serial numbers have been replaced by those in this example.
 
 ```cisco-ios-log
-Would you like to enter the initial configuration dialog? [yes/no]: 
+Would you like to enter the initial configuration dialog? [yes/no]:
 Loading network-confg from 172.17.251.251 (via Vlan1): !
 [OK - 94 bytes]
 
@@ -707,19 +707,19 @@ Loading ZTP-23D9F46EC4-confg from 172.17.251.251 (via Vlan1): !
 
 ...
 *Oct 17 2018 12:45:34.347 PDT: %SYS-5-CONFIG_I: Configured from tftp://172.17.251.251/ZTP-23D9F46EC4-confg by console
-*Oct 17 2018 12:45:34.365 PDT: %HA_EM-6-LOG: sw_stack: 
+*Oct 17 2018 12:45:34.365 PDT: %HA_EM-6-LOG: sw_stack:
      ## FreeZTP configuration received via TFTP, run 'sw_stack' EEM applet in 15s.
 ...
-*Oct 17 2018 12:47:34.376 PDT: %HA_EM-6-LOG: sw_stack: 
+*Oct 17 2018 12:47:34.376 PDT: %HA_EM-6-LOG: sw_stack:
      ## Checking all switches' version and stack membership, adjusting where necessary.
-*Oct 17 2018 12:47:44.755 PDT: %HA_EM-6-LOG: sw_stack: 
-     ## Switches below have been assigned a priority and renumbered* as needed; 
+*Oct 17 2018 12:47:44.755 PDT: %HA_EM-6-LOG: sw_stack:
+     ## Switches below have been assigned a priority and renumbered* as needed;
      ##  FOC11111111 (Priority: 15 // Renumbered: 3 > 1* // Version: 03.07.04E )
      ##  FOC22222222 (Priority: 14 // Renumbered: 1 > 2* // Version: 03.07.04E )
      ##  FOC33333333 (Priority: 13 // Renumbered: 4 > 3* // Version: 03.07.04E )
      ##  FOC44444444 (Priority: 12 // Renumbered: 2 > 4* // Version: 03.07.04E )
 *Oct 17 2018 12:47:52.732 PDT: %SYS-5-CONFIG_I: Configured from console by eem_svc on vty0 (EEM:sw_stack)
-*Oct 17 2018 12:47:52.756 PDT: %HA_EM-6-LOG: sw_stack: 
+*Oct 17 2018 12:47:52.756 PDT: %HA_EM-6-LOG: sw_stack:
      ## EEM applet `sw_stack` deleted and config written, reload for changes to take effect.
 ...
 ```
