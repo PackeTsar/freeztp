@@ -571,7 +571,7 @@ FreeZTP v1.5.0 adds integration for Microsoft Power Automate via webhooks.  Powe
 
 -----------------------------------------
 ##   USAGE TIPS   ##
-If you're looking for more powerful ways to use FreeZTP, check out the [Usage Tips](/Tips.md) page where some of our contributors/maintainers have published advanced usage tips and how-tos.
+If you're looking for more powerful ways to use FreeZTP, check out the [Usage Tips](/TIPS.md) page where some of our contributors/maintainers have published advanced usage tips and how-tos.
 
 
 -----------------------------------------
