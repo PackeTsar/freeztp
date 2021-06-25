@@ -5,7 +5,7 @@ A Zero-Touch Provisioning system built for Cisco Catalyst switches.
 
 -----------------------------------------
 ##   VERSION   ##
-The version of FreeZTP documented here is: **v1.5.0**
+The version of FreeZTP documented here is: **v1.5.1**
 
 
 -----------------------------------------
@@ -696,6 +696,13 @@ ztp set global-keystore GLOBAL
 **Added Features in V1.4.1 --> V1.5.0:**
 
 - **Microsoft Power Automate Webhook Integration**: Added new integration to deliver notifications to Microsoft Teams and config files to SharePoint via Microsoft Power Automate. See the [Integrations](#integrations) section for more info.
+
+
+### v1.5.1
+
+**Bug Fixes in V1.5.0 --> V1.5.1:**
+
+- **PowerAutomate Integration Message Failure**: The PowerAutomate integration would successfully compose and send messages during an integration test, but would fail silently in a real scenario. This is because the the `message.realid` value during a test was a string, but during a real provisioning event it was a dict. The PowerAutomate message composition process was failing to process this dict. This issue has been repaired and the integration test values have been updated to better mimic a real scenario.
 
 
 -----------------------------------------
