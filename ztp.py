@@ -3374,7 +3374,7 @@ class integration_main:
 				"ip": "127.0.0.1",
 				"tempid": "ZTP-TESTING123",
 				"mac": "aa:bb:cc:dd:ee",
-				"realid": "SERIAL12345",
+				"realid": {u'OIDNAME': u'SERIAL12345'},
 				"keystore": "NO_KEYSTORE",
 				"status": "testing",
 				"file": testfile
