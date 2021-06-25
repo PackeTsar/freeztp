@@ -3229,6 +3229,7 @@ class integration_power_automate:
 		log("integration_power_automate.send: Processing message for object (%s)" % self.config["objname"])
 		msgdict = {}
 		if not self.config['url']:
+			log("integration_power_automate.send: ERROR: Invalid or Unknown Integration Destination")
 			raise ValueError("Invalid or Unknown Integration Destination")
 		if message.file != None:
 			msgdict.update({'file-data': message.file.data})
@@ -3236,7 +3237,7 @@ class integration_power_automate:
 		htmlmsg = (
 			'<p><strong>freeZTP Provisioning</strong></p>'
 			'<ul><li>Matched Keystore: ' + message.keystore + '</li>'
-			'<li>Real ID: ' + message.realid + '</li>'
+			'<li>Real ID: ' + str(message.realid) + '</li>'
 			'<li>IP: ' + message.ip + '</li>'
 			'<li>Temp ID: ' + message.tempid + '</li></ul>'
 			'<span style="display: none">'
