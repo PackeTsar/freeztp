@@ -712,7 +712,7 @@ If you would like to help out by contributing code or reporting issues, please d
 Visit the GitHub page (https://github.com/packetsar/freeztp) and either report an issue or fork the project, commit some changes, and submit a pull request.
 
 
-[logo]: http://www.packetsar.com/wp-content/uploads/FreeZTP-100.png
+[logo]: /FreeZTP-100.png
 [centos-post-install]: https://github.com/PackeTsar/scriptfury/blob/master/CentOS_Post_Install.md
 [ubuntu-post-install]: https://github.com/PackeTsar/scriptfury/blob/master/Ubuntu_Post_Install.md
 [raspbian-post-install]: https://github.com/PackeTsar/scriptfury/blob/master/Raspbian_Post_Install.md
