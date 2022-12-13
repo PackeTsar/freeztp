@@ -23,7 +23,8 @@ import logging
 import platform
 import commands
 import threading
-
+from inspect import getmembers, isfunction
+import nstam_ipaddr
 
 class os_detect:
 	def __init__(self):
@@ -556,6 +557,10 @@ class config_factory:
 			path = external_keystores.data
 		templatedata = self.get_template(keystoreid)
 		env = j2.Environment(loader=j2.FileSystemLoader('/'))
+		my_filters = {name: function
+			      for name, function in getmembers(nstam_ipaddr)
+			      if isfunction(function)}
+		env.filters.update(my_filters)
 		template = env.from_string(templatedata)
 		vals = self.pull_keystore_values(path, keystoreid)
 		if snmpinfo:
@@ -667,6 +672,10 @@ class config_factory:
 					quit()
 				else:
 					env = j2.Environment(loader=j2.FileSystemLoader('/'))
+					my_filters = {name: function 
+						for name, function in getmembers(nstam_ipaddr)
+					      	if isfunction(function)}
+					env.filters.update(my_filters)
 					j2template = env.from_string(templatedata)
 					ast = env.parse(templatedata)
 			elif template == "initial":
@@ -1524,6 +1533,11 @@ class config_manager:
 			code = self.running["dhcpd-options"][option]["code"]
 			result += "option {} code {} = {};\n".format(option, code, typ)
 		result += "#\n"
+		result += "class \"black-hole\" {\n" 
+		result += "\t\tmatch if substring(option dhcp-client-identifier,1,5) != \"cisco\" and (option vendor-class-identifier != \"ciscopnp\") ;\n" 
+		result += "\t\t#ignore booting;\n"
+		result += "\t\tdeny booting;\n"
+		result += "}\n"
 		result += "#"
 		mappings = {
 		"gateway": " option routers <value>;",
@@ -3387,11 +3401,17 @@ class integration_main:
 class external_keystore_csv:
 	name = "csv"
 	options = ["file"]
+	
+	
+class external_keystore_json:
+	name = "json"
+	options = ["file"]
 
 
 class external_keystore_main:
 	mods = {
-		external_keystore_csv.name: external_keystore_csv
+		external_keystore_csv.name: external_keystore_csv,
+		external_keystore_json.name: external_keystore_json
 	}
 	def __init__(self):
 		self.data = {
@@ -3444,32 +3464,60 @@ class external_keystore_main:
 		if not os.path.isfile(filename):
 			console("Cannot find file (%s)" % filename)
 			sys.exit()
-		csvfile = open(filename, "r")
-		reader = csv.DictReader(csvfile)
 		keystore_commands = []
 		idarray_commands = []
 		association_commands = []
-		for row in reader:
-			if "keystore_id" not in row:
-				console("ERROR: Cannot find required header (keystore_id)")
-				sys.exit()
-			id = row["keystore_id"]
-			array_keys = []
-			for key in reader.fieldnames:
-				if row[key]:
-					if key == "association":
-						association_commands.append("ztp set association id %s template %s" % (id, row[key]))
-					elif key[:7] == "idarray":
-						array_keys.append(row[key])
-					else:
-						if " " in key:
-							key = '%s' % key
-						if " " in row[key]:
-							row[key] = '%s' % row[key]
-						keystore_commands.append("ztp set keystore %s %s %s" % (id, key, row[key]))
-			if array_keys:
-				idarray_commands.append("ztp set idarray %s %s" % (id, " ".join(array_keys)))
-			keystore_commands.append("#")
+		if config.running['external-keystores'][objname]['type'] == 'json':
+			jsonfile = open(filename, "r")
+			json_data = json.load(jsonfile)
+			reader = json_data.values()
+			for row in reader:
+				if "keystore_id" not in row:
+					console("ERROR: Cannot find required header (keystore_id)")
+					sys.exit()
+				id = row["keystore_id"]
+				array_keys = []
+				for key in row.keys():
+					if row[key] or row[key]==0:
+						if key == "association":
+							association_commands.append("ztp set association id %s template %s" % (id, row[key]))
+						elif key[:7] == "idarray":
+							array_keys.append(row[key])
+						else:
+							if " " in key:
+								key = '%s' % key
+							if not (isinstance(row[key], int)):
+								if " " in row[key]:
+									row[key] = '%s' % row[key]
+							keystore_commands.append("ztp set keystore %s %s %s" % (id, key, row[key]))
+				if array_keys:
+					idarray_commands.append("ztp set idarray %s %s" % (id, " ".join(array_keys)))
+				keystore_commands.append("#")
+		elif config.running['external-keystores'][objname]['type'] == 'csv':
+			csvfile = open(filename, "r")
+			reader = csv.DictReader(csvfile)
+			for row in reader:
+				if "keystore_id" not in row:
+					console("ERROR: Cannot find required header (keystore_id)")
+					sys.exit()
+				id = row["keystore_id"]
+				array_keys = []
+				for key in reader.fieldnames:
+					print key
+					if row[key]:
+						if key == "association":
+							association_commands.append("ztp set association id %s template %s" % (id, row[key]))
+						elif key[:7] == "idarray":
+							array_keys.append(row[key])
+						else:
+							if " " in key:
+								key = '%s' % key
+							if " " in row[key]:
+								row[key] = '%s' % row[key]
+							keystore_commands.append("ztp set keystore %s %s %s" % (id, key, row[key]))
+				if array_keys:
+					idarray_commands.append("ztp set idarray %s %s" % (id, " ".join(array_keys)))
+				keystore_commands.append("#")
 		console("#\n#\n#")
 		for cmd in keystore_commands:
 			console(cmd)
@@ -3495,44 +3543,85 @@ class external_keystore_main:
 				# log("external_keystore_main.load: ERROR: Cannot fine file (%s)" % config.running["external-keystores"][objname]["file"])
 				pass
 			else:
-				csvfile = open(config.running["external-keystores"][objname]["file"], "r")
-				reader = csv.DictReader(csvfile)
-				counter = 1
-				for row in reader:
-					try:
-						if "keystore_id" not in row:
-							log("ERROR: External-keystore ({}): Cannot find required header (keystore_id). Discarding keystore.".format(objname))
-							break
-						id = row["keystore_id"]
-						array_values = []
-						unordered_arrays = {}
-						ordered_keys = []
-						for key in row:
-							if row[key]:
-								if key == "association":
-									associations.update({id: row[key]})
-								if key[:7] == "idarray":
-									array_values.append(row[key])
-									if id not in keyvalstore:
-										keyvalstore.update({id:{}})
-									keyvalstore[id].update({key: row[key]})
-									unordered_arrays.update({key: row[key]})
-								else:
-									if id not in keyvalstore:
-										keyvalstore.update({id:{}})
-									keyvalstore[id].update({key: row[key]})
-						if array_values:
-							idarrays.update({id:array_values})
-						if unordered_arrays:
-							ordered_array_keys = list(unordered_arrays)
-							ordered_array_keys.sort()
-							for key in ordered_array_keys:
-								ordered_keys.append(unordered_arrays[key])
-						keyvalstore[id].update({"idarray": ordered_keys})
-						counter += 1
-					except Exception as e:
-						log("ERROR: External-keystore ({}) error encountered in row {}, row excluded".format(objname, counter))
-						log("    Row Info: {}".format(row))
+				if config.running['external-keystores'][objname]['type'] == 'json':
+					jsonfile = open(config.running["external-keystores"][objname]["file"], "r")
+					json_data = json.load(jsonfile)
+					reader = json_data.values()
+					counter = 1
+					for row in reader:
+						try:
+							if "keystore_id" not in row:
+								log("ERROR: Cannot find required header (keystore_id)")
+								break
+							id = row["keystore_id"]
+							array_values = []
+							unordered_arrays = {}
+							ordered_keys = []
+							for key in row:
+								if row[key] or row[key]==0:
+									if key == "association":
+										associations.update({id: row[key]})
+									if key[:7] == "idarray":
+										array_values.append(row[key])
+										if id not in keyvalstore:
+											keyvalstore.update({id:{}})
+										keyvalstore[id].update({key: row[key]})
+										unordered_arrays.update({key: row[key]})
+									else:
+										if id not in keyvalstore:
+											keyvalstore.update({id:{}})
+										keyvalstore[id].update({key: row[key]})
+							if array_values:
+								idarrays.update({id:array_values})
+							if unordered_arrays:
+								ordered_array_keys = list(unordered_arrays)
+								ordered_array_keys.sort()
+								for key in ordered_array_keys:
+									ordered_keys.append(unordered_arrays[key])
+							keyvalstore[id].update({"idarray": ordered_keys})
+							counter += 1
+						except Exception as e:
+							log("ERROR: External-keystore ({}) error encountered in row {}, row excluded".format(objname, counter))
+							log("    Row Info: {}".format(row))
+				elif config.running['external-keystores'][objname]['type'] == 'csv':
+					csvfile = open(config.running["external-keystores"][objname]["file"], "r")
+					reader = csv.DictReader(csvfile)
+					counter = 1
+					for row in reader:
+						try:
+							if "keystore_id" not in row:
+								log("ERROR: External-keystore ({}): Cannot find required header (keystore_id). Discarding keystore.".format(objname))
+								break
+							id = row["keystore_id"]
+							array_values = []
+							unordered_arrays = {}
+							ordered_keys = []
+							for key in row:
+								if row[key]:
+									if key == "association":
+										associations.update({id: row[key]})
+									if key[:7] == "idarray":
+										array_values.append(row[key])
+										if id not in keyvalstore:
+											keyvalstore.update({id:{}})
+										keyvalstore[id].update({key: row[key]})
+										unordered_arrays.update({key: row[key]})
+									else:
+										if id not in keyvalstore:
+											keyvalstore.update({id:{}})
+										keyvalstore[id].update({key: row[key]})
+							if array_values:
+								idarrays.update({id:array_values})
+							if unordered_arrays:
+								ordered_array_keys = list(unordered_arrays)
+								ordered_array_keys.sort()
+								for key in ordered_array_keys:
+									ordered_keys.append(unordered_arrays[key])
+							keyvalstore[id].update({"idarray": ordered_keys})
+							counter += 1
+						except Exception as e:
+							log("ERROR: External-keystore ({}) error encountered in row {}, row excluded".format(objname, counter))
+							log("    Row Info: {}".format(row))
 		self.data = {
 			"keyvalstore": keyvalstore,
 			"idarrays": idarrays,
