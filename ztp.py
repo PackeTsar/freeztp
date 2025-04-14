@@ -21,7 +21,7 @@ import curses
 import socket
 import logging
 import platform
-import commands
+import subprocess
 import threading
 
 
@@ -32,7 +32,7 @@ class os_detect:
 		self._pkgmgr = self._pkgmgr_detect()
 		self._make_names()
 	def _systemd_detect(self):
-		checksystemd = commands.getstatusoutput("systemctl")
+		checksystemd = subprocess.getstatusoutput("systemctl")
 		if len(checksystemd[1]) > 50 and "Operation not permitted" not in checksystemd[1]:
 			return True
 		else:
@@ -41,7 +41,7 @@ class os_detect:
 		checkpkgmgr = {}
 		checknames = ["yum", "apt", "apt-get"]
 		for mgr in checknames:
-			checkpkgmgr.update({len(commands.getstatusoutput(mgr)[1]): mgr})
+			checkpkgmgr.update({len(subprocess.getstatusoutput(mgr)[1]): mgr})
 		pkgmgr = checkpkgmgr[sorted(list(checkpkgmgr), key=int)[len(sorted(list(checkpkgmgr), key=int)) - 1]]
 		return pkgmgr
 	def _dist_detect(self):
@@ -58,7 +58,7 @@ class os_detect:
 			return "debian"
 		else:
 			print("Unsupported OS Type! Please create an issue at https://github.com/PackeTsar/freeztp/issues and include below information.")
-			print(platform.linux_distribution())
+			print((platform.linux_distribution()))
 			sys.exit()
 	def _make_names(self):
 		if self._dist == "centos":
@@ -1206,7 +1206,7 @@ class config_manager:
 		for iden in self.running["keyvalstore"]:
 			for key in self.running["keyvalstore"][iden]:
 				value = self.running["keyvalstore"][iden][key]
-				if type(value) != type("") and type(value) != type(u""):
+				if type(value) != type("") and type(value) != type(""):
 					value = "'%s'" % json.dumps(value)
 				else:
 					if " " in value:
@@ -1218,7 +1218,7 @@ class config_manager:
 		for iden in self.running["integrations"]:
 			for key in self.running["integrations"][iden]:
 				value = self.running["integrations"][iden][key]
-				if type(value) != type("") and type(value) != type(u""):
+				if type(value) != type("") and type(value) != type(""):
 					value = "'%s'" % json.dumps(value)
 				else:
 					if " " in value:
@@ -1340,7 +1340,7 @@ class config_manager:
 		for iden in self.running["integrations"]:
 			for key in self.running["integrations"][iden]:
 				value = self.running["integrations"][iden][key]
-				if type(value) != type("") and type(value) != type(u""):
+				if type(value) != type("") and type(value) != type(""):
 					value = "'%s'" % json.dumps(value)
 				else:
 					if " " in value:
@@ -1379,7 +1379,7 @@ class config_manager:
 			result += quad + "."
 		return result[:len(result)-1]
 	def isc_hex(self, hexdata):
-		return ":".join(map(''.join, zip(*[iter(hexdata)]*2))).upper()
+		return ":".join(map(''.join, list(zip(*[iter(hexdata)]*2)))).upper()
 	def opt125(self, mode):
 		if mode == "windows":
 			console("""
@@ -2858,7 +2858,7 @@ class tracking_class:
 		dlist.sort(reverse=True)
 		for dload in dlist:
 			data.append(d[dload])
-		return make_table([u'time', u'ipaddr', u'filename', u'filesize', u'bytessent', u'percent', u'rate', u'active'], data)
+		return make_table(['time', 'ipaddr', 'filename', 'filesize', 'bytessent', 'percent', 'rate', 'active'], data)
 	class screen:
 		def __init__(self):
 			self.win = curses.initscr()
@@ -2951,7 +2951,7 @@ class tracking_class:
 		dlist.sort(reverse=True)
 		for dload in dlist[:20]:
 			data.append(d[dload])
-		return make_table([u'time', u'ipaddr', u'filename', u'filesize', u'bytessent', u'percent', u'rate', u'active'], data)
+		return make_table(['time', 'ipaddr', 'filename', 'filesize', 'bytessent', 'percent', 'rate', 'active'], data)
 	def show_downloads_live(self, args):
 		s = self.screen()
 		ani = self._gen_animation()
@@ -3175,7 +3175,7 @@ class integration_spark:
 				- roomId
 				- toPersonEmail
 				- toPersonId""")
-		akey = raw_input("Enter your Cisco Spark API Key > ")
+		akey = input("Enter your Cisco Spark API Key > ")
 		self.config.update({"api-key": akey})  # Update API key entry
 		console("Testing API Key:")
 		console(make_table(["displayName", "emails"], [self._get("https://api.ciscospark.com/v1/people/me")])+"\n\n")
@@ -3186,9 +3186,9 @@ class integration_spark:
 			selection = integrations.table_select(["title"], rooms, "Select a Room")
 			value = selection["id"]
 		elif dtype["destination type"] == "toPersonEmail":
-			value = raw_input("Enter the %s value > " % dtype["destination type"])
+			value = input("Enter the %s value > " % dtype["destination type"])
 		elif dtype["destination type"] == "toPersonId":
-			value = raw_input("Enter the %s value > " % dtype["destination type"])
+			value = input("Enter the %s value > " % dtype["destination type"])
 		self.config.update({dtype["destination type"]: value})
 		return self.config
 
@@ -3263,7 +3263,7 @@ class integration_power_automate:
 			'}\r\n'
 			'\r\n'
 		)
-		url = raw_input("Enter your Power Automate Webhook URL.> ")
+		url = input("Enter your Power Automate Webhook URL.> ")
 		self.config.update({"url": url})  # Update API key entry
 		return self.config
 
@@ -3338,7 +3338,7 @@ class integration_main:
 			index += 1
 		columnorder = ["#"] + columnorder
 		console(make_table(columnorder, tabdata))
-		selection = raw_input(message+" [1] ")
+		selection = input(message+" [1] ")
 		if not selection:
 			selection = "1"
 		elif selection not in lookup:
@@ -3367,14 +3367,14 @@ class integration_main:
 			cfg.update(config.running["integrations"][objname])
 			intgobj = self.mods[typ](cfg)
 			testfile = ztp_dyn_file("testconfig", "127.0.0.1", "65000",
-				data=u"This is a\ntest configuration", track=False)
+				data="This is a\ntest configuration", track=False)
 			#testfile = open("README.md", "r")
 			#testfile = io.StringIO(u"This is a\ntest configuration")
 			message = integration_message({
 				"ip": "127.0.0.1",
 				"tempid": "ZTP-TESTING123",
 				"mac": "aa:bb:cc:dd:ee",
-				"realid": {u'OIDNAME': u'SERIAL12345'},
+				"realid": {'OIDNAME': 'SERIAL12345'},
 				"keystore": "NO_KEYSTORE",
 				"status": "testing",
 				"file": testfile
@@ -3627,7 +3627,7 @@ def interpreter():
 	##### INSTALL #####
 	elif arguments == "install":
 		console("***** Are you sure you want to install FreeZTP using version %s?*****" % version)
-		answer = raw_input(">>>>> If you are sure you want to do this, type in 'CONFIRM' and hit ENTER >>>>")
+		answer = input(">>>>> If you are sure you want to do this, type in 'CONFIRM' and hit ENTER >>>>")
 		if answer.lower() == "confirm":
 			inst = installer()
 			inst.copy_binary()
@@ -3643,7 +3643,7 @@ def interpreter():
 			console("Install/upgrade cancelled")
 	elif arguments == "upgrade":
 		console("***** Are you sure you want to upgrade FreeZTP using version %s?*****" % version)
-		answer = raw_input(">>>>> If you are sure you want to do this, type in 'CONFIRM' and hit ENTER >>>>")
+		answer = input(">>>>> If you are sure you want to do this, type in 'CONFIRM' and hit ENTER >>>>")
 		if answer.lower() == "confirm":
 			inst = installer()
 			inst.copy_binary()
