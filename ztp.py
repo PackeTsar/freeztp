@@ -7,7 +7,7 @@
 ##### https://github.com/packetsar/freeztp #####
 
 ##### Inform FreeZTP version here #####
-version = "v1.5.1"
+version = "v1.5.1_nstam"
 
 
 ##### Import native modules #####
@@ -23,7 +23,8 @@ import logging
 import platform
 import commands
 import threading
-
+from inspect import getmembers, isfunction
+import nstam_ipaddr
 
 class os_detect:
 	def __init__(self):
@@ -238,7 +239,10 @@ class config_factory:
 		self.state = {}
 		self.snmprequests = {}
 		try:
-			self.basefilename = config.running["initialfilename"]
+			# Support multiple initial filenames (comma-separated)
+			_initfn = config.running["initialfilename"]
+			self.basefilenames = [x.strip() for x in _initfn.split(",")] if "," in _initfn else [_initfn]
+			self.basefilename = self.basefilenames[0]  # Keep for backwards compat
 			self.imagediscoveryfile = config.running["imagediscoveryfile"]
 			self.basesnmpcom = config.running["community"]
 			self.snmpoid = config.running["snmpoid"]
@@ -269,7 +273,7 @@ class config_factory:
 		if (self.uniquesuffix in filename) and (filename != self.basefilename):
 			log("cfact.lookup: TempID is (%s)" % tempid)
 			log("cfact.lookup: Current SNMP Requests: %s" % list(self.snmprequests))
-		if filename == self.basefilename:
+		if filename in self.basefilenames:
 			log("cfact.lookup: Requested filename matches the initialfilename. Returning True")
 			return True
 		elif filename == self.imagediscoveryfile:
@@ -330,8 +334,8 @@ class config_factory:
 						return False
 	def request(self, filename, ipaddr, test=False):
 		log("cfact.request: Called with filename (%s) and IP (%s)" % (filename, ipaddr))
-		if filename == self.basefilename:
-			log("cfact.request: Filename (%s) matches the configured initialfilename" % self.basefilename)
+		if filename in self.basefilenames:
+			log("cfact.request: Filename (%s) matches one of the configured initialfilenames" % self.basefilename)
 			tempid = self._generate_name()
 			log("cfact.request: Generated a TempID with cfact._generate_name: (%s)" % tempid)
 			if not test:
@@ -556,6 +560,11 @@ class config_factory:
 			path = external_keystores.data
 		templatedata = self.get_template(keystoreid)
 		env = j2.Environment(loader=j2.FileSystemLoader('/'))
+		#NSTAM_FILTERS_MOD
+		my_filters = {name: function
+			for name, function in getmembers(nstam_ipaddr)
+				if isfunction(function)}
+		env.filters.update(my_filters)
 		template = env.from_string(templatedata)
 		vals = self.pull_keystore_values(path, keystoreid)
 		if snmpinfo:
@@ -667,6 +676,12 @@ class config_factory:
 					quit()
 				else:
 					env = j2.Environment(loader=j2.FileSystemLoader('/'))
+					#NSTAM_FILTERS_MOD
+					my_filters = {name: function 
+						for name, function in getmembers(nstam_ipaddr)
+							if isfunction(function)}
+					env.filters.update(my_filters)
+					#print my_filters
 					j2template = env.from_string(templatedata)
 					ast = env.parse(templatedata)
 			elif template == "initial":
@@ -815,6 +830,7 @@ class config_manager:
 	def __init__(self):
 		self.sections = [
 		{"name": "dhcpd", "function": self.show_config_dhcpd},
+		{"name": "dhcpd-vendor-class", "function": self.show_config_dhcpd_vendor_class},
 		{"name": "template", "function": self.show_config_template},
 		{"name": "keystore", "function": self.show_config_keystore},
 		{"name": "idarray", "function": self.show_config_idarray},
@@ -910,6 +926,8 @@ class config_manager:
 			self.set_dhcpd_options(args)
 		elif setting == "dhcpd":
 			self.set_dhcpd(args)
+		elif setting == "dhcpd-vendor-class":
+			self.set_dhcpd_vendor_class(args)
 		elif setting == "logging":
 			self.set_logging(args[3], args[4])
 		else:
@@ -1008,6 +1026,13 @@ class config_manager:
 				console("DHCP Option '%s' is not currently configured" % iden)
 			else:
 				del self.running["dhcpd-options"][iden]
+		elif setting == "dhcpd-vendor-class":
+			if "dhcpd-vendor-classes" not in list(self.running):
+				console("No DHCP vendor classes are currently configured")
+			elif iden not in list(self.running["dhcpd-vendor-classes"]):
+				console("DHCP Vendor Class '%s' is not currently configured" % iden)
+			else:
+				del self.running["dhcpd-vendor-classes"][iden]
 		else:
 			console("Unknown Setting!")
 		self.save()
@@ -1129,6 +1154,81 @@ class config_manager:
 			self.running["dhcpd"][scope].update({setting: value})
 		else:
 			console("BAD COMMAND!")
+		self.save()
+	def set_dhcpd_vendor_class(self, args):
+		"""
+		Configure DHCP vendor classes for different network equipment manufacturers.
+
+		Usage:
+		  ztp set dhcpd-vendor-class <name> match <match_expression>
+		  ztp set dhcpd-vendor-class <name> range-start <ip>
+		  ztp set dhcpd-vendor-class <name> range-end <ip>
+		  ztp set dhcpd-vendor-class <name> option <option_name> <value>
+
+		Examples:
+		  ztp set dhcpd-vendor-class cisco match 'substring(option dhcp-client-identifier,1,5) = "cisco" or option vendor-class-identifier = "ciscopnp"'
+		  ztp set dhcpd-vendor-class cisco range-start 169.254.100.1
+		  ztp set dhcpd-vendor-class cisco range-end 169.254.100.200
+		  ztp set dhcpd-vendor-class cisco option routers 169.254.254.254
+		  ztp set dhcpd-vendor-class cisco option ztp-tftp-address 169.254.254.254
+
+		  ztp set dhcpd-vendor-class fortigate match 'substring(option vendor-class-identifier,0,8) = "Fortinet" or substring(option vendor-class-identifier,0,9) = "FortiGate"'
+		  ztp set dhcpd-vendor-class fortigate range-start 169.254.101.1
+		  ztp set dhcpd-vendor-class fortigate range-end 169.254.101.200
+		  ztp set dhcpd-vendor-class fortigate option routers 169.254.254.254
+		"""
+		if len(args) < 5:
+			console("ERROR: Incomplete Command!")
+			console("Usage: ztp set dhcpd-vendor-class <name> <setting> <value>")
+			quit()
+		classname = args[3]
+		setting = args[4]
+		value = args[5] if len(args) > 5 else None
+		# Initialize dhcpd-vendor-classes if not exists
+		if "dhcpd-vendor-classes" not in list(self.running):
+			self.running.update({"dhcpd-vendor-classes": {}})
+		# Initialize this vendor class if not exists
+		if classname not in self.running["dhcpd-vendor-classes"]:
+			console("INFO: Creating new vendor class '%s'" % classname)
+			self.running["dhcpd-vendor-classes"].update({classname: {"options": {}}})
+		# Handle different settings
+		if setting == "match":
+			if value is None:
+				console("ERROR: Match expression required")
+				quit()
+			# Allow multi-word match expressions (join remaining args)
+			match_expr = " ".join(args[5:])
+			self.running["dhcpd-vendor-classes"][classname]["match"] = match_expr
+			console("INFO: Set match expression for '%s'" % classname)
+		elif setting == "range-start":
+			# Simple IP validation without netaddr dependency
+			import re
+			ip_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
+			if value is None or not re.match(ip_pattern, value):
+				console("ERROR: Valid IP address required for range-start")
+				quit()
+			self.running["dhcpd-vendor-classes"][classname]["range-start"] = value
+		elif setting == "range-end":
+			# Simple IP validation without netaddr dependency
+			import re
+			ip_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
+			if value is None or not re.match(ip_pattern, value):
+				console("ERROR: Valid IP address required for range-end")
+				quit()
+			self.running["dhcpd-vendor-classes"][classname]["range-end"] = value
+		elif setting == "option":
+			if len(args) < 7:
+				console("ERROR: Option name and value required")
+				console("Usage: ztp set dhcpd-vendor-class <name> option <option_name> <value>")
+				quit()
+			opt_name = args[5]
+			opt_value = " ".join(args[6:])  # Allow multi-word option values
+			self.running["dhcpd-vendor-classes"][classname]["options"][opt_name] = opt_value
+			console("INFO: Set option '%s' = '%s' for vendor class '%s'" % (opt_name, opt_value, classname))
+		else:
+			console("ERROR: Unknown setting '%s'" % setting)
+			console("Valid settings: match, range-start, range-end, option")
+			quit()
 		self.save()
 	def is_ip(self, data):
 		try:
@@ -1327,6 +1427,25 @@ class config_manager:
 		console(configtext)
 	def show_config_dhcpd(self):
 		pass
+	def show_config_dhcpd_vendor_class(self):
+		"""Show configuration for all vendor classes as CLI commands"""
+		cmdlist = []
+		vendor_classes = self.running.get("dhcpd-vendor-classes", {})
+		if not vendor_classes:
+			cmdlist.append("# No vendor classes configured")
+			return cmdlist
+		for classname, classconfig in vendor_classes.items():
+			cmdlist.append("# Vendor class: %s" % classname)
+			if "match" in classconfig:
+				cmdlist.append("ztp set dhcpd-vendor-class %s match '%s'" % (classname, classconfig["match"]))
+			if "range-start" in classconfig:
+				cmdlist.append("ztp set dhcpd-vendor-class %s range-start %s" % (classname, classconfig["range-start"]))
+			if "range-end" in classconfig:
+				cmdlist.append("ztp set dhcpd-vendor-class %s range-end %s" % (classname, classconfig["range-end"]))
+			for opt_name, opt_value in classconfig.get("options", {}).items():
+				cmdlist.append("ztp set dhcpd-vendor-class %s option %s %s" % (classname, opt_name, opt_value))
+			cmdlist.append("#")
+		return cmdlist
 	def show_config_template(self):
 		pass
 	def show_config_keystore(self):
@@ -1524,6 +1643,53 @@ class config_manager:
 			code = self.running["dhcpd-options"][option]["code"]
 			result += "option {} code {} = {};\n".format(option, code, typ)
 		result += "#\n"
+		#NSTAM_DHCP_MOD - Extensible Vendor Classes
+		# Generate vendor class definitions from config
+		vendor_classes = self.running.get("dhcpd-vendor-classes", {})
+		vendor_match_conditions = []
+		for classname, classconfig in vendor_classes.items():
+			if "match" in classconfig:
+				match_expr = classconfig["match"]
+				result += "#\n# Vendor Class: %s\n#\n" % classname
+				result += "class \"%s\" {\n" % classname
+				# Format match expression for readability (handle 'or' conditions)
+				if " or " in match_expr:
+					conditions = match_expr.split(" or ")
+					result += "  match if (\n"
+					for i, cond in enumerate(conditions):
+						cond = cond.strip()
+						if cond.startswith("(") and cond.endswith(")"):
+							cond = cond[1:-1]  # Remove outer parens
+						if i < len(conditions) - 1:
+							result += "    %s or\n" % cond
+						else:
+							result += "    %s\n" % cond
+					result += "  );\n"
+				else:
+					result += "  match if %s;\n" % match_expr
+				result += "}\n"
+				# Collect match conditions for black-hole exclusion
+				vendor_match_conditions.append("(%s)" % match_expr)
+		# Generate black-hole class that denies everything NOT matching any vendor class
+		result += "#\n"
+		result += "# Auto-generated black-hole: denies devices not matching known vendor classes\n"
+		result += "#\n"
+		result += "class \"black-hole\" {\n"
+		if vendor_match_conditions:
+			# Deny if NOT any of the vendor conditions
+			result += "  match if\n"
+			for i, cond in enumerate(vendor_match_conditions):
+				if i < len(vendor_match_conditions) - 1:
+					result += "    not %s and\n" % cond
+				else:
+					result += "    not %s;\n" % cond
+		else:
+			# Fallback: original Cisco-only logic if no vendor classes defined
+			result += "  match if substring(option dhcp-client-identifier,1,5) != \"cisco\" and\n"
+			result += "    (option vendor-class-identifier != \"ciscopnp\");\n"
+		result += "  deny booting;\n"
+		result += "  deny bootp;\n"
+		result += "}\n"
 		result += "#"
 		mappings = {
 		"gateway": " option routers <value>;",
@@ -1573,6 +1739,57 @@ class config_manager:
 				##
 				scopetext += ending
 				result += scopetext
+		# Generate vendor class pools (separate from legacy dhcpd scopes)
+		if vendor_classes:
+			result += "\n#\n#### Vendor Class Pools ####\n"
+			# Group vendor classes by their subnet (inferred from range-start)
+			# For simplicity, assume all vendor class ranges are in 169.254.0.0/16
+			vendor_pools_by_subnet = {}
+			for classname, classconfig in vendor_classes.items():
+				if "range-start" in classconfig and "range-end" in classconfig:
+					# Infer subnet from range-start (assume /16 for link-local)
+					start_ip = classconfig["range-start"]
+					if start_ip.startswith("169.254."):
+						subnet_key = "169.254.0.0/16"
+					elif start_ip.startswith("172.31."):
+						subnet_key = "172.31.0.0/16"
+					elif start_ip.startswith("10."):
+						subnet_key = "10.0.0.0/8"
+					else:
+						# Default to /24 subnet
+						parts = start_ip.split(".")
+						subnet_key = "%s.%s.%s.0/24" % (parts[0], parts[1], parts[2])
+					if subnet_key not in vendor_pools_by_subnet:
+						vendor_pools_by_subnet[subnet_key] = []
+					vendor_pools_by_subnet[subnet_key].append((classname, classconfig))
+			# Generate subnet blocks with vendor class pools
+			for subnet_key, class_list in vendor_pools_by_subnet.items():
+				subnet = netaddr.IPNetwork(subnet_key)
+				net = str(subnet.network)
+				mask = str(subnet.netmask)
+				result += "# Vendor class subnet: %s\n" % subnet_key
+				result += "subnet %s netmask %s {\n" % (net, mask)
+				# Generate a pool for each vendor class
+				for classname, classconfig in class_list:
+					result += "  # Pool for vendor class: %s\n" % classname
+					result += "  pool {\n"
+					result += "    allow members of \"%s\";\n" % classname
+					result += "    range %s %s;\n" % (classconfig["range-start"], classconfig["range-end"])
+					# Add vendor-specific options
+					for opt_name, opt_value in classconfig.get("options", {}).items():
+						# Handle different option formats
+						if opt_name in ["routers", "domain-name-servers"]:
+							result += "    option %s %s;\n" % (opt_name, opt_value)
+						elif opt_name == "domain-name":
+							result += "    option %s \"%s\";\n" % (opt_name, opt_value)
+						elif opt_name in self.running.get("dhcpd-options", {}):
+							# Custom option defined in dhcpd-options
+							result += "    option %s %s;\n" % (opt_name, opt_value)
+						else:
+							# Assume it's a standard option
+							result += "    option %s %s;\n" % (opt_name, opt_value)
+					result += "  }\n"
+				result += "}\n"
 		return result
 	def dhcpd_commit(self):
 		global netaddr
@@ -1973,10 +2190,10 @@ _ztp_complete()
 		COMPREPLY=( $(compgen -W "reset-config show" -- $cur) )
 		;;
 	  "set")
-		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile file-cache-timeout integration external-keystore template external-template keystore idarray association default-keystore global-keystore default-template imagefile image-supression delay-keystore dhcpd-option dhcpd logging" -- $cur) )
+		COMPREPLY=( $(compgen -W "suffix initialfilename community snmpoid initial-template tftproot imagediscoveryfile file-cache-timeout integration external-keystore template external-template keystore idarray association default-keystore global-keystore default-template imagefile image-supression delay-keystore dhcpd-option dhcpd dhcpd-vendor-class logging" -- $cur) )
 		;;
 	  "clear")
-		COMPREPLY=( $(compgen -W "keystore idarray snmpoid integration external-keystore template external-template association dhcpd-option dhcpd log downloads provisioning" -- $cur) )
+		COMPREPLY=( $(compgen -W "keystore idarray snmpoid integration external-keystore template external-template association dhcpd-option dhcpd dhcpd-vendor-class log downloads provisioning" -- $cur) )
 		;;
 	  "request")
 		COMPREPLY=( $(compgen -W "merge-test initial-merge default-keystore-test snmp-test dhcp-option-125 dhcpd-commit auto-dhcpd ipc-console integration-setup integration-test external-keystore-test keystore-csv-export" -- $cur) )
@@ -3389,9 +3606,13 @@ class external_keystore_csv:
 	options = ["file"]
 
 
+class external_keystore_json:
+	name = "json"
+	options = ["file"]
 class external_keystore_main:
 	mods = {
-		external_keystore_csv.name: external_keystore_csv
+		external_keystore_csv.name: external_keystore_csv,
+		external_keystore_json.name: external_keystore_json
 	}
 	def __init__(self):
 		self.data = {
@@ -3444,32 +3665,63 @@ class external_keystore_main:
 		if not os.path.isfile(filename):
 			console("Cannot find file (%s)" % filename)
 			sys.exit()
-		csvfile = open(filename, "r")
-		reader = csv.DictReader(csvfile)
 		keystore_commands = []
 		idarray_commands = []
 		association_commands = []
-		for row in reader:
-			if "keystore_id" not in row:
-				console("ERROR: Cannot find required header (keystore_id)")
-				sys.exit()
-			id = row["keystore_id"]
-			array_keys = []
-			for key in reader.fieldnames:
-				if row[key]:
-					if key == "association":
-						association_commands.append("ztp set association id %s template %s" % (id, row[key]))
-					elif key[:7] == "idarray":
-						array_keys.append(row[key])
-					else:
-						if " " in key:
-							key = '%s' % key
-						if " " in row[key]:
-							row[key] = '%s' % row[key]
-						keystore_commands.append("ztp set keystore %s %s %s" % (id, key, row[key]))
-			if array_keys:
-				idarray_commands.append("ztp set idarray %s %s" % (id, " ".join(array_keys)))
-			keystore_commands.append("#")
+		#NSTAM_MOD_JSON
+		if config.running['external-keystores'][objname]['type'] == 'json':
+			jsonfile = open(filename, "r")
+			json_data = json.load(jsonfile)
+			reader = json_data.values()
+			for row in reader:
+				if "keystore_id" not in row:
+					console("ERROR: Cannot find required header (keystore_id)")
+					sys.exit()
+				id = row["keystore_id"]
+				array_keys = []
+				for key in row.keys():
+					#print key
+					if row[key] or row[key]==0:
+						if key == "association":
+							association_commands.append("ztp set association id %s template %s" % (id, row[key]))
+						elif key[:7] == "idarray":
+							array_keys.append(row[key])
+						else:
+							if " " in key:
+								key = '%s' % key
+							if not (isinstance(row[key], int)):
+								if " " in row[key]:
+									row[key] = '%s' % row[key]
+							keystore_commands.append("ztp set keystore %s %s %s" % (id, key, row[key]))
+				if array_keys:
+					idarray_commands.append("ztp set idarray %s %s" % (id, " ".join(array_keys)))
+				keystore_commands.append("#")
+		else:
+			#CSV
+			csvfile = open(filename, "r")
+			reader = csv.DictReader(csvfile)
+			for row in reader:
+				if "keystore_id" not in row:
+					console("ERROR: Cannot find required header (keystore_id)")
+					sys.exit()
+				id = row["keystore_id"]
+				array_keys = []
+				for key in reader.fieldnames:
+					print key
+					if row[key]:
+						if key == "association":
+							association_commands.append("ztp set association id %s template %s" % (id, row[key]))
+						elif key[:7] == "idarray":
+							array_keys.append(row[key])
+						else:
+							if " " in key:
+								key = '%s' % key
+							if " " in row[key]:
+								row[key] = '%s' % row[key]
+							keystore_commands.append("ztp set keystore %s %s %s" % (id, key, row[key]))
+				if array_keys:
+					idarray_commands.append("ztp set idarray %s %s" % (id, " ".join(array_keys)))
+				keystore_commands.append("#")
 		console("#\n#\n#")
 		for cmd in keystore_commands:
 			console(cmd)
@@ -3495,44 +3747,87 @@ class external_keystore_main:
 				# log("external_keystore_main.load: ERROR: Cannot fine file (%s)" % config.running["external-keystores"][objname]["file"])
 				pass
 			else:
-				csvfile = open(config.running["external-keystores"][objname]["file"], "r")
-				reader = csv.DictReader(csvfile)
-				counter = 1
-				for row in reader:
-					try:
-						if "keystore_id" not in row:
-							log("ERROR: External-keystore ({}): Cannot find required header (keystore_id). Discarding keystore.".format(objname))
-							break
-						id = row["keystore_id"]
-						array_values = []
-						unordered_arrays = {}
-						ordered_keys = []
-						for key in row:
-							if row[key]:
-								if key == "association":
-									associations.update({id: row[key]})
-								if key[:7] == "idarray":
-									array_values.append(row[key])
-									if id not in keyvalstore:
-										keyvalstore.update({id:{}})
-									keyvalstore[id].update({key: row[key]})
-									unordered_arrays.update({key: row[key]})
-								else:
-									if id not in keyvalstore:
-										keyvalstore.update({id:{}})
-									keyvalstore[id].update({key: row[key]})
-						if array_values:
-							idarrays.update({id:array_values})
-						if unordered_arrays:
-							ordered_array_keys = list(unordered_arrays)
-							ordered_array_keys.sort()
-							for key in ordered_array_keys:
-								ordered_keys.append(unordered_arrays[key])
-						keyvalstore[id].update({"idarray": ordered_keys})
-						counter += 1
-					except Exception as e:
-						log("ERROR: External-keystore ({}) error encountered in row {}, row excluded".format(objname, counter))
-						log("    Row Info: {}".format(row))
+				#NSTAM_MOD_JSON
+				if config.running['external-keystores'][objname]['type'] == 'json':
+					jsonfile = open(config.running["external-keystores"][objname]["file"], "r")
+					json_data = json.load(jsonfile)
+					reader = json_data.values()
+					counter = 1
+					for row in reader:
+						try:
+							if "keystore_id" not in row:
+								log("ERROR: Cannot find required header (keystore_id)")
+								break
+							id = row["keystore_id"]
+							array_values = []
+							unordered_arrays = {}
+							ordered_keys = []
+							for key in row:
+								if row[key] or row[key]==0:
+									if key == "association":
+										associations.update({id: row[key]})
+									if key[:7] == "idarray":
+										array_values.append(row[key])
+										if id not in keyvalstore:
+											keyvalstore.update({id:{}})
+										keyvalstore[id].update({key: row[key]})
+										unordered_arrays.update({key: row[key]})
+									else:
+										if id not in keyvalstore:
+											keyvalstore.update({id:{}})
+										keyvalstore[id].update({key: row[key]})
+							if array_values:
+								idarrays.update({id:array_values})
+							if unordered_arrays:
+								ordered_array_keys = list(unordered_arrays)
+								ordered_array_keys.sort()
+								for key in ordered_array_keys:
+									ordered_keys.append(unordered_arrays[key])
+							keyvalstore[id].update({"idarray": ordered_keys})
+							counter += 1
+						except Exception as e:
+							log("ERROR: External-keystore ({}) error encountered in row {}, row excluded".format(objname, counter))
+							log("    Row Info: {}".format(row))
+				#CSV FILE
+				else:
+					csvfile = open(config.running["external-keystores"][objname]["file"], "r")
+					reader = csv.DictReader(csvfile)
+					counter = 1
+					for row in reader:
+						try:
+							if "keystore_id" not in row:
+								log("ERROR: External-keystore ({}): Cannot find required header (keystore_id). Discarding keystore.".format(objname))
+								break
+							id = row["keystore_id"]
+							array_values = []
+							unordered_arrays = {}
+							ordered_keys = []
+							for key in row:
+								if row[key]:
+									if key == "association":
+										associations.update({id: row[key]})
+									if key[:7] == "idarray":
+										array_values.append(row[key])
+										if id not in keyvalstore:
+											keyvalstore.update({id:{}})
+										keyvalstore[id].update({key: row[key]})
+										unordered_arrays.update({key: row[key]})
+									else:
+										if id not in keyvalstore:
+											keyvalstore.update({id:{}})
+										keyvalstore[id].update({key: row[key]})
+							if array_values:
+								idarrays.update({id:array_values})
+							if unordered_arrays:
+								ordered_array_keys = list(unordered_arrays)
+								ordered_array_keys.sort()
+								for key in ordered_array_keys:
+									ordered_keys.append(unordered_arrays[key])
+							keyvalstore[id].update({"idarray": ordered_keys})
+							counter += 1
+						except Exception as e:
+							log("ERROR: External-keystore ({}) error encountered in row {}, row excluded".format(objname, counter))
+							log("    Row Info: {}".format(row))
 		self.data = {
 			"keyvalstore": keyvalstore,
 			"idarrays": idarrays,
@@ -3808,6 +4103,7 @@ def interpreter():
 		console(" - set delay-keystore <msec-to-delay>                          |  Set the miliseconds to delay the processing of a keystore lookup")
 		console(" - set dhcpd-option <opt-name> code <code> type <field-type>   |  Configure DHCP options to be available to the DHCP server")
 		console(" - set dhcpd <scope-name> [parameters]                         |  Configure DHCP scope(s) to serve IP addresses to ZTP clients")
+		console(" - set dhcpd-vendor-class <name> [parameters]                  |  Configure DHCP vendor classes for multi-vendor support (Cisco, FortiGate, etc)")
 		console(" - set logging [parameters]                                    |  Set up custom logging settings")
 	elif arguments == "set suffix":
 		console(" - set suffix <value>                             |  Set the file name suffix used by target when requesting the final config")
@@ -3869,6 +4165,19 @@ def interpreter():
 		console("                                                                         - set dhcpd-option ztp-tftp-address code 150 type ip-address")
 	elif arguments == "set dhcpd":
 		console(" - set dhcpd <scope-name> [parameters]            |  Configure DHCP scope(s) to serve IP addresses to ZTP clients")
+	elif (arguments[:20] == "set dhcpd-vendor-class" and len(sys.argv) < 6) or arguments == "set dhcpd-vendor-class":
+		console(" - set dhcpd-vendor-class <name> match <expression>             |  Set the DHCP match expression for this vendor class")
+		console(" - set dhcpd-vendor-class <name> range-start <ip>               |  Set the start of the IP range for this vendor class")
+		console(" - set dhcpd-vendor-class <name> range-end <ip>                 |  Set the end of the IP range for this vendor class")
+		console(" - set dhcpd-vendor-class <name> option <opt-name> <value>      |  Set a DHCP option for this vendor class")
+		console("                                                                 Examples:")
+		console("                                                                      - set dhcpd-vendor-class cisco match 'substring(option dhcp-client-identifier,1,5) = \"cisco\" or option vendor-class-identifier = \"ciscopnp\"'")
+		console("                                                                      - set dhcpd-vendor-class cisco range-start 169.254.100.1")
+		console("                                                                      - set dhcpd-vendor-class cisco range-end 169.254.100.200")
+		console("                                                                      - set dhcpd-vendor-class cisco option routers 169.254.254.254")
+		console("                                                                      - set dhcpd-vendor-class fortigate match 'substring(option vendor-class-identifier,0,8) = \"Fortinet\"'")
+		console("                                                                      - set dhcpd-vendor-class fortigate range-start 169.254.101.1")
+		console("                                                                      - set dhcpd-vendor-class fortigate option routers 169.254.254.254")
 	elif (arguments[:11] == "set logging" and len(sys.argv) < 5) or arguments == "set logging":
 		console(" - set logging merged-config-to-mainlog (enable|disable)           |  Enable or disable logging of final configs to the main log file")
 		console(" - set logging merged-config-to-custom-file (<filepath>|disable)   |  Log your merged configs to a Jinja2 rendered custom file")
@@ -3889,6 +4198,7 @@ def interpreter():
 		console(" - clear association <id/arrayname>               |  Delete an association from the configuration")
 		console(" - clear dhcpd-option <opt-name>                  |  Delete a configured DHCP option")
 		console(" - clear dhcpd <scope-name>                       |  Delete a DHCP scope")
+		console(" - clear dhcpd-vendor-class <name>                |  Delete a DHCP vendor class")
 		console(" - clear log                                      |  Delete the logging info from the logfile")
 		console(" - clear downloads                                |  Delete the list of TFTP downloads")
 		console(" - clear provisioning                             |  Delete the list of provisioned devices")
@@ -3912,6 +4222,8 @@ def interpreter():
 		console(" - clear dhcpd-option <opt-name>                  |  Delete a configured DHCP option")
 	elif (arguments[:11] == "clear dhcpd" and len(sys.argv) < 4) or arguments == "clear dhcpd":
 		console(" - clear dhcpd <scope-name>                       |  Delete a DHCP scope")
+	elif (arguments[:23] == "clear dhcpd-vendor-class" and len(sys.argv) < 4) or arguments == "clear dhcpd-vendor-class":
+		console(" - clear dhcpd-vendor-class <name>                |  Delete a DHCP vendor class")
 	elif arguments[:13] == "clear snmpoid" and len(sys.argv) >= 4:
 		config.clear(sys.argv)
 	elif arguments[:17] == "clear integration" and len(sys.argv) >= 5:
@@ -3929,6 +4241,8 @@ def interpreter():
 	elif arguments[:17] == "clear association" and len(sys.argv) >= 4:
 		config.clear(sys.argv)
 	elif arguments[:11] == "clear dhcpd" and len(sys.argv) >= 4:
+		config.clear(sys.argv)
+	elif arguments[:23] == "clear dhcpd-vendor-class" and len(sys.argv) >= 4:
 		config.clear(sys.argv)
 	elif arguments == "clear log":
 		logger.clear()
@@ -4121,6 +4435,7 @@ def interpreter():
 		console(" - set delay-keystore <msec-to-delay>                          |  Set the miliseconds to delay the processing of a keystore lookup")
 		console(" - set dhcpd-option <opt-name> code <code> type <field-type>   |  Configure DHCP options to be available to the DHCP server")
 		console(" - set dhcpd <scope-name> [parameters]                         |  Configure DHCP scope(s) to serve IP addresses to ZTP clients")
+		console(" - set dhcpd-vendor-class <name> [parameters]                  |  Configure DHCP vendor classes for multi-vendor support (Cisco, FortiGate, etc)")
 		console(" - set logging [parameters]                                    |  Set up custom logging settings")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
@@ -4134,6 +4449,7 @@ def interpreter():
 		console(" - clear association <id/arrayname>                            |  Delete an association from the configuration")
 		console(" - clear dhcpd-option <opt-name>                               |  Delete a configured DHCP option")
 		console(" - clear dhcpd <scope-name>                                    |  Delete a DHCP scope")
+		console(" - clear dhcpd-vendor-class <name>                             |  Delete a DHCP vendor class")
 		console(" - clear log                                                   |  Delete the logging info from the logfile")
 		console(" - clear downloads                                             |  Delete the list of TFTP downloads")
 		console(" - clear provisioning                                          |  Delete the list of provisioned devices")

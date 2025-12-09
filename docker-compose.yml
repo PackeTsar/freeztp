@@ -1,0 +1,18 @@
+services:
+  freeztp:
+    image: ghcr.io/nstamoul/freeztp:latest
+    platform: linux/arm64
+    container_name: freeztp
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      # Persist ZTP config/state alongside this compose file (put ztp.cfg here)
+      - ./etc-ztp:/etc/ztp:rw
+      # Persist TFTP root alongside this compose file
+      - ./tftp:/opt/tftp:rw
+      # Host DHCP bits (still absolute paths)
+      - /etc/dhcp/dhcpd.conf:/etc/dhcp/dhcpd.conf
+      - /var/lib/dhcp/dhcpd.leases:/var/lib/dhcp/dhcpd.leases:ro
+      # Uncomment to override bundled ztp.py with a local copy in this repo
+      # - ./ztp:/app/ztp:ro
+    command: ["python", "/app/ztp", "run"]
