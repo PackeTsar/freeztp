@@ -2904,9 +2904,9 @@ class tracking_class:
 			thread.start() # Start talker thread to listen to port
 	def _status_ipc_talker(self, client):
 		while True:
-			recieve = client.recv(1024)
-			if len(recieve) > 0:
-				if "?" in recieve:
+			receive = client.recv(1024)
+			if len(receive) > 0:
+				if "?" in receive:
 					table = """
 - threads
 - clear downloads
@@ -2915,18 +2915,18 @@ class tracking_class:
 - exit
 """
 					client.send(table)
-				elif "exit" in recieve:
+				elif "exit" in receive:
 					client.close()
 					return None
-				elif "threads" in recieve:
+				elif "threads" in receive:
 					client.send(str(threading.activeCount()))  # Send the query response
 					client.send(str(threading.enumerate()))
-				elif "clear downloads" in recieve:
+				elif "clear downloads" in receive:
 					self.clear_downloads(nested=True)
 					client.send(json.dumps(self.status, indent=4, sort_keys=True)+"\n")  # Send the query response
-				elif "get downloads" in recieve:
+				elif "get downloads" in receive:
 					client.send(json.dumps(self.status, indent=4, sort_keys=True)+"\n")  # Send the query response
-				elif "clear provisioning" in recieve:
+				elif "clear provisioning" in receive:
 					self.clear_provisioning(nested=True)
 					client.send(json.dumps(self.provdb.recall(), indent=4, sort_keys=True)+"\n")  # Send the query response
 				else:
