@@ -239,7 +239,7 @@ class file_cache:
 ##### Dynamic file object: instantiated by the tftpy server to generate   #####
 #####   TFTP files                                                        #####
 class ztp_dyn_file:
-    closed = False
+    closed = True
     position = 0
     def __init__(self, afile, raddress, rport, data=None, track=True):
         self.filename = afile
@@ -992,13 +992,13 @@ class snmp_query:                                                              #
         self.status = "running"
         while not self.complete:
             # PSC - new asyncio call to updated _get_oid
-            response = asyncio.run(self._get_oid(oid))
+            response = str(asyncio.run(self._get_oid(oid)))
             # PSC - response will be oid data or None
             if response:
                 self.responses.update({oidname: response})
                 self.status = "success"
                 self.complete = True
-                log(f"snmp_query._query_worker: SNMP Query Successful (OID: {oidname}). Host ({self.host}) responded with ({str(response)})")
+                log(f"snmp_query._query_worker: SNMP Query Successful (OID: {oidname}). Host ({self.host}) responded with ({response})")
             else:
                 self.status = "retrying"
                 log("snmp_query._query_worker: SNMP Query Timed Out")
@@ -1570,7 +1570,7 @@ class config_manager:                                                          #
                         # value = "'%s'" % value
                         value = f"'{value}'"
                 # intglist.append("ztp set integration %s %s %s" % (iden, key, value))
-                intglist.append("ztp set integration {iden} {key} {value}")
+                intglist.append(f"ztp set integration {iden} {key} {value}")
             intglist.append("#")
 
         exkeystlist = []
@@ -1581,7 +1581,7 @@ class config_manager:                                                          #
                     # value = "'%s'" % value
                     value = f"'{value}'"
                 # exkeystlist.append("ztp set external-keystore %s %s %s" % (iden, key, value))
-                exkeystlist.append("ztp set external-keystore {iden} {key} {value}")
+                exkeystlist.append(f"ztp set external-keystore {iden} {key} {value}")
             exkeystlist.append("#")
 
         extemplist = []
@@ -1592,7 +1592,7 @@ class config_manager:                                                          #
                     # value = "'%s'" % value
                     value = f"'{value}'"
                 # extemplist.append("ztp set external-template %s %s %s" % (iden, key, value))
-                extemplist.append("ztp set external-template {iden} {key} {value}")
+                extemplist.append(f"ztp set external-template {iden} {key} {value}")
             extemplist.append("#")
 
         associationlist = []
@@ -4326,15 +4326,15 @@ class external_templates_main:                                                 #
 def start_tftp():
     global tftpy
     import tftpy                                                               # pylint: disable=import-outside-toplevel
-    try:
-        # tftpy.TftpContextServer.start = start  # Overwrite the function
-        # tftpy.TftpContextServer.end = end  # Overwrite the function
-        # tftpy.TftpStateExpectACK.sendDAT = sendDAT
-        tftpy.TftpContexts.start = start  # Overwrite the function
-        tftpy.TftpContexts.end = end  # Overwrite the function
-        tftpy.TftpStates.TftpStateExpectACK.sendDAT = sendDAT
-    except NameError:
-        pass
+    # try:
+    #     # tftpy.TftpContextServer.start = start  # Overwrite the function
+    #     # tftpy.TftpContextServer.end = end  # Overwrite the function
+    #     # tftpy.TftpStateExpectACK.sendDAT = sendDAT
+    #     tftpy.TftpContexts.start = start  # Overwrite the function
+    #     tftpy.TftpContexts.end = end  # Overwrite the function
+    #     tftpy.TftpStates.TftpStateExpectACK.sendDAT = sendDAT
+    # except NameError:
+    #     pass
     log("start_tftp: Starting Up TFTPy")
     #tftpy.setLogLevel(logging.DEBUG)
     try:
@@ -4345,7 +4345,7 @@ def start_tftp():
         # os.system('mkdir -p ' + config.running["tftproot"])
         subprocess.run(["mkdir", "-p", config.running["tftproot"]], capture_output=False, check=True)
         server = tftpy.TftpServer(config.running["tftproot"], dyn_file_func=interceptor)
-    server.listen(listenip="", listenport=69)
+    server.listen(listenip="0.0.0.0", listenport=69)
     log("start_tftp: Started up successfully")
 
 
