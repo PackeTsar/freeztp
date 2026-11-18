@@ -3120,135 +3120,135 @@ bind 'set show-all-if-ambiguous on'"""
 
 
 
-# Overwrite of a TFTPY function to notify when downloads complete
-def end(self):
-    """Finish up the context."""
-    tftpy.TftpContexts.end(self)
-    self.metrics.end_time = time.time()
-    #### BEGIN CHANGES ####
-    tracking.report({
-        "ipaddr": self.host,
-        "port": self.port,
-        "block": None,
-        "filename": self.file_to_transfer,
-        "source": "end"})
-    #### END CHANGES ####
-    tftpy.log.debug("Set metrics.end_time to %s", self.metrics.end_time)
-    self.metrics.compute()
-
-
-# Overwrite of a TFTPY function to notify when downloads start
-def start(self, buffer):
-    """Start the state cycle. Note that the server context receives an
-    initial packet in its start method. Also note that the server does not
-    loop on cycle(), as it expects the TftpServer object to manage
-    that."""
-    tftpy.log.debug("In TftpContextServer.start")
-    self.metrics.start_time = time.time()
-    tftpy.log.debug("Set metrics.start_time to %s", self.metrics.start_time)
-    # And update our last updated time.
-    self.last_update = time.time()
-    pkt = self.factory.parse(buffer)
-    tftpy.log.debug("TftpContextServer.start() - factory returned a %s", pkt)
-    # Call handle once with the initial packet. This should put us into
-    # the download or the upload state.
-    #### BEGIN CHANGES ####
-    try:
-        tracking.report({
-            "ipaddr": self.host,
-            "port": self.port,
-            "block": None,
-            "filename": pkt.filename,
-            "source": "start"})
-    except Exception:                                                          # pylint: disable=broad-exception-caught
-        pass
-    #### END CHANGES ####
-    self.state = self.state.handle(pkt,
-                                    self.host,
-                                    self.port)
-
-
-def handle(self, pkt, raddress, rport):
-    # "Handle a packet, hopefully an ACK since we just sent a DAT."
-    if isinstance(pkt, tftpy.TftpPacketTypes.TftpPacketACK):
-        tftpy.log.debug("Received ACK for packet %d", pkt.blocknumber)
-        #### BEGIN CHANGES ####
-        tracking.report({
-            "ipaddr": raddress,
-            "port": rport,
-            "block": pkt.blocknumber,
-            "filename": None,
-            "source": "handle"})
-        #### END CHANGES ####
-        # Is this an ack to the one we just sent?
-        if self.context.next_block == pkt.blocknumber:
-            if self.context.pending_complete:
-                tftpy.log.info("Received ACK to final DAT, we're done.")
-                return None
-            # PSC - else -> none due to preceding return
-            # else:
-            tftpy.log.debug("Good ACK, sending next DAT")
-            self.context.next_block += 1
-            tftpy.log.debug("Incremented next_block to %d",
-                self.context.next_block)
-            self.context.pending_complete = self.sendDAT()
-        elif pkt.blocknumber < self.context.next_block:
-            tftpy.log.warning("Received duplicate ACK for block %d", pkt.blocknumber)
-            self.context.metrics.add_dup(pkt)
-        else:
-            tftpy.log.warning("Oooh, time warp. Received ACK to packet we didn't send yet. Discarding.")
-            self.context.metrics.errors += 1
-        return self
-    # PSC - elif -> if due to preceding return
-    # elif isinstance(pkt, tftpy.TftpPacketERR):
-    if isinstance(pkt, tftpy.TftpPacketTypes.TftpPacketERR):
-        tftpy.log.error("Received ERR packet from peer: %s", str(pkt))
-        # raise tftpy.TftpException("Received ERR packet from peer: %s" % str(pkt))
-        raise tftpy.TftpException(f"Received ERR packet from peer: {pkt}")
-    # PSC - else -> none due to preceding raise
-    # else:
-    tftpy.log.warning("Discarding unsupported packet: %s", str(pkt))
-    return self
-
-def sendDAT(self):
-    """This method sends the next DAT packet based on the data in the
-    context. It returns a boolean indicating whether the transfer is
-    finished."""
-    finished = False
-    blocknumber = self.context.next_block
-    # Test hook
-    if tftpy.TftpShared.DELAY_BLOCK and tftpy.TftpShared.DELAY_BLOCK == blocknumber:
-        import time                                                            # pylint: disable=import-outside-toplevel, reimported, redefined-outer-name
-        # PSC - syntax error
-        # log.debug("Deliberately delaying 10 seconds...")
-        tftpy.log.debug("Deliberately delaying 10 seconds...")
-        time.sleep(10)
-    dat = None
-    blksize = self.context.getBlocksize()
-    buffer = self.context.fileobj.read(blksize)
-    tftpy.log.debug("Read %d bytes into buffer", len(buffer))
-    if len(buffer) < blksize:
-        tftpy.log.info("Reached EOF on file %s", self.context.file_to_transfer)
-        finished = True
-    dat = tftpy.TftpPacketTypes.TftpPacketDAT()
-    dat.data = buffer
-    dat.blocknumber = blocknumber
-    self.context.metrics.bytes += len(dat.data)
-    tftpy.log.debug("Sending DAT packet %d", dat.blocknumber)
-    # self.context.sock.sendto(dat.encode().buffer,
-    #     (self.context.host, self.context.tidport))
-    self.context.sock.sendto(dat.buffer,
-        (self.context.host, self.context.tidport))
-    if self.context.packethook:
-        self.context.packethook(dat)
-    self.context.last_pkt = dat
-    tracking.report({
-        "ipaddr": self.context.address,
-        "port": self.context.port,
-        "position": self.context.fileobj.tell(),
-        "filename": self.context.file_to_transfer,
-        "source": "sendDAT"})
-    return finished
+# # Overwrite of a TFTPY function to notify when downloads complete
+# def end(self):
+#     """Finish up the context."""
+#     tftpy.TftpContexts.end(self)
+#     self.metrics.end_time = time.time()
+#     #### BEGIN CHANGES ####
+#     tracking.report({
+#         "ipaddr": self.host,
+#         "port": self.port,
+#         "block": None,
+#         "filename": self.file_to_transfer,
+#         "source": "end"})
+#     #### END CHANGES ####
+#     tftpy.log.debug("Set metrics.end_time to %s", self.metrics.end_time)
+#     self.metrics.compute()
+#
+#
+# # Overwrite of a TFTPY function to notify when downloads start
+# def start(self, buffer):
+#     """Start the state cycle. Note that the server context receives an
+#     initial packet in its start method. Also note that the server does not
+#     loop on cycle(), as it expects the TftpServer object to manage
+#     that."""
+#     tftpy.log.debug("In TftpContextServer.start")
+#     self.metrics.start_time = time.time()
+#     tftpy.log.debug("Set metrics.start_time to %s", self.metrics.start_time)
+#     # And update our last updated time.
+#     self.last_update = time.time()
+#     pkt = self.factory.parse(buffer)
+#     tftpy.log.debug("TftpContextServer.start() - factory returned a %s", pkt)
+#     # Call handle once with the initial packet. This should put us into
+#     # the download or the upload state.
+#     #### BEGIN CHANGES ####
+#     try:
+#         tracking.report({
+#             "ipaddr": self.host,
+#             "port": self.port,
+#             "block": None,
+#             "filename": pkt.filename,
+#             "source": "start"})
+#     except Exception:                                                          # pylint: disable=broad-exception-caught
+#         pass
+#     #### END CHANGES ####
+#     self.state = self.state.handle(pkt,
+#                                     self.host,
+#                                     self.port)
+#
+#
+# def handle(self, pkt, raddress, rport):
+#     # "Handle a packet, hopefully an ACK since we just sent a DAT."
+#     if isinstance(pkt, tftpy.TftpPacketTypes.TftpPacketACK):
+#         tftpy.log.debug("Received ACK for packet %d", pkt.blocknumber)
+#         #### BEGIN CHANGES ####
+#         tracking.report({
+#             "ipaddr": raddress,
+#             "port": rport,
+#             "block": pkt.blocknumber,
+#             "filename": None,
+#             "source": "handle"})
+#         #### END CHANGES ####
+#         # Is this an ack to the one we just sent?
+#         if self.context.next_block == pkt.blocknumber:
+#             if self.context.pending_complete:
+#                 tftpy.log.info("Received ACK to final DAT, we're done.")
+#                 return None
+#             # PSC - else -> none due to preceding return
+#             # else:
+#             tftpy.log.debug("Good ACK, sending next DAT")
+#             self.context.next_block += 1
+#             tftpy.log.debug("Incremented next_block to %d",
+#                 self.context.next_block)
+#             self.context.pending_complete = self.sendDAT()
+#         elif pkt.blocknumber < self.context.next_block:
+#             tftpy.log.warning("Received duplicate ACK for block %d", pkt.blocknumber)
+#             self.context.metrics.add_dup(pkt)
+#         else:
+#             tftpy.log.warning("Oooh, time warp. Received ACK to packet we didn't send yet. Discarding.")
+#             self.context.metrics.errors += 1
+#         return self
+#     # PSC - elif -> if due to preceding return
+#     # elif isinstance(pkt, tftpy.TftpPacketERR):
+#     if isinstance(pkt, tftpy.TftpPacketTypes.TftpPacketERR):
+#         tftpy.log.error("Received ERR packet from peer: %s", str(pkt))
+#         # raise tftpy.TftpException("Received ERR packet from peer: %s" % str(pkt))
+#         raise tftpy.TftpException(f"Received ERR packet from peer: {pkt}")
+#     # PSC - else -> none due to preceding raise
+#     # else:
+#     tftpy.log.warning("Discarding unsupported packet: %s", str(pkt))
+#     return self
+#
+# def sendDAT(self):
+#     """This method sends the next DAT packet based on the data in the
+#     context. It returns a boolean indicating whether the transfer is
+#     finished."""
+#     finished = False
+#     blocknumber = self.context.next_block
+#     # Test hook
+#     if tftpy.TftpShared.DELAY_BLOCK and tftpy.TftpShared.DELAY_BLOCK == blocknumber:
+#         import time                                                            # pylint: disable=import-outside-toplevel, reimported, redefined-outer-name
+#         # PSC - syntax error
+#         # log.debug("Deliberately delaying 10 seconds...")
+#         tftpy.log.debug("Deliberately delaying 10 seconds...")
+#         time.sleep(10)
+#     dat = None
+#     blksize = self.context.getBlocksize()
+#     buffer = self.context.fileobj.read(blksize)
+#     tftpy.log.debug("Read %d bytes into buffer", len(buffer))
+#     if len(buffer) < blksize:
+#         tftpy.log.info("Reached EOF on file %s", self.context.file_to_transfer)
+#         finished = True
+#     dat = tftpy.TftpPacketTypes.TftpPacketDAT()
+#     dat.data = buffer
+#     dat.blocknumber = blocknumber
+#     self.context.metrics.bytes += len(dat.data)
+#     tftpy.log.debug("Sending DAT packet %d", dat.blocknumber)
+#     # self.context.sock.sendto(dat.encode().buffer,
+#     #     (self.context.host, self.context.tidport))
+#     self.context.sock.sendto(dat.buffer,
+#         (self.context.host, self.context.tidport))
+#     if self.context.packethook:
+#         self.context.packethook(dat)
+#     self.context.last_pkt = dat
+#     tracking.report({
+#         "ipaddr": self.context.address,
+#         "port": self.context.port,
+#         "position": self.context.fileobj.tell(),
+#         "filename": self.context.file_to_transfer,
+#         "source": "sendDAT"})
+#     return finished
 
 
 def make_table(columnorder, tabledata):                                        # pylint: disable=too-many-locals
@@ -3551,9 +3551,11 @@ class tracking_class:
                 console("Service Running. Clearing downloads with IPC")
                 client.connect(('localhost', 10000))
                 time.sleep(0.1)
-                client.send("clear downloads\n")
+                # client.send("clear downloads\n")
+                client.send("clear downloads\n".encode("utf-8"))
                 time.sleep(0.1)
-                client.send("exit\n")
+                # client.send("exit\n")
+                client.send("exit\n".encode("utf-8"))
                 time.sleep(0.1)
                 client.close()
             except socket.error:
@@ -3577,7 +3579,8 @@ class tracking_class:
 
     def _status_ipc_talker(self, client):
         while True:
-            recieve = client.recv(1024)
+            recv = client.recv(1024)
+            recieve = recv.decode("utf-8")
             if len(recieve) > 0:
                 if "?" in recieve:
                     table = """
@@ -3587,25 +3590,35 @@ class tracking_class:
 - get downloads
 - exit
 """
-                    client.send(table)
+                    # client.send(table)
+                    client.send(table.encode("utf-8"))
                 elif "exit" in recieve:
                     client.close()
                     return
                 elif "threads" in recieve:
                     # PSC - activeCount() deprecated and changed to active_count()
                     # client.send(str(threading.activeCount()))  # Send the query response
-                    client.send(str(threading.active_count()))  # Send the query response
-                    client.send(str(threading.enumerate()))
+                    # client.send(str(threading.active_count())  # Send the query response
+                    # client.send(str(threading.enumerate())
+                    client.send(str(threading.active_count()).encode("utf-8"))  # Send the query response
+                    client.send(str(threading.enumerate()).encode("utf-8"))
                 elif "clear downloads" in recieve:
                     self.clear_downloads(nested=True)
-                    client.send(json.dumps(self.status, indent=4, sort_keys=True)+"\n")  # Send the query response
+                    # client.send(json.dumps(self.status, indent=4, sort_keys=True)+"\n")  # Send the query response
+                    msg = json.dumps(self.status, indent=4, sort_keys=True)+"\n"
+                    client.send(msg.encode("utf-8"))  # Send the query response
                 elif "get downloads" in recieve:
-                    client.send(json.dumps(self.status, indent=4, sort_keys=True)+"\n")  # Send the query response
+                    # client.send(json.dumps(self.status, indent=4, sort_keys=True)+"\n")  # Send the query response
+                    msg = json.dumps(self.status, indent=4, sort_keys=True)+"\n"
+                    client.send(msg.encode("utf-8"))  # Send the query response
                 elif "clear provisioning" in recieve:
                     self.clear_provisioning(nested=True)
-                    client.send(json.dumps(self.provdb.recall(), indent=4, sort_keys=True)+"\n")  # Send the query response
+                    # client.send(json.dumps(self.provdb.recall(), indent=4, sort_keys=True)+"\n") # Send the query response
+                    msg = json.dumps(self.provdb.recall(), indent=4, sort_keys=True)+"\n"
+                    client.send(msg.encode("utf-8"))  # Send the query response
                 else:
-                    client.send("ZTP#")  # Send the query response
+                    # client.send("ZTP#")  # Send the query response
+                    client.send("ZTP#".encode("utf-8"))  # Send the query response
 
     def _gen_animation(self):
         l = ["\\", "|", "/", "-"]
@@ -3707,10 +3720,13 @@ class tracking_class:
         self.provdb({})
         if not nested:
             try:
+                console("Service Running. Clearing provisioning with IPC")
                 client = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
                 client.connect(('localhost', 10000))
-                client.send("clear provisioning\n")
-                client.send("exit\n")
+                # client.send("clear provisioning\n")
+                client.send("clear provisioning\n".encode("utf-8"))
+                # client.send("exit\n")
+                client.send("exit\n".encode("utf-8"))
                 client.close()
             except socket.error:
                 console("Service not running. Clearing provisioning.")
