@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # Globally disabled linting warnings
 # pylint: disable=line-too-long
 # pylint: disable=missing-docstring
@@ -37,7 +37,7 @@ VERSION = "v1.6.1"
 log = None
 F_LEV = logging.DEBUG
 C_LEV = logging.INFO
-LOGFILE = "/etc/ztp/ztp.log"
+LOG_FILE = "/etc/ztp/ztp.log"
 
 class os_detect:
     def __init__(self):
@@ -1880,7 +1880,7 @@ class log_management:
     Log Management Class: Handles log show and clear actions
     """
     def __init__(self):
-        self.logfile = LOGFILE
+        self.logfile = LOG_FILE
 
     def show(self, args):
         if len(args) == 3:
@@ -2114,7 +2114,7 @@ After=network.target
 [Service]
 Type=simple
 User=root
-ExecStart=/bin/bash -c 'cd /bin; python ztp run'
+ExecStart=/bin/bash -c 'cd /bin; python3 ztp run'
 Restart=on-abort
 
 
@@ -3773,9 +3773,10 @@ def interpreter():                                                             #
     """
     arguments = cat_list(sys.argv[1:])
     if arguments == "run":
-        init_logging(log_file=LOGFILE, file_level=F_LEV, console_level=C_LEV)
+        init_logging(log_file=LOG_FILE, file_level=F_LEV, console_level=C_LEV)
     else:
-        init_logging(log_file=LOGFILE, file_level=F_LEV, console_level=None)
+        # Minimize logging for all other commands
+        init_logging(log_file=None, file_level=None, console_level=logging.WARNING)
     global config
     global osd
     global integrations
@@ -4373,15 +4374,15 @@ def init_logging(log_file, file_level, console_level=None):
     )
 
     # Create and configure file logging
-    try:
-        f_handler = logging.FileHandler(log_file)
-    except PermissionError:
-        print("FATAL: Permission Error: Cannot open log file. Ending program.")
-        print("    (Try running with 'sudo')\n\n")
-        sys.exit()
-    f_handler.setLevel(file_level)
-    f_handler.setFormatter(formatter)
-    log.addHandler(f_handler)
+    if file_level is not None:
+        try:
+            f_handler = logging.FileHandler(log_file)
+        except PermissionError:
+            print("FATAL: Permission Error: Cannot open log file. Ending program.")
+            sys.exit()
+        f_handler.setLevel(file_level)
+        f_handler.setFormatter(formatter)
+        log.addHandler(f_handler)
 
     # Create and configure console logging, if needed
     if console_level is not None:
@@ -4389,7 +4390,6 @@ def init_logging(log_file, file_level, console_level=None):
         c_handler.setLevel(console_level)
         c_handler.setFormatter(formatter)
         log.addHandler(c_handler)
-
 
 if __name__ == "__main__":
     interpreter()
