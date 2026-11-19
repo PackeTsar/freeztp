@@ -14,9 +14,7 @@
 #####             FreeZTP Server             #####
 #####        Written by John W Kerns         #####
 #####       http://blog.packetsar.com        #####
-##### https://github.com/packetsar/freeztp #####
-
-##### Inform FreeZTP version here #####
+#####  https://github.com/packetsar/freeztp  #####
 """
 
 ##### Import native modules #####
@@ -29,13 +27,11 @@ import time
 import json
 import curses
 import socket
-# import logging
 import platform
-# import commands
 import subprocess
 import threading
 
-version = "v1.5.1"
+version = "v1.6.0"
 
 class os_detect:
     def __init__(self):
@@ -45,12 +41,6 @@ class os_detect:
         self._make_names()
 
     def _systemd_detect(self):
-        # checksystemd = commands.getstatusoutput("systemctl")
-        # if len(checksystemd[1]) > 50 and "Operation not permitted" not in checksystemd[1]:
-        #     return True
-        # else:
-        #     return False
-        # PSC - deprecated commands module replaced by subprocess
         params = {
             "capture_output": True,
             "text": True,
@@ -72,13 +62,12 @@ class os_detect:
             "timeout": 10
         }
         for mgr in checknames:
-            # PSC - deprecated commands module replaced by subprocess
             try:
                 result = subprocess.run(mgr, **params, check=False)
             except FileNotFoundError:
                 continue
             checkpkgmgr[len(result.stdout)] = mgr
-            # checkpkgmgr.update({len(commands.getstatusoutput(mgr)[1]): mgr})
+
         # PSC - Select item with longest output?? Obscure. Difficult to interpret.
         pkgmgr = checkpkgmgr[sorted(list(checkpkgmgr), key=int)[len(sorted(list(checkpkgmgr), key=int)) - 1]]
         return pkgmgr
@@ -139,9 +128,7 @@ class os_detect:
         #     self.DHCPLEASES = "/var/lib/dhcp/dhcpd.leases"
 
     def service_control(self, cmd, service):
-        # PSC - deprecated os.system module replaced by subprocess
         if self._systemd:
-            # os.system("sudo systemctl %s %s" % (cmd, service))
             cli_cmd = ["sudo", "systemctl", cmd, service]
         else:
             # os.system("sudo service %s %s" % (service, cmd))
@@ -150,12 +137,9 @@ class os_detect:
         subprocess.run(cli_cmd, capture_output=False, check=False)
 
     def install_pkg(self, pkg):
-        # PSC - deprecated os.system module replaced by subprocess
-        # cmd = "sudo %s install -y %s" % (self._pkgmgr, pkg)
         cli_cmd = ["sudo", self._pkgmgr, "install", "-y", pkg]
         console("")
         subprocess.run(cli_cmd, capture_output=False, check=False)
-        # os.system("sudo %s install -y %s" % (self._pkgmgr, pkg))
 
 def interceptor(afile, raddress, rport):
     log("interceptor: Called. Checking the cache")
@@ -177,9 +161,11 @@ def interceptor(afile, raddress, rport):
     return None
 
 
-##### Class to cache generated file objects to prevent multiple rapid     #####
-#####   hits to the ZTP process: reducing logging                         #####
 class file_cache:
+    """
+    Class to cache generated file objects to prevent multiple rapid
+    hits to the ZTP process: reducing logging
+    """
     def __init__(self):
         self.timeout = config.running["file-cache-timeout"]
         self._cache_list = []
@@ -236,9 +222,11 @@ class file_cache:
                     del self._cache[entry]
 
 
-##### Dynamic file object: instantiated by the tftpy server to generate   #####
-#####   TFTP files                                                        #####
 class ztp_dyn_file:
+    """
+    Dynamic file object: instantiated by the tftpy server to generate TFTP
+    files
+    """
     closed = True
     position = 0
     def __init__(self, afile, raddress, rport, data=None, track=True):
@@ -271,11 +259,7 @@ class ztp_dyn_file:
     def read(self, size):
         start = self.position                                                  # pylint: disable=redefined-outer-name
         end = self.position + size                                             # pylint: disable=redefined-outer-name
-        #if not self.closed:
-        #    log("ztp_dyn_file.read: Called with size (%s)" % str(size))
         result = str(self.data[start:end])
-        #if not self.closed:
-        #    log("ztp_dyn_file.read: Returning position %s to %s" % (str(start), str(end)))
         self.position = end
         if self.track:
             tracking.report({
@@ -299,9 +283,11 @@ class ztp_dyn_file:
         self.closed = True
 
 
-##### Configuration factory: The main program which creates TFTP files    #####
-#####   based on the ZTP configuration                                    #####
 class config_factory:
+    """
+    Configuration factory: The main program which creates TFTP files based on
+    the ZTP configuration
+    """
     def __init__(self):
         global j2
         global meta
@@ -446,8 +432,6 @@ class config_factory:
             self.send_tracking_update(ipaddr, filename, len(result))
             return result
 
-        # PSC - elif -> if due to previous return
-        # elif filename == self.imagediscoveryfile:
         if filename == self.imagediscoveryfile:
             # log("cfact.request: Filename (%s) matches the configured imagediscoveryfile" % filename)
             log(f"cfact.request: Filename ({filename}) matches the configured imagediscoveryfile")
@@ -456,16 +440,12 @@ class config_factory:
                 self.send_tracking_update(ipaddr, filename, len(result))
                 return result
 
-            # PSC - else -> none due to previous return
-            # else:
             result = config.running["imagefile"]
             # log("cfact.request: Returning the value of the imagefile setting (%s)" % result)
             log(f"cfact.request: Returning the value of the imagefile setting ({result})")
             self.send_tracking_update(ipaddr, filename, len(result))
             return result
 
-        # PSC - else -> none due to previous return
-        # else:
         # log("cfact.request: Filename (%s) does NOT match the configured initial filename" % filename)
         log(f"cfact.request: Filename ({filename}) does NOT match the configured initial filename")
         tempid = filename.replace(self.uniquesuffix, "")
@@ -537,8 +517,6 @@ class config_factory:
                             })
                     return result
 
-                # PSC - else -> none due to previous return
-                # else:
                 # log("cfact.request: SNMP request for (%s) returned an unknown ID, checking for default-keystore" % self.snmprequests[tempid].host)
                 log(f"cfact.request: SNMP request for ({self.snmprequests[tempid].host}) returned an unknown ID, checking for default-keystore")
                 default = self._default_lookup()
@@ -633,34 +611,23 @@ class config_factory:
             elif os.path.isfile(newfile):
                 # log("cfact.log_merged_config_file: File ({}) already exists. Appending".format(newfile))
                 log(f"cfact.log_merged_config_file: File ({newfile}) already exists. Appending")
-                # PSC - convert to with open file handler
-                # f = open(newfile, "a")
                 with open(newfile, "w", encoding="utf8") as f:
-                    # f.write("\n\n{}\n\n".format(filedata))
                     f.write(f"\n\n{filedata}\n\n")
-                # f.close()
             elif not os.path.isdir(directory):
                 # log("cfact.log_merged_config_file: Creating new directory ({})".format(directory))
                 log(f"cfact.log_merged_config_file: Creating new directory ({directory})")
                 os.makedirs(directory)
                 # log("cfact.log_merged_config_file: Writing to file ({})".format(newfile))
                 log(f"cfact.log_merged_config_file: Writing to file ({newfile})")
-                # PSC - convert to with open file handler
-                # f = open(newfile, "w")
                 with open(newfile, "w", encoding="utf8") as f:
-                    # f.write("\n\n{}\n\n".format(filedata))
                     f.write(f"\n\n{filedata}\n\n")
-                # f.close()
             else:
                 # log("cfact.log_merged_config_file: Directory ({}) already exists".format(directory))
                 log(f"cfact.log_merged_config_file: Directory ({directory}) already exists")
                 # log("cfact.log_merged_config_file: Writing to file ({})".format(newfile))
                 log(f"cfact.log_merged_config_file: Writing to file ({newfile})")
-                # PSC - convert to with open file handler
-                # f = open(newfile, "w")
                 with open(newfile, "w", encoding="utf8") as f:
                     f.write(f"\n\n{filedata}\n\n")
-                # f.close()
 
     def send_tracking_update(self, ipaddr, filename, filesize):
         tracking.report({
@@ -717,8 +684,6 @@ class config_factory:
                     log(f"cfact.get_keystore_id: ID ({identifier}) resolved directly to a keystore")
                 return (identifier, identifier)
 
-            # PSC - else -> none due to previous return
-            # else:
             if not silent:
                 # log("cfact.get_keystore_id: ID (%s) not found in keystore names, checking local IDArrays" % identifier)
                 log(f"cfact.get_keystore_id: ID ({identifier}) not found in keystore names, checking local IDArrays")
@@ -732,13 +697,10 @@ class config_factory:
                         log(f"cfact.get_keystore_id: Keystore with name '{arrayname}' has been found")
                         return (arrayname, identifier)
 
-                    # PSC - elif -> if due to previous return
                     if arrayname in list(external_keystores.data["keyvalstore"]):
                         # log("cfact.get_keystore_id: Keystore with name '%s' has been found in an external-keystore" % arrayname)
                         log(f"cfact.get_keystore_id: Keystore with name '{arrayname}' has been found in an external-keystore")
                         return (arrayname, identifier)
-                    # PSC - else -> none due to preceding return
-                    # else:
                     # log("cfact.get_keystore_id: A keystore matching arrayname '%s' cannot be found. Discarding IDArray match" % arrayname)
                     log(f"cfact.get_keystore_id: A keystore matching arrayname '{arrayname}' cannot be found. Discarding IDArray match")
 
@@ -764,7 +726,6 @@ class config_factory:
             if not silent:
                 # log("cfact.get_keystore_id: ID (%s) not found in external IDArrays. ID Lookup failed!" % identifier)
                 log(f"cfact.get_keystore_id: ID ({identifier}) not found in external IDArrays. ID Lookup failed!")
-        # PSC - did not hit return statement, return None
         return None
 
     def get_template(self, identity):                                          # pylint: disable=too-many-branches
@@ -830,8 +791,6 @@ class config_factory:
             # log("ID '%s' cannot be found!" % iden)
             log(f"ID '{iden}' cannot be found!")
             log("To check for usage of a default keystore use: ztp request default-keystore-test")
-            # PSC - No return value needed to exit def.
-            # return None
             return
         identity, identifier = idtup                                           # pylint: disable=unused-variable
 
@@ -849,7 +808,6 @@ class config_factory:
                 if not templatedata:
                     # log("No tempate associated with identity %s" % iden)
                     log(f"No tempate associated with identity {iden}")
-                    # quit()
                     sys.exit()
                 else:
                     env = j2.Environment(loader=j2.FileSystemLoader('/'))
@@ -858,8 +816,6 @@ class config_factory:
             elif template == "initial":
                 env = j2.Environment(loader=j2.FileSystemLoader('/'))
                 j2template = env.from_string(self.baseconfig)
-                # PSC - appears to be syntax error. template does not have parse() method
-                # ast = j2template.parse(self.baseconfig)
                 ast = env.parse(self.baseconfig)
             templatevarlist = list(meta.find_undeclared_variables(ast))        # pylint: disable=possibly-used-before-assignment
             varsmissing = False
@@ -871,13 +827,11 @@ class config_factory:
             if varsmissing:
                 console("\nSome variables in jinja template do not exist in keystore:")
                 for var in missingvarlist:
-                    # console("\t-"+var)
                     console(f"\t-{var}")
                 console("\n")
             kvalues = self.pull_keystore_values(path, identity)
             snmpinfo = {"matched": "FAKEMATCHEDSERIAL"}
             for oid in config.running["snmpoid"]:
-                # snmpinfo.update({oid: "{}_FAKESERIAL".format(oid)})
                 snmpinfo.update({oid: f"{oid}_FAKESERIAL"})
             kvalues.update({"snmpinfo": snmpinfo})
             # log("cfact.merge_test: Merging with values:\n{}".format(json.dumps(kvalues, indent=4)))
@@ -890,8 +844,6 @@ class config_factory:
         if (keystore_id not in path["idarrays"]) and (keystore_id not in list(config.running["idarrays"])):
             return self._global_keystore_merge(path["keyvalstore"][keystore_id])
 
-        # PSC - else -> none due to previous return
-        # else:
         log("cfact.pull_keystore_values: Inserting IDArray keys")
         base_vals = dict(path["keyvalstore"][keystore_id])
         # Grab values from selected path first
@@ -908,7 +860,6 @@ class config_factory:
             base_vals.update({"idarray": ida_vals})
         index = 1
         for value in ida_vals:
-            # key = "idarray_{}".format(index)
             key = f"idarray_{index}"
             if key not in base_vals:
                 base_vals.update({key: value})
@@ -927,34 +878,27 @@ class config_factory:
                 keystoredata[kid] = config.running["keyvalstore"][kid]
                 return keystoredata
 
-            # PSC - elif -> if due to previous return
-            # elif kid in external_keystores.data["keyvalstore"]:
             if kid in external_keystores.data["keyvalstore"]:
                 log("cfact._global_lookup: Global keystore exists in external keystore. Returning")
                 keystoredata[kid] = external_keystores.data["keyvalstore"][kid]
                 return keystoredata
 
-            # PSC - else -> none due to previous return
-            # else:
             log("cfact._global_lookup: Global keystore doesn't exist. Returning keystore data unchanged")
             return keystoredata
 
-        # PSC - else -> none due to previous return
-        # else:
         log("cfact._global_lookup: Global-keystore configured as none. Discarding")
         return keystoredata
 
 
-##### SNMP Querying object: It is instantiated by the config_factory      #####
-#####   when the initial template is pulled down. A thread is             #####
-#####   spawned which continuously tries to query the ID of the           #####
-#####   switch. Once successfully queried, the querying object            #####
-#####   retains the real ID of the switch which is mapped to a            #####
-#####   keystore ID when the final template is requested                  #####
 class snmp_query:                                                              # pylint: disable=too-few-public-methods
+    """
+    SNMP Querying object: It is instantiated by the config_factory when the
+    initial template is pulled down. A thread is spawned which continuously
+    tries to query the ID of the switch. Once successfully queried, the
+    querying object retains the real ID of the switch which is mapped to a
+    keystore ID when the final template is requested
+    """
     def __init__(self, host, community, oids, timeout=30):
-        # global pysnmp
-        # import pysnmp.hlapi
         global psa
         import pysnmp.hlapi.v3arch.asyncio as psa                              # pylint: disable=import-outside-toplevel
         self.complete = False
@@ -991,9 +935,8 @@ class snmp_query:                                                              #
         starttime = time.time()
         self.status = "running"
         while not self.complete:
-            # PSC - new asyncio call to updated _get_oid
             response = str(asyncio.run(self._get_oid(oid)))
-            # PSC - response will be oid data or None
+            # response will be oid data or None
             if response:
                 self.responses.update({oidname: response})
                 self.status = "success"
@@ -1002,38 +945,14 @@ class snmp_query:                                                              #
             else:
                 self.status = "retrying"
                 log("snmp_query._query_worker: SNMP Query Timed Out")
-            # try:
-            #     log("snmp_query._query_worker: Attempting SNMP Query")
-            #     response = self._get_oid(oid)
-            #     self.responses.update({oidname: response})
-            #     self.status = "success"
-            #     self.complete = True
-            #     # log("snmp_query._query_worker: SNMP Query Successful (OID: %s). Host (%s) responded with (%s)" % (oidname, self.host, str(response)))
-            # except IndexError:
-            #     self.status = "retrying"
-            #     log("snmp_query._query_worker: SNMP Query Timed Out")
+
             if (time.time() - starttime) > self.timeout:
                 self.status = "failed"
                 log("snmp_query._query_worker: Timeout Expired, Query Thread Terminating")
                 break
 
-            # PSC - else -> none due to preceding break
-            # else:
             time.sleep(0.1)
 
-    # PSC - pysnmp.hlapi.getCmd deprecated. AsyncIO method replaces.
-    # def _get_oid(self, oid):
-        # errorIndication, errorStatus, errorIndex, varBinds = next(
-        #     pysnmp.hlapi.getCmd(
-        #         pysnmp.hlapi.SnmpEngine(),
-        #         pysnmp.hlapi.CommunityData(self.community, mpModel=0),
-        #         pysnmp.hlapi.UdpTransportTarget((self.host, 161)),
-        #         pysnmp.hlapi.ContextData(),
-        #         pysnmp.hlapi.ObjectType(pysnmp.hlapi.ObjectIdentity(oid))
-        #     )
-        # )
-        # return str(varBinds[0][1])
-    # PSC - new pysnmp async method. Returns none instead of error on fail.
     async def _get_oid(self, oid):
         iterator = psa.get_cmd(
             psa.SnmpEngine(),
@@ -1048,9 +967,11 @@ class snmp_query:                                                              #
         return varBinds[0][1] if varBinds else None
 
 
-##### Configuration Manager: handles publishing of and changes to the ZTP #####
-#####   configuration input by the administrator                          #####
 class config_manager:                                                          # pylint: disable=too-many-public-methods
+    """
+    Configuration Manager: handles publishing of and changes to the ZTP
+    configuration input by the administrator
+    """
     def __init__(self):
         self.sections = [
         {"name": "dhcpd", "function": self.show_config_dhcpd},
@@ -1074,11 +995,8 @@ class config_manager:                                                          #
 
     def _publish(self):
         if self.configfile:
-            # PSC - switch to 'with open' (best practice)
-            # f = open(self.configfile, "r")
             with open(self.configfile, "r", encoding="utf8") as f:
                 self.rawconfig = f.read()
-            # f.close()
             self.running = json.loads(self.rawconfig)
             self.suffix = self.running["suffix"]
             self.templates = self.running["templates"]
@@ -1099,12 +1017,6 @@ class config_manager:                                                          #
                 external_templates.load()
 
     def save(self):
-        # PSC - assignments don't make sense. switch to 'with open'
-        # self.rawconfig = self.json = json.dumps(self.running, indent=4, sort_keys=True)
-        # f = open(self.configfile, "w")
-            # PSC - no assignment needed
-            # self.rawconfig = f.write(self.rawconfig)
-        # f.close()
         rawconfig = json.dumps(self.running, indent=4, sort_keys=True)
         with open(self.configfile, "w", encoding="utf8") as f:
             f.write(rawconfig)
@@ -1416,18 +1328,14 @@ class config_manager:                                                          #
             cmds = []
             ips = self.filter_ips(self.get_addresses())  # Get current interface addresses
             if len(ips) == 1:
-                # myip = ips[0][1].encode()
                 myip = ips[0][1]
                 # console("INFO: Detected ZTP server IP: {}".format(myip))
-                # cmds.append("ztp set dhcpd {} ztp-tftp-address {}".format(scope, myip))
                 console(f"INFO: Detected ZTP server IP: {myip}")
                 cmds.append(f"ztp set dhcpd {scope} ztp-tftp-address {myip}")
                 scopedict.update({"ztp-tftp-address": myip})
             else:
                 # console("INFO: Could not detect ZTP server IP. To set IP for this scope, use: ztp set dhcpd {} ztp-tftp-address <ip-address>".format(scope))
                 console(f"INFO: Could not detect ZTP server IP. To set IP for this scope, use: ztp set dhcpd {scope} ztp-tftp-address <ip-address>")
-            # cmds.append("ztp set dhcpd {} lease-time 3600".format(scope))
-            # cmds.append("ztp set dhcpd {} imagediscoveryfile-option enable".format(scope))
             cmds.append(f"ztp set dhcpd {scope} lease-time 3600")
             cmds.append(f"ztp set dhcpd {scope} imagediscoveryfile-option enable")
             scopedict.update({"imagediscoveryfile-option": "enable", "lease-time": 3600})
@@ -1435,7 +1343,7 @@ class config_manager:                                                          #
             for cmd in cmds:
                 # console("    Injecting Command: {}".format(cmd))
                 console(f"    Injecting Command: {cmd}")
-        ###############
+
         if setting in checks:
             check = checks[setting](value)
             # if check == True:
@@ -1464,8 +1372,6 @@ class config_manager:                                                          #
             ipobj = netaddr.IPNetwork(data)
             if str(ipobj.cidr) == data:
                 return True
-            # PSC - else -> none due to previous return
-            # else:
             return "Please provide a CIDR address (ie: 10.0.0.0/24)"
 
         except ValueError as err:
@@ -1478,8 +1384,6 @@ class config_manager:                                                          #
         except Exception:                                                      # pylint: disable=broad-exception-caught
             return "Must be a number!"
 
-    # PSC - unused param
-    # def make_true(self, data):
     def make_true(self):
         return True
 
@@ -1499,30 +1403,21 @@ class config_manager:                                                          #
         cmdlist = []
         simplevals = ["suffix", "initialfilename", "community", "tftproot", "imagediscoveryfile", "file-cache-timeout"]
         for each in simplevals:
-            # cmdlist.append("ztp set %s %s" % (each, self.running[each]))
             cmdlist.append(f"ztp set {each} {self.running[each]}")
 
         for oid in self.running["snmpoid"]:
-            # cmdlist.append("ztp set snmpoid %s %s" % (oid, self.running["snmpoid"][oid]))
             cmdlist.append(f"ztp set snmpoid {oid} {self.running["snmpoid"][oid]}")
 
-        # log_merged_mainlog = "ztp set logging merged-config-to-mainlog {}".format(
-        #     self.running["logging"]["merged-config-to-mainlog"]
-        # )
         info = self.running["logging"]["merged-config-to-mainlog"]
         log_merged_mainlog = f"ztp set logging merged-config-to-mainlog {info}"
         if self.running["logging"]["merged-config-to-custom-file"] == "disable":
             log_merged_customfile = "ztp set logging merged-config-to-custom-file disable"
         else:
-            # log_merged_customfile = "ztp set logging merged-config-to-custom-file '{}'".format(
-            #     self.running["logging"]["merged-config-to-custom-file"]
-            # )
             info = self.running["logging"]["merged-config-to-custom-file"]
             log_merged_customfile = f"ztp set logging merged-config-to-custom-file '{info}'"
 
         itempval = self.running["starttemplate"]["value"]
         itempdel = self.running["starttemplate"]["delineator"]
-        # itemp = "ztp set initial-template %s\n%s\n%s" % (itempdel, itempval, itempdel)
         itemp = f"ztp set initial-template {itempdel}\n{itempval}\n{itempdel}"
 
         templatetext = ""
@@ -1530,16 +1425,13 @@ class config_manager:                                                          #
             tempval = self.running["templates"][template]["value"]
             tempdel = self.running["templates"][template]["delineator"]
             templatetext += "#\n#\n#\n"
-            # templatetext += "ztp set template %s %s\n%s\n%s" % (template, tempdel, tempval, tempdel)
             templatetext += f"ztp set template {template} {tempdel}\n{tempval}\n{tempdel}"
             templatetext += "\n#\n#\n#\n#######################################################\n"
 
         idarraylist = []
         for arrayname in self.running["idarrays"]:
-            # command = "ztp set idarray " + arrayname
             command = f"ztp set idarray {arrayname}"
             for iden in self.running["idarrays"][arrayname]:
-                # command += " " + iden
                 command += f" {iden}"
             idarraylist.append(command)
 
@@ -1548,13 +1440,10 @@ class config_manager:                                                          #
             for key in self.running["keyvalstore"][iden]:
                 value = self.running["keyvalstore"][iden][key]
                 if type(value) != type("") and type(value) != type(u""):       # pylint: disable=unidiomatic-typecheck, redundant-u-string-prefix
-                    # value = "'%s'" % json.dumps(value)
                     value = f"'{json.dumps(value)}'"
                 else:
                     if " " in value:
-                        # value = "'%s'" % value
                         value = f"'{value}'"
-                # keylist.append("ztp set keystore %s %s %s" % (iden, key, value))
                 keylist.append(f"ztp set keystore {iden} {key} {value}")
             keylist.append("#")
 
@@ -1563,13 +1452,10 @@ class config_manager:                                                          #
             for key in self.running["integrations"][iden]:
                 value = self.running["integrations"][iden][key]
                 if type(value) != type("") and type(value) != type(u""):       # pylint: disable=unidiomatic-typecheck, redundant-u-string-prefix
-                    # value = "'%s'" % json.dumps(value)
                     value = f"'{json.dumps(value)}'"
                 else:
                     if " " in value:
-                        # value = "'%s'" % value
                         value = f"'{value}'"
-                # intglist.append("ztp set integration %s %s %s" % (iden, key, value))
                 intglist.append(f"ztp set integration {iden} {key} {value}")
             intglist.append("#")
 
@@ -1578,9 +1464,7 @@ class config_manager:                                                          #
             for key in self.running["external-keystores"][iden]:
                 value = self.running["external-keystores"][iden][key]
                 if key == "file":
-                    # value = "'%s'" % value
                     value = f"'{value}'"
-                # exkeystlist.append("ztp set external-keystore %s %s %s" % (iden, key, value))
                 exkeystlist.append(f"ztp set external-keystore {iden} {key} {value}")
             exkeystlist.append("#")
 
@@ -1589,24 +1473,15 @@ class config_manager:                                                          #
             for key in self.running["external-templates"][iden]:
                 value = self.running["external-templates"][iden][key]
                 if key == "file":
-                    # value = "'%s'" % value
                     value = f"'{value}'"
-                # extemplist.append("ztp set external-template %s %s %s" % (iden, key, value))
                 extemplist.append(f"ztp set external-template {iden} {key} {value}")
             extemplist.append("#")
 
         associationlist = []
         for association in self.running["associations"]:
             template = self.running["associations"][association]
-            # associationlist.append("ztp set association id %s template %s" % (association, template))
             associationlist.append(f"ztp set association id {association} template {template}")
 
-        # dkeystore = "ztp set default-keystore %s"  % str(self.running["default-keystore"])
-        # gkeystore = "ztp set global-keystore %s"  % str(self.running["global-keystore"])
-        # dtemplate = "ztp set default-template %s"  % str(self.running["default-template"])
-        # imagefile = "ztp set imagefile %s"  % str(self.running["imagefile"])
-        # imagesup = "ztp set image-supression %s"  % str(self.running["image-supression"])
-        # delaykey = "ztp set delay-keystore %s"  % str(self.running["delay-keystore"])
         dkeystore = f"ztp set default-keystore {str(self.running["default-keystore"])}"
         gkeystore = f"ztp set global-keystore {str(self.running["global-keystore"])}"
         dtemplate = f"ztp set default-template {str(self.running["default-template"])}"
@@ -1618,14 +1493,12 @@ class config_manager:                                                          #
         for option in self.running["dhcpd-options"]:
             code = self.running["dhcpd-options"][option]["code"]
             typ = self.running["dhcpd-options"][option]["type"]
-            # dhcpoptlist.append("ztp set dhcpd-option %s code %s type %s" % (option, code, typ))
             dhcpoptlist.append(f"ztp set dhcpd-option {option} code {code} type {typ}")
 
         scopelist = []
         for scope in self.running["dhcpd"]:
             for option in self.running["dhcpd"][scope]:
                 value = self.running["dhcpd"][scope][option]
-                # command = "ztp set dhcpd %s %s %s" % (scope, option, value)
                 command = f"ztp set dhcpd {scope} {option} {value}"
                 command = command.replace(",", "")
                 scopelist.append(command)
@@ -1634,11 +1507,8 @@ class config_manager:                                                          #
 
         configtext = "#######################################################\n#\n#\n#\n"
         for cmd in cmdlist:
-            # configtext += cmd + "\n"
             configtext += f"{cmd}\n"
-        # configtext += log_merged_mainlog + "\n"
         configtext += f"{log_merged_mainlog}\n"
-        # configtext += log_merged_customfile + "\n"
         configtext += f"{log_merged_customfile}\n"
         configtext += "#\n#\n"
         configtext += itemp
@@ -1646,11 +1516,9 @@ class config_manager:                                                          #
         configtext += "\n#\n#\n#\n#######################################################\n"
         configtext += "#\n#\n#\n"
         for cmd in dhcpoptlist:
-            # configtext += cmd + "\n"
             configtext += f"{cmd}\n"
         configtext += "#\n#\n#\n"
         for cmd in scopelist:
-            # configtext += cmd + "\n"
             configtext += f"{cmd}\n"
 
         configtext += "#\n#\n#\n#######################################################\n"
@@ -1658,15 +1526,12 @@ class config_manager:                                                          #
 
         configtext += "#\n#\n#\n"
         for cmd in keylist:
-            # configtext += cmd + "\n"
             configtext += f"{cmd}\n"
         configtext += "#\n#\n"
         for cmd in idarraylist:
-            # configtext += cmd + "\n"
             configtext += f"{cmd}\n"
         configtext += "#\n#\n#\n"
         for cmd in associationlist:
-            # configtext += cmd + "\n"
             configtext += f"{cmd}\n"
         configtext += "#\n#\n#\n"
         configtext += dkeystore
@@ -1682,14 +1547,11 @@ class config_manager:                                                          #
         configtext += delaykey
         configtext += "\n#\n#\n#\n"
         for cmd in intglist:
-            # configtext += cmd + "\n"
             configtext += f"{cmd}\n"
         for cmd in exkeystlist:
-            # configtext += cmd + "\n"
             configtext += f"{cmd}\n"
         configtext += "#\n#\n"
         for cmd in extemplist:
-            # configtext += cmd + "\n"
             configtext += f"{cmd}\n"
         configtext += "#\n#\n#\n#######################################################"
 
@@ -1716,13 +1578,10 @@ class config_manager:                                                          #
             for key in self.running["integrations"][iden]:
                 value = self.running["integrations"][iden][key]
                 if type(value) != type("") and type(value) != type(u""):       # pylint: disable=unidiomatic-typecheck, redundant-u-string-prefix
-                    # value = "'%s'" % json.dumps(value)
                     value = f"'{json.dumps(value)}'"
                 else:
                     if " " in value:
-                        # value = "'%s'" % value
                         value = f"'{value}'"
-                # intglist.append("ztp set integration %s %s %s" % (iden, key, value))
                 intglist.append("ztp set integration {iden} {key} {value}")
             intglist.append("#")
         return intglist
@@ -1733,7 +1592,6 @@ class config_manager:                                                          #
                 return section["function"]()
         # console("Section (%s) not found!" % secinput)
         console(f"Section ({secinput}) not found!")
-        # PSC - return empty string if not found
         return ""
 
     def calcopt125hex(self):
@@ -1741,7 +1599,6 @@ class config_manager:                                                          #
         ### 00 00 00 09 = Cisco vendor specific code
         basedata = "000000090a05"
         filenamedata = self.running["imagediscoveryfile"].encode("utf-8").hex()
-        # lenval = hex(len(filenamedata)/2).replace("0x", "")
         lenval = f"{int(len(filenamedata)/2):x}"
         if len(lenval) < 2:
             lenval = "0"+lenval
@@ -1755,8 +1612,6 @@ class config_manager:                                                          #
             if (len(hexdata) - last) < 4:
                 templist.append(hexdata[last:len(hexdata)])
                 break
-            # PSC - elif --> if due to preceding break
-            # elif current%4 == 0:
             if current%4 == 0:
                 templist.append(hexdata[last:current])
                 last = current
@@ -1964,44 +1819,34 @@ class config_manager:                                                          #
 
             else:
                 ### Start Compiling
-                # scopetext = "#### Scope: %s ####" % scope
-                # ending = " }\n" + "#" * len(scopetext)
-                # scopetext = "\n#\n" + scopetext + "\n"
                 scopetext = f"#### Scope: {scope} ####"
                 ending = f" }}\n{'#'*len(scopetext)}"
                 scopetext = f"\n#\n{scopetext}\n"
-                ##
+
                 subnet = netaddr.IPNetwork(self.running["dhcpd"][scope]["subnet"])
                 net = str(subnet.network)
                 mask = str(subnet.netmask)
-                # scopetext += "subnet %s netmask %s {\n" % (net, mask)
+
                 scopetext += f"subnet {net} netmask {mask} {{\n"
-                ##
+
                 for option in self.running["dhcpd"][scope]:
                     if option in mappings:
                         value = str(self.running["dhcpd"][scope][option])
                         txt = mappings[option].replace("<value>", value)
-                        # scopetext += txt + "\n"
                         scopetext += f"{txt}\n"
                     elif option == "first-address":
                         first = self.running["dhcpd"][scope]["first-address"]
                         last = self.running["dhcpd"][scope]["last-address"]
-                        # txt = " range %s %s;" % (first, last)
                         txt = f" range {first} {last};"
-                        # scopetext += txt + "\n"
                         scopetext += f"{txt}\n"
                     elif option in self.running["dhcpd-options"]:
-                        # txt = ' option {} {};'.format(option, self.running["dhcpd"][scope][option])
                         txt = f' option {option} {self.running["dhcpd"][scope][option]};'
-                        # scopetext += txt + "\n"
                         scopetext += f"{txt}\n"
                 if self.running["dhcpd"][scope]["imagediscoveryfile-option"] == "enable":
                     opt125val = self.opt125("isc")
-                    # txt = " send imagediscoveryfile-option %s;" % opt125val
                     txt = f" send imagediscoveryfile-option {opt125val};"
-                    # scopetext += txt + "\n"
                     scopetext += f"{txt}\n"
-                ##
+
                 scopetext += ending
                 result += scopetext
         return result
@@ -2010,8 +1855,6 @@ class config_manager:                                                          #
         global netaddr
         import netaddr                                                         # pylint: disable=import-outside-toplevel
         dhcpdata = self.dhcpd_compile()
-        # PSC - convert to with open file handler
-        # filedatalist = open("/etc/dhcp/dhcpd.conf").readlines()
         with open("/etc/dhcp/dhcpd.conf", "r", encoding="utf8") as f:
             filedatalist = f.readlines()
         index = 1
@@ -2019,8 +1862,6 @@ class config_manager:                                                          #
             if line == '########### FREEZTP DHCP SCOPES ###########\n':
                 break
 
-            # PSC - else -> none due to previous break
-            # else:
             index += 1
         strippeddata = ""
         for line in filedatalist[:index-1]:
@@ -2031,11 +1872,8 @@ class config_manager:                                                          #
         console(strippeddata)
         console("###############################################################################")
         console("###############################################################################")
-        # PSC - convert to 'with open'
-        # f = open("/etc/dhcp/dhcpd.conf", "w")
         with open("/etc/dhcp/dhcpd.conf", "w", encoding="utf8") as f:
             f.write(strippeddata)
-        # f.close()
         console("\nWrite Complete. Restarting DHCP Service...\n")
         osd.service_control("restart", osd.DHCPSVC)
         osd.service_control("status", osd.DHCPSVC)
@@ -2057,26 +1895,7 @@ class config_manager:                                                          #
     def filter_ips(self, iplist):
         result = []
         for adtup in iplist:
-            # try:
-            #     bits = netaddr.IPAddress(adtup[2]).netmask_bits()
-            #     ip = adtup[1] + "/" + str(bits)
-            #     i = netaddr.IPNetwork(ip)
-            #     uni = i.is_unicast()
-            #     loc = i.is_link_local()
-            #     loop = i.is_loopback()
-            #     multi = i.is_multicast()
-            #     priv = i.is_private()
-            #     res = i.is_reserved()
-            #     if (uni, loc, loop, multi, priv, res) == (True, False, False, False, True, False):
-            #         # Is a private IPv4 address
-            #         result.append((adtup[0], adtup[1], adtup[2], str(i.cidr)))
-            #     elif (uni, loc, loop, multi, priv, res) == (True, False, False, False, False, False):
-            #         # Is a public IPv4 address
-            #         result.append((adtup[0], adtup[1], adtup[2], str(i.cidr)))
-            # except Exception:                                                  # pylint: disable=broad-exception-caught
-            #     pass
             try:
-                # PSC - updated to identify IPv6 correctly
                 na_mask = netaddr.IPAddress(adtup[2].split("/")[0])
                 bits = netaddr.IPAddress(na_mask).netmask_bits()
                 ip_composed = f"{adtup[1].split("%")[0]}/{str(bits)}"
@@ -2106,27 +1925,20 @@ class config_manager:                                                          #
         if os.path.isfile("/etc/default/isc-dhcp-server"):
             ifstr = " ".join(iflist)
             newfilelines = []
-            # PSC - replace with standard 'with open' file handler
-            # filedatalist = open("/etc/default/isc-dhcp-server").readlines()
             with open("/etc/default/isc-dhcp-server", "r", encoding="utf8") as f:
                 filedatalist = f.readlines()
             for line in filedatalist:
                 if "INTERFACESv4=" in line:
-                    # newfilelines.append('INTERFACESv4="%s"\n' % ifstr)
                     newfilelines.append(f'INTERFACESv4="{ifstr}"\n')
                 elif "INTERFACES=" in line:
-                    # newfilelines.append('INTERFACES="%s"\n' % ifstr)
                     newfilelines.append(f'INTERFACES="{ifstr}"\n')
                 else:
                     newfilelines.append(line)
             newfile = ""
             for line in newfilelines:
                 newfile += line                                                # pylint: disable=consider-using-join
-            # PSC - replace with standard 'with open' file handler
-            # f = open("/etc/default/isc-dhcp-server", "w")
             with open("/etc/default/isc-dhcp-server", "w", encoding="utf8") as f:
                 f.write(newfile)
-            # f.close()
 
     def auto_dhcpd(self):
         global netaddr
@@ -2139,22 +1951,14 @@ class config_manager:                                                          #
         # console("  Found: %s\nCreating Scopes..." % ips)
         console(f"  Found: {ips}\nCreating Scopes...")
         for net in ips:
-            # scopename = "INTERFACE-" + net[0].encode().upper()
             scopename = f"INTERFACE-{net[0].upper()}"
-            # console("  Building Scope %s" % scopename)
             console(f"  Building Scope {scopename}")
-            # if net[2].encode() == "255.255.255.255":
             if net[2] == "255.255.255.255":
-                # console("    WARNING: Scope %s has a /32 subnet size. You may need to adjust it if you want to serve IP addresses on that subnet" % scopename)
                 console(f"    WARNING: Scope {scopename} has a /32 subnet size. You may need to adjust it if you want to serve IP addresses on that subnet")
-            # subnet = net[3].encode()
             subnet = net[3]
-            # myip = net[1].encode()
             myip = net[1]
-            # cmd1 = "ztp set dhcpd %s subnet %s" % (scopename, subnet)
             cmd1 = f"ztp set dhcpd {scopename} subnet {subnet}"
             api1 = ['ztp', 'set', 'dhcpd', scopename, 'subnet', subnet]
-            # cmd2 = "ztp set dhcpd %s ztp-tftp-address %s" % (scopename, myip)
             cmd2 = f"ztp set dhcpd {scopename} ztp-tftp-address {myip}"
             api2 = ['ztp', 'set', 'dhcpd', scopename, 'ztp-tftp-address', myip]
             # console("    Injecting Command: %s" % cmd1)
@@ -2168,9 +1972,11 @@ class config_manager:                                                          #
         console("\n\nComplete!\n\nRemember to commit the new DHCP config using the command 'ztp request dhcpd-commit'\n")
 
 
-##### Log Management Class: Handles all prnting to console and logging    #####
-#####   to the logfile                                                     #####
 class log_management:
+    """
+    Log Management Class: Handles all prnting to console and logging to the
+    logfile
+    """
     def __init__(self):
         self.logfile = "/etc/ztp/ztp.log"
         self._publish_methods()
@@ -2181,11 +1987,8 @@ class log_management:
         logdata = f"{time.strftime("%Y-%m-%d %H:%M:%S")}:  {data}\n"
         if self.can_log:
             try:
-                # PSC - replace with standard 'with open' file handler
-                # f = open(self.logfile, 'a')
                 with open(self.logfile, "a", encoding="utf8") as f:
                     f.write(logdata)
-                # f.close()
             except IOError:
                 # self._console("Unable to log to logfile %s. Make sure FreeZTP is installed. Disabling logging to logfile" % self.logfile)
                 self._console(f"Unable to log to logfile {self.logfile}. Make sure FreeZTP is installed. Disabling logging to logfile")
@@ -2194,7 +1997,6 @@ class log_management:
 
     def _console(self, data, timestamp=False):
         if timestamp:
-            # logdata = time.strftime("%Y-%m-%d %H:%M:%S") + ":   " + data + "\n"
             logdata = f"{time.strftime("%Y-%m-%d %H:%M:%S")}:  {data}\n"
         else:
             logdata = data
@@ -2208,9 +2010,7 @@ class log_management:
 
     def show(self, args):
         if len(args) == 3:
-            # PSC - replace deprecated os.system with subprocess
             subprocess.run(["more", self.logfile], capture_output=False, check=True)
-            # os.system("more " + self.logfile)
         else:
             if args[3].lower() == "tail":
                 if len(args) == 4:
@@ -2228,21 +2028,18 @@ class log_management:
                 self._console(f"Invalid input '{args[3]}'")
 
     def tail(self, length="25"):
-        # PSC - replace deprecated os.system with subprocess
         subprocess.run(["tail", "-fn", length, self.logfile], capture_output=False, check=True)
-        # os.system("tail -fn %s %s" % (length, self.logfile))
 
     def clear(self):
-        # PSC - replace with standard 'with open' file handler
-        # f = open(self.logfile, 'w')
         with open(self.logfile,"w", encoding="utf8") as f:
             f.write("")
-        # f.close()
 
 
-##### Installer class: A simple holder class which contains all of the    #####
-#####   installation scripts used to install/upgrade the ZTP server       #####
 class installer:
+    """
+    Installer class: A simple holder class which contains all of the
+    installation scripts used to install/upgrade the ZTP server
+    """
     defaultconfig = '''{
     "associations": {
         "SERIAL100": "SHORT_TEMPLATE",
@@ -2300,7 +2097,7 @@ class installer:
     },
     "snmpoid": {
         "C9K_CHASSIS_SERIAL": "1.3.6.1.2.1.47.1.1.1.1.11.1",
-        "C3K-C9K_MOD1_SERIAL": "1.3.6.1.2.1.47.1.1.1.1.11.1000",
+        "C9K_MOD1_SERIAL": "1.3.6.1.2.1.47.1.1.1.1.11.1000",
         "C9800_SERIAL": "1.3.6.1.2.1.47.1.1.1.1.11.2"
     },
     "starttemplate": {
@@ -2348,9 +2145,6 @@ class installer:
             import requests                                                    # pylint: disable=import-outside-toplevel, unused-import, redefined-outer-name
         except ImportError:
             console("\n\nInstalling some new dependencies...\n")
-            # PSC - replace deprecated os.system with subprocess
-            # os.system("pip install requests")
-            # os.system("pip install requests_toolbelt")
             subprocess.run(["pip", "install", "requests"], capture_output=False, check=True)
             subprocess.run(["pip", "install", "requests_toolbelt"], capture_output=False, check=True)
 
@@ -2374,9 +2168,6 @@ class installer:
     def copy_binary(self):
         binpath = "/bin/"
         binname = "ztp"
-        # PSC - replace deprecated os.system with subprocess
-        # os.system('cp ztp.py ' + binpath + binname)
-        # os.system('chmod 777 ' + binpath + binname)
         subprocess.run(["cp", "ztp.py", f"{binpath}{binname}"], capture_output=False, check=True)
         subprocess.run(["chmod", "777", f"{binpath}{binname}"], capture_output=False, check=True)
         # console("Binary file installed at " + binpath + binname)
@@ -2387,36 +2178,18 @@ class installer:
         rawconfig = json.dumps(config, indent=4, sort_keys=True)
         configfilepath = "/etc/ztp/"
         configfilename = "ztp.cfg"
-        # PSC - replace deprecated os.system with subprocess
-        # os.system('mkdir -p ' + configfilepath)
-        # os.system('mkdir -p ' + "/etc/ztp/tftproot/")
         subprocess.run(["mkdir", "-p", configfilepath], capture_output=False, check=True)
         subprocess.run(["mkdir", "-p", f"{configfilepath}tftproot/"], capture_output=False, check=True)
-        # PSC - replace with standard with open file handler
-        # f = open(configfilepath + configfilename, "w")
         with open(f"{configfilepath}{configfilename}", "w", encoding="utf8") as f:
             f.write(rawconfig)
-        # f.close()
         # console("Config File Created at " + configfilepath + configfilename)
         console(f"Config File Created at {configfilepath}{configfilename}")
 
     def install_tftpy(self):
-        # PSC - install un-modified version of tftpy
         console("\n\nInstalling tftpy via PIP...\n")
         subprocess.run(["pip", "install", "--break-system-packages", "--root-user-action=ignore", "tftpy"], capture_output=False, check=True)
-        # console("Downloading tftpy library from https://github.com/PackeTsar/tftpy/archive/master.tar.gz...")
-        # os.system("curl -OL https://github.com/PackeTsar/tftpy/archive/master.tar.gz")
-        # console("Installing tftpy library...")
-        # os.system("tar -xzf master.tar.gz")
-        # os.system("cp -r tftpy-master/tftpy/ " + osd.PKGDIR)
-        # os.system("rm -rf tftpy-master")
-        # os.system("rm -rf master.tar.gz")
-        # console("Tftpy library installed")
 
     def disable_firewall(self):
-        # PSC - replace deprecated os.system with subprocess
-        # os.system("systemctl stop firewalld")
-        # os.system("systemctl disable firewalld")
         try:
             subprocess.run(["systemctl", "stop", "firewalld"], capture_output=False, check=True)
         except subprocess.CalledProcessError:
@@ -2427,14 +2200,10 @@ class installer:
 
     def install_dependencies(self):
         if osd._pkgmgr == "apt-get":  # If using apt-get, update the repos     # pylint: disable=protected-access
-            # PSC - replace deprecated os.system with subprocess
-            # os.system("sudo apt-get update -y")
             subprocess.run(["sudo", "apt-get", "update", "-y"], capture_output=False, check=True)
-        # osd.install_pkg("epel-release")
         osd.install_pkg(osd.PIPPKG)
-        # osd.install_pkg("gcc gmp python-devel")
         osd.install_pkg("telnet")
-        # PSC - apt installed python modules for modern "externally managed environments"
+        # apt installed python modules for modern "externally managed environments"
         osd.install_pkg("python3-pysnmp")
         osd.install_pkg("python3-requests")
         osd.install_pkg("python3-requests-toolbelt")
@@ -2442,21 +2211,6 @@ class installer:
         osd.install_pkg("python3-netaddr")
         osd.install_pkg("python3-netifaces")
         osd.install_pkg("python3-isc-dhcp-leases")
-        # # PSC - replace deprecated os.system with subprocess
-        # # os.system("pip install pysnmp")
-        # subprocess.run(["pip", "install", "pysnmp"], capture_output=False, check=True)
-        # # os.system("pip install requests")
-        # subprocess.run(["pip", "install", "requests"], capture_output=False, check=True)
-        # # os.system("pip install requests_toolbelt")
-        # subprocess.run(["pip", "install", "requests_toolbelt"], capture_output=False, check=True)
-        # # os.system("pip install jinja2")
-        # subprocess.run(["pip", "install", "jinja2"], capture_output=False, check=True)
-        # # os.system("pip install netaddr")
-        # subprocess.run(["pip", "install", "netaddr"], capture_output=False, check=True)
-        # # os.system("pip install netifaces")
-        # subprocess.run(["pip", "install", "netifaces"], capture_output=False, check=True)
-        # # os.system("pip install isc_dhcp_leases")
-        # subprocess.run(["pip", "install", "isc_dhcp_leases"], capture_output=False, check=True)
 
     def dhcp_setup(self):
         console("\n\nInstalling DHCPD...\n")
@@ -2570,18 +2324,12 @@ esac'''
         elif not systemd:
             installpath = nonsystemdpath
             installfile = nonsystemd_startfile
-        # PSC - replace with standard with open file handler
-        # f = open(installpath, 'w')
         with open(installpath, "w", encoding="utf8") as f:                     # pylint: disable=possibly-used-before-assignment
             f.write(installfile)                                               # pylint: disable=possibly-used-before-assignment
-        # f.close()
         if systemd:
             osd.service_control("enable", "ztp")
             osd.service_control("start", "ztp")
         elif not systemd:
-            # PSC - replace deprecated os.system with subprocess
-            # os.system('chmod 777 /etc/init.d/radiuid')
-            # os.system('chkconfig radiuid on')
             subprocess.run(["chmod", "777", "/etc/init.d/radiuid"], capture_output=False, check=True)
             subprocess.run(["chkconfig", "radiuid", "on"], capture_output=False, check=True)
         console("ZTP service installed at /etc/systemd/system/ztp.service")
@@ -3086,180 +2834,41 @@ _ztp_complete()
 complete -F _ztp_complete ztp &&
 bind 'set show-all-if-ambiguous on'"""
         ##### BASH SCRIPT DATA STOP #####
+
         ##### Remove legacy script file #####
         if os.path.isfile('/etc/profile.d/ztp-complete.sh'):
             console("Legacy completion file detected at /etc/profile.d/ztp-complete.sh... Removing...")
             os.remove('/etc/profile.d/ztp-complete.sh')
             console("    Removed!")
+
         ##### Place script file #####
         installpath = '/etc/bash_completion.d/ztp_completion'
-        # PSC - replace with standard with open file handler
-        # f = open(installpath, 'w')
         with open(installpath, "w", encoding="utf8") as f:
             f.write(bash_complete_script)
-        # f.close()
-        # PSC - replace deprecated os.system with subprocess
-        # os.system('chmod 777 /etc/bash_completion.d/ztp_completion')
         subprocess.run(["chmod", "777", "/etc/bash_completion.d/ztp_completion"], capture_output=False, check=True)
         console("Auto-complete script installed to /etc/bash_completion.d/ztp_completion")
+
         ##### Run script file from profile #####
         rcfilepath = os.path.join(os.path.expanduser("~") , ".bashrc")
-        # PSC - replace with standard with open file handler
-        # f = open(rcfilepath, 'r')
         with open(rcfilepath, "r", encoding="utf8") as f:
             rcfile = f.read()
-        # f.close()
         if "source /etc/bash_completion.d/ztp_completion" not in rcfile:
             # console("Adding completion file to user profile in {}".format(rcfilepath))
             console(f"Adding completion file to user profile in {rcfilepath}")
-            # PSC - convert to with open file handler
-            # f = open(rcfilepath, 'a')
             with open(rcfilepath, "a", encoding="utf8") as f:
                 f.write("\n\n\n# FreeZTP BASH Completion\nsource /etc/bash_completion.d/ztp_completion")
-            # f.close()
-
-
-
-# # Overwrite of a TFTPY function to notify when downloads complete
-# def end(self):
-#     """Finish up the context."""
-#     tftpy.TftpContexts.end(self)
-#     self.metrics.end_time = time.time()
-#     #### BEGIN CHANGES ####
-#     tracking.report({
-#         "ipaddr": self.host,
-#         "port": self.port,
-#         "block": None,
-#         "filename": self.file_to_transfer,
-#         "source": "end"})
-#     #### END CHANGES ####
-#     tftpy.log.debug("Set metrics.end_time to %s", self.metrics.end_time)
-#     self.metrics.compute()
-#
-#
-# # Overwrite of a TFTPY function to notify when downloads start
-# def start(self, buffer):
-#     """Start the state cycle. Note that the server context receives an
-#     initial packet in its start method. Also note that the server does not
-#     loop on cycle(), as it expects the TftpServer object to manage
-#     that."""
-#     tftpy.log.debug("In TftpContextServer.start")
-#     self.metrics.start_time = time.time()
-#     tftpy.log.debug("Set metrics.start_time to %s", self.metrics.start_time)
-#     # And update our last updated time.
-#     self.last_update = time.time()
-#     pkt = self.factory.parse(buffer)
-#     tftpy.log.debug("TftpContextServer.start() - factory returned a %s", pkt)
-#     # Call handle once with the initial packet. This should put us into
-#     # the download or the upload state.
-#     #### BEGIN CHANGES ####
-#     try:
-#         tracking.report({
-#             "ipaddr": self.host,
-#             "port": self.port,
-#             "block": None,
-#             "filename": pkt.filename,
-#             "source": "start"})
-#     except Exception:                                                          # pylint: disable=broad-exception-caught
-#         pass
-#     #### END CHANGES ####
-#     self.state = self.state.handle(pkt,
-#                                     self.host,
-#                                     self.port)
-#
-#
-# def handle(self, pkt, raddress, rport):
-#     # "Handle a packet, hopefully an ACK since we just sent a DAT."
-#     if isinstance(pkt, tftpy.TftpPacketTypes.TftpPacketACK):
-#         tftpy.log.debug("Received ACK for packet %d", pkt.blocknumber)
-#         #### BEGIN CHANGES ####
-#         tracking.report({
-#             "ipaddr": raddress,
-#             "port": rport,
-#             "block": pkt.blocknumber,
-#             "filename": None,
-#             "source": "handle"})
-#         #### END CHANGES ####
-#         # Is this an ack to the one we just sent?
-#         if self.context.next_block == pkt.blocknumber:
-#             if self.context.pending_complete:
-#                 tftpy.log.info("Received ACK to final DAT, we're done.")
-#                 return None
-#             # PSC - else -> none due to preceding return
-#             # else:
-#             tftpy.log.debug("Good ACK, sending next DAT")
-#             self.context.next_block += 1
-#             tftpy.log.debug("Incremented next_block to %d",
-#                 self.context.next_block)
-#             self.context.pending_complete = self.sendDAT()
-#         elif pkt.blocknumber < self.context.next_block:
-#             tftpy.log.warning("Received duplicate ACK for block %d", pkt.blocknumber)
-#             self.context.metrics.add_dup(pkt)
-#         else:
-#             tftpy.log.warning("Oooh, time warp. Received ACK to packet we didn't send yet. Discarding.")
-#             self.context.metrics.errors += 1
-#         return self
-#     # PSC - elif -> if due to preceding return
-#     # elif isinstance(pkt, tftpy.TftpPacketERR):
-#     if isinstance(pkt, tftpy.TftpPacketTypes.TftpPacketERR):
-#         tftpy.log.error("Received ERR packet from peer: %s", str(pkt))
-#         # raise tftpy.TftpException("Received ERR packet from peer: %s" % str(pkt))
-#         raise tftpy.TftpException(f"Received ERR packet from peer: {pkt}")
-#     # PSC - else -> none due to preceding raise
-#     # else:
-#     tftpy.log.warning("Discarding unsupported packet: %s", str(pkt))
-#     return self
-#
-# def sendDAT(self):
-#     """This method sends the next DAT packet based on the data in the
-#     context. It returns a boolean indicating whether the transfer is
-#     finished."""
-#     finished = False
-#     blocknumber = self.context.next_block
-#     # Test hook
-#     if tftpy.TftpShared.DELAY_BLOCK and tftpy.TftpShared.DELAY_BLOCK == blocknumber:
-#         import time                                                            # pylint: disable=import-outside-toplevel, reimported, redefined-outer-name
-#         # PSC - syntax error
-#         # log.debug("Deliberately delaying 10 seconds...")
-#         tftpy.log.debug("Deliberately delaying 10 seconds...")
-#         time.sleep(10)
-#     dat = None
-#     blksize = self.context.getBlocksize()
-#     buffer = self.context.fileobj.read(blksize)
-#     tftpy.log.debug("Read %d bytes into buffer", len(buffer))
-#     if len(buffer) < blksize:
-#         tftpy.log.info("Reached EOF on file %s", self.context.file_to_transfer)
-#         finished = True
-#     dat = tftpy.TftpPacketTypes.TftpPacketDAT()
-#     dat.data = buffer
-#     dat.blocknumber = blocknumber
-#     self.context.metrics.bytes += len(dat.data)
-#     tftpy.log.debug("Sending DAT packet %d", dat.blocknumber)
-#     # self.context.sock.sendto(dat.encode().buffer,
-#     #     (self.context.host, self.context.tidport))
-#     self.context.sock.sendto(dat.buffer,
-#         (self.context.host, self.context.tidport))
-#     if self.context.packethook:
-#         self.context.packethook(dat)
-#     self.context.last_pkt = dat
-#     tracking.report({
-#         "ipaddr": self.context.address,
-#         "port": self.context.port,
-#         "position": self.context.fileobj.tell(),
-#         "filename": self.context.file_to_transfer,
-#         "source": "sendDAT"})
-#     return finished
-
 
 def make_table(columnorder, tabledata):                                        # pylint: disable=too-many-locals
     ##### Check and fix input type #####
     if type(tabledata) != type([]): # If tabledata is not a list               # pylint: disable=unidiomatic-typecheck
         tabledata = [tabledata] # Nest it in a list
+
     ##### Set seperators and spacers #####
     tablewrap = "#" # The character used to wrap the table
     headsep = "=" # The character used to seperate the headers from the table values
     columnsep = "|" # The character used to seperate each value in the table
     columnspace = "  " # The amount of space between the largest value and its column seperator
+
     ##### Generate a dictionary which contains the length of the longest value or head in each column #####
     datalengthdict = {} # Create the dictionary for storing the longest values
     for columnhead in columnorder: # For each column in the columnorder input
@@ -3268,6 +2877,7 @@ def make_table(columnorder, tabledata):                                        #
         for item in columnorder: # For column entry in that row
             if len(re.sub(r'\x1b[^m]*m', "",  str(row[item]))) > datalengthdict[item]: # If the length of this column entry is longer than the current longest entry
                 datalengthdict[item] = len(str(row[item])) # Then change the value of entry
+
     ##### Calculate total table width #####
     totalwidth = 0 # Initialize at 0
     for columnwidth in datalengthdict: # For each of the longest column values # pylint: disable=consider-using-dict-items
@@ -3275,6 +2885,7 @@ def make_table(columnorder, tabledata):                                        #
     totalwidth += len(columnorder) * len(columnspace) * 2 # Account for double spaces on each side of each column value
     totalwidth += len(columnorder) - 1 # Account for seperators for each row entry minus 1
     totalwidth += 2 # Account for start and end characters for each row
+
     ##### Build Header #####
     result = tablewrap * totalwidth + "\n" + tablewrap # Initialize the result with the top header, line break, and beginning of header line
     columnqty = len(columnorder) # Count number of columns
@@ -3289,6 +2900,7 @@ def make_table(columnorder, tabledata):                                        #
         columnqty -= 1 # Remove 1 from the counter to keep track of when we hit the last column
     del columnqty # Remove the column spacing variable so it can be used again
     result += tablewrap + "\n" + tablewrap + headsep * (totalwidth - 2) + tablewrap + "\n" # Add bottom wrapper to header
+
     ##### Build table contents #####
     result += tablewrap # Add the first wrapper of the value table
     for row in tabledata: # For each row (dict) in the tabledata input
@@ -3431,13 +3043,11 @@ class tracking_class:
                 thread.start()
                 self.threads.append(thread)  # Add to list of session threads
                 return None
-            # PSC - else -> none due to preceding return
-            # else:
+
             while True:
                 if not self.active:  # If this session is no longer inactive
                     return None  # Return and stop the thread
-                # PSC - else -> none due to preceding return
-                # else:  # If it is still active
+
                 if time.time() - self.lastupdate > seconds:
                     # If there has been no activity
                     # in the timeout period
@@ -3479,8 +3089,7 @@ class tracking_class:
         def utc_to_local(self, dt):
             if time.localtime().tm_isdst:
                 return dt - datetime.timedelta(seconds = time.altzone)
-            # PSC - else -> none due to preceding return
-            # else:
+
             return dt - datetime.timedelta(seconds = time.timezone)
 
         def get(self, mode="current"):
@@ -3492,8 +3101,7 @@ class tracking_class:
                     result.update({index: self._format_lease(leases[lease])})
                     index += 1
                 return result
-            # PSC - else -> none due to preceding return
-            # else:
+
             leases = self.leasesobj.get()
             for lease in leases:
                 result.update({index: self._format_lease(lease)})
@@ -3523,8 +3131,7 @@ class tracking_class:
         dlist.sort(reverse=True)
         for dload in dlist:
             data.append(d[dload])
-        # PSC - unneeded u string. all python3 strings are unicode
-        # return make_table([u'time', u'ipaddr', u'filename', u'filesize', u'bytessent', u'percent', u'rate', u'active'], data)
+
         return make_table(['time', 'ipaddr', 'filename', 'filesize', 'bytessent', 'percent', 'rate', 'active'], data)
 
     class screen:                                                              # pylint: disable=too-few-public-methods
@@ -3551,10 +3158,8 @@ class tracking_class:
                 console("Service Running. Clearing downloads with IPC")
                 client.connect(('localhost', 10000))
                 time.sleep(0.1)
-                # client.send("clear downloads\n")
                 client.send("clear downloads\n".encode("utf-8"))
                 time.sleep(0.1)
-                # client.send("exit\n")
                 client.send("exit\n".encode("utf-8"))
                 time.sleep(0.1)
                 client.close()
@@ -3590,34 +3195,25 @@ class tracking_class:
 - get downloads
 - exit
 """
-                    # client.send(table)
                     client.send(table.encode("utf-8"))
                 elif "exit" in recieve:
                     client.close()
                     return
                 elif "threads" in recieve:
-                    # PSC - activeCount() deprecated and changed to active_count()
-                    # client.send(str(threading.activeCount()))  # Send the query response
-                    # client.send(str(threading.active_count())  # Send the query response
-                    # client.send(str(threading.enumerate())
                     client.send(str(threading.active_count()).encode("utf-8"))  # Send the query response
                     client.send(str(threading.enumerate()).encode("utf-8"))
                 elif "clear downloads" in recieve:
                     self.clear_downloads(nested=True)
-                    # client.send(json.dumps(self.status, indent=4, sort_keys=True)+"\n")  # Send the query response
                     msg = json.dumps(self.status, indent=4, sort_keys=True)+"\n"
                     client.send(msg.encode("utf-8"))  # Send the query response
                 elif "get downloads" in recieve:
-                    # client.send(json.dumps(self.status, indent=4, sort_keys=True)+"\n")  # Send the query response
                     msg = json.dumps(self.status, indent=4, sort_keys=True)+"\n"
                     client.send(msg.encode("utf-8"))  # Send the query response
                 elif "clear provisioning" in recieve:
                     self.clear_provisioning(nested=True)
-                    # client.send(json.dumps(self.provdb.recall(), indent=4, sort_keys=True)+"\n") # Send the query response
                     msg = json.dumps(self.provdb.recall(), indent=4, sort_keys=True)+"\n"
                     client.send(msg.encode("utf-8"))  # Send the query response
                 else:
-                    # client.send("ZTP#")  # Send the query response
                     client.send("ZTP#".encode("utf-8"))  # Send the query response
 
     def _gen_animation(self):
@@ -3641,8 +3237,6 @@ class tracking_class:
         dlist.sort(reverse=True)
         for dload in dlist[:20]:
             data.append(d[dload])
-        # PSC - remove redundant u. all strings in python 3 are unicode.
-        # return make_table([u'time', u'ipaddr', u'filename', u'filesize', u'bytessent', u'percent', u'rate', u'active'], data)
         return make_table(['time', 'ipaddr', 'filename', 'filesize', 'bytessent', 'percent', 'rate', 'active'], data)
 
     def show_downloads_live(self, args):                                       # pylint: disable=unused-argument
@@ -3692,9 +3286,9 @@ class tracking_class:
                         current[tstamp][attrib] = data[attrib]  # Update the provdb
                 self.provdb(current)
                 self.check_integrations(current[tstamp])
-                # PSC - bare return permitted to exit early
-                # return None  # Return to prevent further execution
+
                 return  # Return to prevent further execution
+
         # To prevent multiple provdb entries when multiple requests
         for tstamp in current:                                                 # pylint: disable=too-many-nested-blocks
             if "IP Address" in data:
@@ -3705,16 +3299,15 @@ class tracking_class:
                                 current[tstamp][attrib] = data[attrib]  # Update the provdb
                         self.provdb(current)
                         self.check_integrations(current[tstamp])
-                        # PSC - bare return permitted to exit early
-                        # return None  # Return to prevent further execution
+
                         return  # Return to prevent further execution
+
         # If the tempid was not in provdb
         dhcpinfo = self.prov_get_mac(data["IP Address"])
         if dhcpinfo:
             data["MAC Address"] = dhcpinfo[0]
         current.update({data["Timestamp"]: data})  # Add the entry with data
         self.provdb(current)
-        ########
 
     def clear_provisioning(self, nested=False):
         self.provdb({})
@@ -3723,9 +3316,7 @@ class tracking_class:
                 console("Service Running. Clearing provisioning with IPC")
                 client = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
                 client.connect(('localhost', 10000))
-                # client.send("clear provisioning\n")
                 client.send("clear provisioning\n".encode("utf-8"))
-                # client.send("exit\n")
                 client.send("exit\n".encode("utf-8"))
                 client.close()
             except socket.error:
@@ -3735,12 +3326,12 @@ class tracking_class:
     def show_provisioning(self):
         data = self.provdb.recall()
         tabledata = []
-        ####################################
+
         tlist = []
         for timestamp in data:
             tlist.append(timestamp)
         tlist.sort(reverse=True)
-        ####################################
+
         for each in tlist:
             if type(data[each]["Real IDs"]) == type({}):                       # pylint: disable=unidiomatic-typecheck
                 real = ""
@@ -3784,20 +3375,13 @@ class persistent_store:
     def _write(self):
         fulldb = self._pull_full_db()  # Pull a full copy of the db
         fulldb.update({self._dbid: self._running})  # Update it
-        # rawout = json.dumps(fulldb, indent=4, sort_keys=True)
         rawout = json.dumps(fulldb, indent=4, sort_keys=False)
-        # PSC - convert to with open file handler
-        # f = open(self._file, "w")
         with open(self._file, "w", encoding="utf8") as f:
             f.write(rawout)
-        # f.close()
 
     def _create_blank(self):
-        # PSC - convert to with open file handler
-        # f = open(self._file, "w")
         with open(self._file, "w", encoding="utf8") as f:
             f.write("{}")
-        # f.close()
 
     def _read(self):
         try:
@@ -3809,18 +3393,17 @@ class persistent_store:
         except Exception as e:                                                 # pylint: disable=broad-exception-caught
             log("persistent_store: ERROR: Error in reading from store file")
             log("persistent_store: ERROR: " + str(e))
+
     def _pull_full_db(self):
         try:
-            # PSC - convert to with open file handler
-            # f = open(self._file, "r")
             with open(self._file, "r", encoding="utf8") as f:
                 rawdata = f.read()
+
         except IOError:
             self._create_blank()
-            # f = open(self._file, "r")
             with open(self._file, "r", encoding="utf8") as f:
                 rawdata = f.read()
-        # f.close()
+
         result = json.loads(rawdata)
         return result
 
@@ -3855,7 +3438,6 @@ class integration_spark:
                 console(e)
                 return None
         else:
-            # raise ValueError("Invalid Server Response Status Code: (%s)\n(%s)" % (str(response.status_code), response.text))
             raise ValueError(f"Invalid Server Response Status Code: ({str(response.status_code)})\n({response.text})")
 
     def _rooms(self):
@@ -3878,16 +3460,6 @@ class integration_spark:
             sendfile = io.StringIO(message.file.data)
             # data.update({'files': ("{}.txt".format(message.file.filename), sendfile, "text/plain")})
             data.update({'files': (f"{message.file.filename}.txt", sendfile, "text/plain")})
-#         txtmsg = """------------------------------
-# ## **FreeZTP Provisioning (%s)**
-# - Timestamp: **%s**
-# - IP: **%s**
-# - Temp ID: **%s**
-# - MAC Address: **%s**
-# - Real ID: **%s**
-# - Matched Keystore: **%s**
-#
-# ------------------------------""" % (self.config["objname"], message.timestamp, message.ip, message.tempid, message.mac, message.realid, message.keystore)
         txtmsg = f"""------------------------------
 ## **FreeZTP Provisioning ({self.config["objname"]})**
 - Timestamp: **{message.timestamp}**
@@ -3922,10 +3494,8 @@ class integration_spark:
             selection = integrations.table_select(["title"], rooms, "Select a Room")
             value = selection["id"]
         elif dtype["destination type"] == "toPersonEmail":
-            # value = input("Enter the %s value > " % dtype["destination type"])
             value = input(f"Enter the {dtype["destination type"]} value > ")
         elif dtype["destination type"] == "toPersonId":
-            # value = input("Enter the %s value > " % dtype["destination type"])
             value = input(f"Enter the {dtype["destination type"]} value > ")
         self.config.update({dtype["destination type"]: value})                 # pylint: disable=possibly-used-before-assignment
         return self.config
@@ -3958,7 +3528,6 @@ class integration_power_automate:
                 console(e)
                 return None
         else:
-            # raise ValueError("Invalid Server Response Status Code: (%s)\n(%s)" % (str(response.status_code), response.text))
             raise ValueError(f"Invalid Server Response Status Code: ({str(response.status_code)})\n({response.text})")
 
     def send(self, message):
@@ -3970,7 +3539,6 @@ class integration_power_automate:
             raise ValueError("Invalid or Unknown Integration Destination")
         if message.file is not None:
             msgdict.update({'file-data': message.file.data})
-            # msgdict.update({'file-name': message.keystore + '.txt'})
             msgdict.update({'file-name': f'{message.keystore}.txt'})
         htmlmsg = (
             '<p><strong>freeZTP Provisioning</strong></p>'
@@ -4118,7 +3686,6 @@ class integration_main:
             cfg = {"objname": objname}
             cfg.update(config.running["integrations"][objname])
             intgobj = self.mods[typ](cfg)
-            # testfile = ztp_dyn_file("testconfig", "127.0.0.1", "65000",data=u"This is a\ntest configuration", track=False)
             testfile = ztp_dyn_file("testconfig", "127.0.0.1", "65000",data="This is a\ntest configuration", track=False)
             message = integration_message({
                 "ip": "127.0.0.1",
@@ -4174,14 +3741,12 @@ class external_keystore_main:
             for key in config.running["keyvalstore"][keystore_id]:
                 rowdata.update({key: config.running["keyvalstore"][keystore_id][key]})
             tabledata.append(rowdata)
-        # PSC - convert to with open file handler
-        # csvfile = open(filename, "w")
+
         with open(filename, "w", encoding="utf8") as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=headers)
             writer.writeheader()
             for row in tabledata:
                 writer.writerow(row)
-        # csvfile.close()
 
     def test(self, objname):                                                   # pylint: disable=too-many-branches
         if objname not in config.running["external-keystores"]:
@@ -4200,8 +3765,6 @@ class external_keystore_main:
             console(f"Cannot find file ({filename})")
             sys.exit()
 
-        # PSC - convert to with open file handler
-        # csvfile = open(filename, "r")
         with open(filename, "r", encoding="utf8") as csvfile:
             reader = csv.DictReader(csvfile)
             keystore_commands = []
@@ -4216,7 +3779,6 @@ class external_keystore_main:
                 for key in reader.fieldnames:
                     if row[key]:
                         if key == "association":
-                            # association_commands.append("ztp set association id %s template %s" % (id, row[key]))
                             association_commands.append(f"ztp set association id {id} template {row[key]}")
                         elif key[:7] == "idarray":
                             array_keys.append(row[key])
@@ -4226,10 +3788,8 @@ class external_keystore_main:
                                 key = '%s' % key                               # pylint: disable=consider-using-f-string
                             if " " in row[key]:
                                 row[key] = '%s' % row[key]                     # pylint: disable=consider-using-f-string
-                            # keystore_commands.append("ztp set keystore %s %s %s" % (id, key, row[key]))
                             keystore_commands.append(f"ztp set keystore {id} {key} {row[key]}")
                 if array_keys:
-                    # idarray_commands.append("ztp set idarray %s %s" % (id, " ".join(array_keys)))
                     key_set = " ".join(array_keys)
                     idarray_commands.append(f"ztp set idarray {id} {key_set}")
                 keystore_commands.append("#")
@@ -4263,8 +3823,6 @@ class external_keystore_main:
                 # log(f"external_keystore_main.load: ERROR: Cannot fine file ({config.running["external-keystores"][objname]["file"]})")
                 pass
             else:
-                # PSC - convert to with open file handler
-                # csvfile = open(config.running["external-keystores"][objname]["file"], "r")
                 with open(config.running["external-keystores"][objname]["file"], "r", encoding="utf8") as csvfile:
                     reader = csv.DictReader(csvfile)
                     counter = 1
@@ -4322,11 +3880,8 @@ class external_templates_main:                                                 #
             if os.path.isfile(filepath):
                 # log("Loading template ({}) from file ({})".format(template_name, filepath))
                 # log(f"Loading template ({template_name}) from file ({filepath})")
-                # PSC - convert to with open file handler
-                # f = open(filepath)
                 with open(filepath, "r", encoding="utf8") as f:
                     data = f.read()
-                # f.close()
                 self.templates.update({template_name: data})
             else:
                 # log("ERROR: Cannot find template file ({})".format(filepath))
@@ -4336,37 +3891,33 @@ class external_templates_main:                                                 #
 
 
 
-##### TFTP Server main entry. Starts the TFTP server listener and is the  #####
-#####   main program loop. It is started with the ztp_dyn_file class      #####
-#####   passed in as the dynamic file function.                           #####
 def start_tftp():
+    """
+    TFTP Server main entry. Starts the TFTP server listener and is the main
+    program loop. It is started with the ztp_dyn_file class passed in as the
+    dynamic file function.
+    """
     global tftpy
     import tftpy                                                               # pylint: disable=import-outside-toplevel
-    # try:
-    #     # tftpy.TftpContextServer.start = start  # Overwrite the function
-    #     # tftpy.TftpContextServer.end = end  # Overwrite the function
-    #     # tftpy.TftpStateExpectACK.sendDAT = sendDAT
-    #     tftpy.TftpContexts.start = start  # Overwrite the function
-    #     tftpy.TftpContexts.end = end  # Overwrite the function
-    #     tftpy.TftpStates.TftpStateExpectACK.sendDAT = sendDAT
-    # except NameError:
-    #     pass
+
     log("start_tftp: Starting Up TFTPy")
-    #tftpy.setLogLevel(logging.DEBUG)
+
     try:
         server = tftpy.TftpServer(config.running["tftproot"], dyn_file_func=interceptor)
+
     except tftpy.TftpShared.TftpException:
         log("start_tftp: ERROR: TFTP Root path doesn't exist. Creating...")
-        # PSC - deprecated os.system module replaced by subprocess
-        # os.system('mkdir -p ' + config.running["tftproot"])
         subprocess.run(["mkdir", "-p", config.running["tftproot"]], capture_output=False, check=True)
         server = tftpy.TftpServer(config.running["tftproot"], dyn_file_func=interceptor)
+
     server.listen(listenip="0.0.0.0", listenport=69)
     log("start_tftp: Started up successfully")
 
 
-##### Concatenate a list of words into a space-seperated string           #####
 def cat_list(listname):
+    """
+    Concatenate a list of words into a space-seperated string
+    """
     result = ""
     counter = 0
     for word in listname:                                                      # pylint: disable=unused-variable
@@ -4376,11 +3927,12 @@ def cat_list(listname):
     return result
 
 
-##### Main CLI interpreter and helper function. Entry point for the app.  #####
 def interpreter():                                                             # pylint: disable=too-many-branches
+    """
+    Main CLI interpreter and helper function. Entry point for the app.
+    """
     arguments = cat_list(sys.argv[1:])
     global config
-    #global cfact
     global logger
     global osd
     global integrations
@@ -4392,6 +3944,7 @@ def interpreter():                                                             #
     external_templates = external_templates_main()
     config = config_manager()
     config.load_external()
+
     ##### TEST #####
     if arguments == "test":
         pass
@@ -4426,6 +3979,7 @@ def interpreter():                                                             #
             console("\nInstall complete! Logout and log back into SSH to activate auto-complete")
         else:
             console("Install/upgrade cancelled")
+
     elif arguments == "upgrade":
         # console("***** Are you sure you want to upgrade FreeZTP using version %s?*****" % version)
         console(f"***** Are you sure you want to upgrade FreeZTP using version {version}?*****")
@@ -4530,8 +4084,6 @@ def interpreter():                                                             #
         console(" - show provisioning                              |  Show list of provisioned devices")
 
     elif arguments == "show config raw" or arguments == "show run raw":
-        # PSC - deprecated os.system module replaced by subprocess
-        # os.system("more /etc/ztp/ztp.cfg")
         subprocess.run(["more", "/etc/ztp/ztp.cfg"], capture_output=False, check=True)
     elif arguments == "show config" or arguments == "show run":
         config.show_config()
@@ -4548,7 +4100,6 @@ def interpreter():                                                             #
         osd.service_control("status", osd.DHCPSVC)
         console("\n")
     elif arguments == "show version":
-        # console("FreeZTP %s" % version)
         console(f"FreeZTP {version}")
     elif arguments[:8] == "show log":
         logger.show(sys.argv)
@@ -4564,8 +4115,6 @@ def interpreter():                                                             #
         tracking = tracking_class(client=True)
         console(tracking.show_dhcp_leases())
     elif arguments == "show dhcpd leases raw":
-        # PSC - deprecated os.system module replaced by subprocess
-        # os.system("more "+osd.DHCPLEASES)
         subprocess.run(["more", osd.DHCPLEASES], capture_output=False, check=True)
     elif arguments == "show dhcpd leases current":
         tracking = tracking_class(client=True)
@@ -4576,8 +4125,8 @@ def interpreter():                                                             #
     elif arguments == "show provisioning":
         tracking = tracking_class(client=True)
         console(tracking.show_provisioning())
-    ##### SET #####
 
+    ##### SET #####
     elif arguments == "set":
         console("--------------------------------------------------- SETTINGS YOU PROBABLY SHOULDN'T CHANGE ---------------------------------------------------")
         console(" - set suffix <value>                                          |  Set the file name suffix used by target when requesting the final config")
@@ -4673,6 +4222,7 @@ def interpreter():                                                             #
         console("                                                                         - set logging merged-config-to-custom-file '/etc/ztp/merged-logs/{{ hostname }}'")
     elif arguments[:3] == "set" and len(sys.argv) >= 4:
         config.set(sys.argv)
+
     ##### CLEAR #####
     elif arguments == "clear":
         console(" - clear snmpoid <name>                           |  Delete an SNMP OID from the configuration")
@@ -4737,6 +4287,7 @@ def interpreter():                                                             #
         tracking = tracking_class(client=True)
         tracking.clear_provisioning()
         log("Provisioning history has been cleared")
+
     ##### REQUEST #####
     elif arguments == "request":
         console(" - request merge-test <id>                        |  Perform a test jinja2 merge of the final template with a keystore ID")
@@ -4784,8 +4335,6 @@ def interpreter():                                                             #
         # console("\nQuerying %s using community (%s) and OID (%s)\n" % (sys.argv[3], community, oid))
         console(f"\nQuerying {sys.argv[3]} using community ({community}) and OID ({oid})\n")
         query = snmp_query(sys.argv[3], community, oid)
-        # PSC - isAlive() deprecated and replaced with is_alive()
-        # while query.thread.isAlive():
         while query.thread.is_alive():
             time.sleep(3)
     elif arguments[:23] == "request dhcp-option-125" and (sys.argv[3] == "cisco" or sys.argv[3] == "windows"):
@@ -4795,8 +4344,6 @@ def interpreter():                                                             #
     elif arguments == "request auto-dhcpd":
         config.auto_dhcpd()
     elif arguments == "request ipc-console":
-        # PSC - deprecated os.system module replaced by subprocess
-        # os.system('telnet localhost 10000')
         subprocess.run(["telnet", "localhost", "10000"], capture_output=False, check=True)
     elif arguments[:25] == "request integration-setup" and len(sys.argv) >= 4:
         integrations = integration_main()
@@ -4810,6 +4357,7 @@ def interpreter():                                                             #
     elif arguments[:27] == "request keystore-csv-export" and len(sys.argv) >= 4:
         external_keystores = external_keystore_main()
         external_keystores.export(sys.argv[3])
+
     ##### SERVICE #####
     elif arguments == "service":
         console(" - service (start|stop|restart|status)            |  Start, Stop, or Restart the installed ZTP service")
@@ -4963,6 +4511,3 @@ def interpreter():                                                             #
 
 if __name__ == "__main__":
     interpreter()
-#   ztp set external-keystore TEST type csv
-#   ztp set external-keystore TEST file "/home/user/mycsv.csv"
-#   ztp set external-keystore TEST mode offline
