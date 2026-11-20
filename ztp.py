@@ -950,8 +950,11 @@ class config_manager:                                                          #
 
     def save(self):
         rawconfig = json.dumps(self.running, indent=4, sort_keys=True)
-        with open(self.configfile, "w", encoding="utf8") as f:
-            f.write(rawconfig)
+        try:
+            with open(self.configfile, "w", encoding="utf8") as f:
+                f.write(rawconfig)
+        except PermissionError:
+            print("CHANGE ABORTED: Error writing config. Try 'sudo'")
 
     def set(self, args):                                                       # pylint: disable=too-many-branches
         setting = args[2]
@@ -1915,7 +1918,7 @@ class installer:
     Installer class: A simple holder class which contains all of the
     installation scripts used to install/upgrade the ZTP server
     """
-    defaultconfig = '''{
+    defaultconfig = r'''{
     "associations": {
         "SERIAL100": "SHORT_TEMPLATE",
         "STACK1": "LONG_TEMPLATE"
@@ -1973,21 +1976,22 @@ class installer:
     "snmpoid": {
         "C9K_CHASSIS_SERIAL": "1.3.6.1.2.1.47.1.1.1.1.11.1",
         "C9K_MOD1_SERIAL": "1.3.6.1.2.1.47.1.1.1.1.11.1000",
-        "C9800_SERIAL": "1.3.6.1.2.1.47.1.1.1.1.11.2"
+        "C9800_SERIAL": "1.3.6.1.2.1.47.1.1.1.1.11.2",
+        "C3K_COMPACT_SERIAL": "1.3.6.1.2.1.47.1.1.1.1.11.1001"
     },
     "starttemplate": {
         "delineator": "^",
-        "value": "hostname {{ autohostname }}\\n!\\nsnmp-server community {{ community }} RO\\n!\\nend"
+        "value": "hostname {{ autohostname }}\n!\nsnmp-server community {{ community }} RO\n!\nusername ztp privilege 15 secret ZtpPass123!\n!\naaa new-model\naaa authentication login default local\naaa authorization console\naaa authorization exec default local\n!\nno ip domain lookup\nno ip domain-lookup\n!\nline con 0\n logging synchronous\n transport preferred none\nline vty 0 15\n logging synchronous\n transport input all\n transport preferred none\nend"
     },
     "suffix": "-confg",
     "templates": {
         "LONG_TEMPLATE": {
             "delineator": "^",
-            "value": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} {{ vl1_netmask }}\\n no shut\\n!\\n!{% for interface in range(1,49) %}\\ninterface GigabitEthernet1/0/{{interface}}\\n description User Port (VLAN 1)\\n switchport access vlan 1\\n switchport mode access\\n no shutdown\\n!{% endfor %}\\n!\\nip domain-name test.com\\n!\\nusername admin privilege 15 secret password123\\n!\\naaa new-model\\n!\\n!\\naaa authentication login CONSOLE local\\naaa authorization console\\naaa authorization exec default local if-authenticated\\n!\\ncrypto key generate rsa modulus 2048\\n!\\nip ssh version 2\\n!\\nline vty 0 15\\nlogin authentication default\\ntransport input ssh\\nline console 0\\nlogin authentication CONSOLE\\nend"
+            "value": "hostname {{ hostname }}\n!\ninterface Vlan1\n ip address {{ vl1_ip_address }} {{ vl1_netmask }}\n no shut\n!\n!{% for interface in range(1,4) %}\ninterface GigabitEthernet1/0/{{ interface }}\n description User Port (VLAN 1)\n switchport access vlan 1\n switchport mode access\n no shutdown\n!{% endfor %}\n!\nno ip domain lookup\nno ip domain-lookup\n!\nusername ztp privilege 15 secret ZtpPass123!\n!\naaa new-model\naaa authentication login default local\naaa authorization console\naaa authorization exec default local\n!\nline con 0\n logging synchronous\n transport preferred none\nline vty 0 15\n logging synchronous\n transport input all\n transport preferred none\nend"
         },
         "SHORT_TEMPLATE": {
             "delineator": "^",
-            "value": "hostname {{ hostname }}\\n!\\ninterface Vlan1\\n ip address {{ vl1_ip_address }} 255.255.255.0\\n no shut\\n!\\nend"
+            "value": "hostname {{ hostname }}\n!\ninterface Vlan1\n ip address {{ vl1_ip_address }} 255.255.255.0\n no shut\n!\nend"
         }
     },
     "tftproot": "/etc/ztp/tftproot/"
