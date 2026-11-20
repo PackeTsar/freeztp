@@ -1909,8 +1909,11 @@ class log_management:
             sys.exit()
 
     def clear(self):
-        with open(self.logfile,"w", encoding="utf8") as f:
-            f.write("")
+        try:
+            with open(self.logfile,"w", encoding="utf8") as f:
+                f.write("")
+        except PermissionError:
+            print("CHANGE ABORTED: Error writing config. Try 'sudo'")
 
 
 class installer:
@@ -3304,14 +3307,13 @@ class integration_spark:
         return self._decode(response)
 
     def _decode(self, response):
-        if response.status_code == 200:
-            try:
-                return json.loads(response.text)
-            except Exception as e:                                             # pylint: disable=broad-exception-caught
-                print(e)
-                return None
-        else:
-            raise ValueError(f"Invalid Server Response Status Code: ({str(response.status_code)})\n({response.text})")
+        if response.status_code != 200:
+            data = f"\n\t{str(response.status_code)}\n{response.text}"
+            raise ValueError(f"Failure from server: {data}")
+        text = None
+        if response.text:
+            text = json.loads(response.text)
+        return text
 
     def _rooms(self):
         return self._get("https://api.ciscospark.com/v1/rooms")
@@ -3392,14 +3394,13 @@ class integration_power_automate:
         return self._decode(response)
 
     def _decode(self, response):
-        if response.status_code in range (200,299):
-            try:
-                return json.loads(response.text)
-            except Exception as e:                                             # pylint: disable=broad-exception-caught
-                print(e)
-                return None
-        else:
-            raise ValueError(f"Invalid Server Response Status Code: ({str(response.status_code)})\n({response.text})")
+        if response.status_code not in range (200,299):
+            data = f"\n\t{str(response.status_code)}\n{response.text}"
+            raise ValueError(f"Failure from server: {data}")
+        text = None
+        if response.text:
+            text = json.loads(response.text)
+        return text
 
     def send(self, message):
         log.info("Processing message for object (%s)", self.config["objname"])
@@ -3544,6 +3545,9 @@ class integration_main:
         if objname not in config.running["integrations"]:
             print(f"Integration object ({objname}) does not exist!")
         else:
+            # Temporarily raise console logging level
+            old_log_lvl = change_console_logging(logging.INFO)
+
             typ = config.running["integrations"][objname]["type"]
             cfg = {"objname": objname}
             cfg.update(config.running["integrations"][objname])
@@ -3559,6 +3563,9 @@ class integration_main:
                 "file": testfile
                 })
             intgobj.send(message)
+
+            # Return console logging to previous state
+            _ = change_console_logging(old_log_lvl)
 
 class external_keystore_csv:                                                   # pylint: disable=too-few-public-methods
     name = "csv"
@@ -3747,12 +3754,21 @@ def start_tftp():
     log.info("Starting Up TFTPy")
 
     try:
-        server = tftpy.TftpServer(config.running["tftproot"], dyn_file_func=interceptor)
+        server = tftpy.TftpServer(
+            config.running["tftproot"],
+            dyn_file_func=interceptor
+        )
 
     except tftpy.TftpShared.TftpException:
-        log.info("ERROR: TFTP Root path doesn't exist. Creating...")
-        subprocess.run(["mkdir", "-p", config.running["tftproot"]], capture_output=False, check=True)
-        server = tftpy.TftpServer(config.running["tftproot"], dyn_file_func=interceptor)
+        log.warning("ERROR: TFTP Root path doesn't exist. Creating...")
+        subprocess.run(
+            ["mkdir", "-p", config.running["tftproot"]],
+            capture_output=False, check=True
+        )
+        server = tftpy.TftpServer(
+            config.running["tftproot"],
+            dyn_file_func=interceptor
+        )
 
     server.listen(listenip="", listenport=69)
     log.info("Started up successfully")
@@ -4357,6 +4373,14 @@ def interpreter():                                                             #
         print("----------------------------------------------------------------------------------------------------------------------------------------------")
         print(" - version                                                     |  Show the current version of ZTP")
         print("----------------------------------------------------------------------------------------------------------------------------------------------")
+
+def change_console_logging(new_lvl):
+    old_lvl = None
+    for handler in log.handlers:
+        if not isinstance(handler, logging.FileHandler):
+            old_lvl = handler.level
+            handler.setLevel(new_lvl)
+    return old_lvl
 
 def init_logging(log_file, file_level, console_level=None):
     """
