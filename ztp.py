@@ -1,15 +1,20 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 # Globally disabled linting warnings
 # pylint: disable=line-too-long
 # pylint: disable=missing-docstring
 # pylint: disable=invalid-name
-# pylint: disable=global-statement
-# pylint: disable=global-variable-undefined
 # pylint: disable=too-many-lines
 # pylint: disable=too-many-statements
 # pylint: disable=too-many-instance-attributes
+# pylint: disable=global-statement
 # pylint: disable=consider-using-join
 # pylint: disable=consider-using-in
+# pylint: disable=too-many-locals
+# pylint: disable=too-many-branches
+# pylint: disable=too-many-return-statements
+# pylint: disable=too-few-public-methods
+# pylint: disable=too-many-public-methods
+# pylint: disable=too-many-nested-blocks
 """
 #####             FreeZTP Server             #####
 #####        Written by John W Kerns         #####
@@ -17,27 +22,79 @@
 #####  https://github.com/packetsar/freeztp  #####
 """
 
-##### Import native modules #####
+# Python native modules
 import asyncio
-import os
-import re
-import sys
 import csv
-import time
-import json
 import curses
-import socket
-import platform
-import subprocess
-import threading
+import datetime
+import io
+import json
 import logging
+import os
+import platform
+# import re
+import socket
+import subprocess
+import sys
+import threading
+import time
 
-VERSION = "v1.6.1"
+# External modules
+absent_modules = []
+try:
+    import jinja2 as j2
+    from jinja2 import meta
+except ModuleNotFoundError as err:
+    absent_modules.append(str(err).split()[-1].replace("'",""))
+try:
+    import pysnmp.hlapi.v3arch.asyncio as psa
+except ModuleNotFoundError as err:
+    absent_modules.append(str(err).split()[-1].replace("'",""))
+try:
+    import netaddr
+except ModuleNotFoundError as err:
+    absent_modules.append(str(err).split()[-1].replace("'",""))
+try:
+    import netifaces
+except ModuleNotFoundError as err:
+    absent_modules.append(str(err).split()[-1].replace("'",""))
+try:
+    import requests
+except ModuleNotFoundError as err:
+    absent_modules.append(str(err).split()[-1].replace("'",""))
+try:
+    import isc_dhcp_leases as isc
+except ModuleNotFoundError as err:
+    absent_modules.append(str(err).split()[-1].replace("'",""))
+try:
+    from requests_toolbelt import MultipartEncoder
+except ModuleNotFoundError as err:
+    absent_modules.append(str(err).split()[-1].replace("'",""))
+try:
+    import tftpy
+except ModuleNotFoundError as err:
+    absent_modules.append(str(err).split()[-1].replace("'",""))
+
+# Private modules
+
+VERSION = "v1.6.1a"
 
 log = None
 F_LEV = logging.DEBUG
 C_LEV = logging.INFO
 LOG_FILE = "/etc/ztp/ztp.log"
+
+# Globals
+osd = None
+config = None
+cache = None
+cfact = None
+integrations = None
+external_keystores = None
+external_templates = None
+tracking = None
+# Future use
+# is_admin = os.geteuid() == 0
 
 class os_detect:
     def __init__(self):
@@ -75,86 +132,44 @@ class os_detect:
             checkpkgmgr[len(result.stdout)] = mgr
 
         # PSC - Select item with longest output?? Obscure. Difficult to interpret.
-        pkgmgr = checkpkgmgr[sorted(list(checkpkgmgr), key=int)[len(sorted(list(checkpkgmgr), key=int)) - 1]]
+        pkgmgr = checkpkgmgr[
+            sorted(list(checkpkgmgr), key=int)[len(sorted(list(checkpkgmgr), key=int)) - 1]]
         return pkgmgr
 
     def _dist_detect(self):
         if platform.system() != "Linux":
-            print("Unsupported OS Type! Please create an issue at https://github.com/PackeTsar/freeztp/issues and include below information.")
+            print("Unsupported OS Type!")
             sys.exit()
         return "debian"
-        # PSC - platform.linux_distribution deprecated. New method needed.
-        # PSC - hacking in debian as placeholder
-        # distlist = platform.linux_distribution()
-        # if "centos" in distlist[0].lower():
-        #     return "centos"
-        # elif "red hat" in distlist[0].lower() and float(distlist[1] > 8):
-        #     return "rhel8"
-        # elif "red hat" in distlist[0].lower():
-        #     return "rhel"
-        # elif "ubuntu" in distlist[0].lower():
-        #     return "ubuntu"
-        # elif "debian" in distlist[0].lower():
-        #     return "debian"
-        # else:
-        #     print("Unsupported OS Type! Please create an issue at https://github.com/PackeTsar/freeztp/issues and include below information.")
-        #     print(platform.linux_distribution())
-        #     sys.exit()
 
     def _make_names(self):
         if self._dist == "debian":
             self.DHCPSVC = "isc-dhcp-server"
             self.DHCPPKG = "isc-dhcp-server"
             self.PIPPKG = "python3-pip"
-            # self.PKGDIR = "/usr/local/lib/python2.7/dist-packages/"
             self.DHCPLEASES = "/var/lib/dhcp/dhcpd.leases"
-        # elif self._dist == "centos":
-        #     self.DHCPSVC = "dhcpd"
-        #     self.DHCPPKG = "dhcp"
-        #     self.PIPPKG = "python2-pip"
-        #     self.PKGDIR = "/usr/lib/python2.7/site-packages/"
-        #     self.DHCPLEASES = "/var/lib/dhcpd/dhcpd.leases"
-        # elif self._dist == "rhel8":
-        #     self.DHCPSVC = "dhcpd"
-        #     self.DHCPPKG = "dhcp-server"
-        #     self.PIPPKG = "python2-pip"
-        #     self.PKGDIR = "/usr/lib/python2.7/site-packages/"
-        #     self.DHCPLEASES = "/var/lib/dhcpd/dhcpd.leases"
-        # elif self._dist == "rhel":
-        #     self.DHCPSVC = "dhcpd"
-        #     self.DHCPPKG = "dhcp"
-        #     self.PIPPKG = "python2-pip"
-        #     self.PKGDIR = "/usr/lib/python2.7/site-packages/"
-        #     self.DHCPLEASES = "/var/lib/dhcpd/dhcpd.leases"
-        # elif self._dist == "ubuntu":
-        #     self.DHCPSVC = "isc-dhcp-server"
-        #     self.DHCPPKG = "isc-dhcp-server"
-        #     self.PIPPKG = "python-pip"
-        #     self.PKGDIR = "/usr/local/lib/python2.7/dist-packages/"
-        #     self.DHCPLEASES = "/var/lib/dhcp/dhcpd.leases"
 
     def service_control(self, cmd, service):
         if self._systemd:
             cli_cmd = ["sudo", "systemctl", cmd, service]
         else:
-            # os.system("sudo service %s %s" % (service, cmd))
             cli_cmd = ["sudo", "service", service, cmd]
 
         subprocess.run(cli_cmd, capture_output=False, check=False)
 
     def install_pkg(self, pkg):
         cli_cmd = ["sudo", self._pkgmgr, "install", "-y", pkg]
-        print("")
+        print(f"\n{'#'*25}\n")
         subprocess.run(cli_cmd, capture_output=False, check=False)
 
 def interceptor(afile, raddress, rport):
     log.info("Checking the cache")
-    cached = cache.get(afile, raddress)                                        # pylint: disable=used-before-assignment
+    cached = cache.get(afile, raddress)
     if cached:
         return cached
 
     log.info("Cache returned None. Running cfact.lookup procedure")
-    lookup = cfact.lookup(afile, raddress)                                     # pylint: disable=used-before-assignment
+    lookup = cfact.lookup(afile, raddress)
     log.info("cfact.lookup returned (%s)", lookup)
     if lookup:
         log.info("Returning ztp_dyn_file instantiated object")
@@ -189,16 +204,21 @@ class file_cache:
 
     def get(self, filename, ipaddr):
         currenttime = time.time()
-        for entry in self._cache:                                              # pylint: disable=consider-using-dict-items
-            if filename == self._cache[entry]["filename"] and ipaddr == self._cache[entry]["ipaddr"]:
-                log.info("File (%s) requested by (%s) found in cache. Checking timeout.", filename, ipaddr)
+        for entry, item in self._cache.items():
+            if filename == item["filename"] and ipaddr == item["ipaddr"]:
+                log.info(
+                    "File (%s) requested by (%s) found in cache.",
+                    filename, ipaddr
+                )
                 if currenttime - entry < self.timeout:
-                    log.info("Cached file is still within timeout period. Resetting to 0 and returning")
-                    self._cache[entry]["file"].position = 0
-                    return self._cache[entry]["file"]
-                log.info("Cached file is outside of timeout period. Deleting from cache. Returning None")
+                    log.info("Not timed out. Set cursor to 0 and return.")
+                    item["file"].position = 0
+                    return item["file"]
+
+                log.info("Timed out. Deleting from cache. Returning None")
                 del self._cache[entry]
                 return None
+
         log.info("File (%s) requested by (%s) not in cache", filename, ipaddr)
         return None
 
@@ -237,7 +257,7 @@ class ztp_dyn_file:
         self.port = rport
         self.track = track
         if self.track:
-            tracking.files.append(self)                                        # pylint: disable=used-before-assignment
+            tracking.files.append(self)
         log.info("Instantiated as (%s)", str(self))
         if not data:
             self.data = cfact.request(afile, raddress)
@@ -256,8 +276,8 @@ class ztp_dyn_file:
         return len(self.data)-self.position
 
     def read(self, size):
-        start = self.position                                                  # pylint: disable=redefined-outer-name
-        end = self.position + size                                             # pylint: disable=redefined-outer-name
+        start = self.position
+        end = self.position + size
         result = str(self.data[start:end])
         self.position = end
         if self.track:
@@ -286,10 +306,6 @@ class config_factory:
     the ZTP configuration
     """
     def __init__(self):
-        global j2
-        global meta
-        import jinja2 as j2                                                    # pylint: disable=import-outside-toplevel
-        from jinja2 import meta                                                # pylint: disable=import-outside-toplevel
         self.state = {}
         self.snmprequests = {}
         try:
@@ -302,9 +318,8 @@ class config_factory:
             self.templates = config.running["templates"]
             self.keyvalstore = config.running["keyvalstore"]
             self.associations = config.running["associations"]
-        except:                                                                # pylint: disable=bare-except
-            # console("cfact.__init__: Error pulling settings from config file")
-            log.warning("Error retrieving settings from config file.")
+        except KeyError as e:
+            log.warning("Config file missing key: %s", e)
 
     def _check_supression(self, ipaddr):
         log.debug("Checking for image download supression for IP (%s)", ipaddr)
@@ -316,7 +331,9 @@ class config_factory:
             if filename == config.running["imagediscoveryfile"]:
                 if sesip == ipaddr:
                     if time.time()-float(timestamp) < timeout:
-                        log.debug("Previous session detected %s seconds ago (within %s seconds). Supressing upgrade.", time.time()-float(timestamp), timeout)
+                        log.debug("Previous session detected %s seconds ago "
+                            "(within %s seconds). Supressing upgrade.",
+                            time.time()-float(timestamp), timeout)
                         return True
         log.debug("Previous session not detected within %s seconds.", timeout)
         return False
@@ -337,18 +354,23 @@ class config_factory:
             log.info("##########IOS UPGRADE ABOUT TO BEGIN!!!##########")
             return True
 
-        if self.uniquesuffix in filename and tempid in list(self.snmprequests):  # If the filname contains the suffix and it has an entry in the snmp request list
+        # If the filname contains the suffix and it has an entry in the snmp request list
+        if self.uniquesuffix in filename and tempid in list(self.snmprequests):
             log.info("Seeing the suffix in the filename and the TempID in the SNMPRequests")
-            if self.snmprequests[tempid].complete:  # If the snmprequest has completed
+            # If the snmprequest has completed
+            if self.snmprequests[tempid].complete:
                 log.info("The SNMP request is showing as completed")
                 for response in self.snmprequests[tempid].responses:
-                    if self.id_configured(self.snmprequests[tempid].responses[response]):  # If the snmp id response is a configured IDArray or keystore
+                    # If the snmp id response is a configured IDArray or keystore
+                    if self.id_configured(self.snmprequests[tempid].responses[response]):
                         log.info("Target ID is in the Keystore or an IDArray")
                         return True
-                if self._default_lookup():  # If there is a default keystore configured
+                # If there is a default keystore configured
+                if self._default_lookup():
                     log.info("Target ID is NOT in the Keystore or an IDArray, but a default is configured")
                     return True
-            elif self._default_lookup():  # If there is a default keystore configured
+            # If there is a default keystore configured
+            elif self._default_lookup():
                 log.info("Target ID is NOT in the Keystore or an IDArray, but a default is configured")
                 return True
 
@@ -393,7 +415,7 @@ class config_factory:
 
         return False
 
-    def request(self, filename, ipaddr, test=False):                           # pylint: disable=too-many-branches, too-many-return-statements
+    def request(self, filename, ipaddr, test=False):
         log.info("Called with filename (%s) and IP (%s)", filename, ipaddr)
         if filename == self.basefilename:
             log.info("Filename (%s) matches the configured initialfilename", self.basefilename)
@@ -632,7 +654,7 @@ class config_factory:
         log.info("Merging with values:\n%s", json.dumps(vals, indent=4))
         return (template.render(vals), vals)
 
-    def get_keystore_id(self, idens, silent=False):                            # pylint: disable=too-many-branches
+    def get_keystore_id(self, idens, silent=False):
         for identifier in idens:
             identifier = idens[identifier]
             if not silent:
@@ -678,7 +700,7 @@ class config_factory:
                 log.info("ID (%s) not found in external IDArrays. ID Lookup failed!", identifier)
         return None
 
-    def get_template(self, identity):                                          # pylint: disable=too-many-branches
+    def get_template(self, identity):
         log.info("Looking up association for identity (%s)", identity)
         response = False
         for association in self.associations:
@@ -722,13 +744,13 @@ class config_factory:
                 log.info("Default-template is set to None")
         return response
 
-    def merge_test(self, iden, template):                                      # pylint: disable=too-many-branches, too-many-locals
+    def merge_test(self, iden, template):
         idtup = self.get_keystore_id({"Merge Test":iden})
         if not idtup:
             log.info("ID '%s' cannot be found!", iden)
             log.info("To check for usage of a default keystore use: ztp request default-keystore-test")
             return
-        identity, identifier = idtup                                           # pylint: disable=unused-variable
+        identity, _ = idtup
 
         if identity in config.running["keyvalstore"]:
             path = config.running
@@ -738,6 +760,8 @@ class config_factory:
         if not identity:
             log.info("ID '%s' does not exist in keystore!", iden)
         else:
+            ast = ""
+            j2template = ""
             if template == "final":
                 templatedata = self.get_template(identity)
                 if not templatedata:
@@ -751,7 +775,7 @@ class config_factory:
                 env = j2.Environment(loader=j2.FileSystemLoader('/'))
                 j2template = env.from_string(self.baseconfig)
                 ast = env.parse(self.baseconfig)
-            templatevarlist = list(meta.find_undeclared_variables(ast))        # pylint: disable=possibly-used-before-assignment
+            templatevarlist = list(meta.find_undeclared_variables(ast))
             varsmissing = False
             missingvarlist = []
             for var in templatevarlist:
@@ -770,7 +794,7 @@ class config_factory:
             kvalues.update({"snmpinfo": snmpinfo})
             log.info("Merging with values:\n%s", json.dumps(kvalues, indent=4))
             print("##############################")
-            print(j2template.render(kvalues))                                # pylint: disable=possibly-used-before-assignment
+            print(j2template.render(kvalues))
             print("##############################")
 
     def pull_keystore_values(self, path, keystore_id):
@@ -802,7 +826,8 @@ class config_factory:
     def _global_keystore_merge(self, ksdata):
         keystoredata = dict(ksdata)
         log.info("Checking if a global-keystore is configured and ready...")
-        if config.running["global-keystore"]:  # If a global keystore ID is set
+        # If a global keystore ID is set
+        if config.running["global-keystore"]:
             kid = config.running["global-keystore"]
             log.info("A global-keystore is configured (%s), checking if it exists in local config", kid)
             if kid in config.running["keyvalstore"]:
@@ -822,7 +847,7 @@ class config_factory:
         return keystoredata
 
 
-class snmp_query:                                                              # pylint: disable=too-few-public-methods
+class snmp_query:
     """
     SNMP Querying object: It is instantiated by the config_factory when the
     initial template is pulled down. A thread is spawned which continuously
@@ -831,8 +856,6 @@ class snmp_query:                                                              #
     keystore ID when the final template is requested
     """
     def __init__(self, host, community, oids, timeout=30):
-        global psa
-        import pysnmp.hlapi.v3arch.asyncio as psa                              # pylint: disable=import-outside-toplevel
         self.complete = False
         self.status = "starting"
         self.responses = {}
@@ -866,6 +889,7 @@ class snmp_query:                                                              #
     def _query_worker(self, oidname, oid):
         starttime = time.time()
         self.status = "running"
+        log.info("SNMP Query - Host: %s / OID: %s", self.host, oidname)
         while not self.complete:
             response = str(asyncio.run(self._get_oid(oid)))
             # response will be oid data or None
@@ -873,14 +897,14 @@ class snmp_query:                                                              #
                 self.responses.update({oidname: response})
                 self.status = "success"
                 self.complete = True
-                log.info("SNMP Query Successful (OID: %s). Host (%s) responded with (%s)", oidname, self.host, response)
+                log.info("SNMP Response - Host: %s / OID: %s / Data: %s", self.host, oidname, response)
             else:
                 self.status = "retrying"
-                log.info("SNMP Query Timed Out")
+                log.info("SNMP Timeout - Host: %s / OID: %s", self.host, oidname)
 
             if (time.time() - starttime) > self.timeout:
                 self.status = "failed"
-                log.info("Timeout Expired, Query Thread Terminating")
+                log.info("SNMP Expired - Host: %s / OID: %s", self.host, oidname)
                 break
 
             time.sleep(0.1)
@@ -899,7 +923,7 @@ class snmp_query:                                                              #
         return varBinds[0][1] if varBinds else None
 
 
-class config_manager:                                                          # pylint: disable=too-many-public-methods
+class config_manager:
     """
     Configuration Manager: handles publishing of and changes to the ZTP
     configuration input by the administrator
@@ -956,7 +980,7 @@ class config_manager:                                                          #
         except PermissionError:
             print("CHANGE ABORTED: Error writing config. Try 'sudo'")
 
-    def set(self, args):                                                       # pylint: disable=too-many-branches
+    def set(self, args):
         setting = args[2]
         value = args[3]
         exceptions = ["keyvalstore", "starttemplate"]
@@ -974,7 +998,7 @@ class config_manager:                                                          #
         elif setting == "external-keystore":
             self.set_external_keystore(args[3], args[4], args[5])
 
-        elif setting == "template" or setting == "initial-template":           # pylint: disable=consider-using-in
+        elif setting in ["template", "initial-template"]:
             if setting == "initial-template":
                 print(f"Enter each line of the template ending with '{args[3]}' on a line by itself")
                 newtemplate = self.multilineinput(args[3])
@@ -1004,13 +1028,13 @@ class config_manager:                                                          #
             template = args[6]
             self.set_association(iden, template)
 
-        elif setting == "default-keystore" or setting == "default-template" or setting == "global-keystore":    # pylint: disable=consider-using-in
+        elif setting in ["default-keystore", "default-template", "global-keystore"]:
             if value.lower() == "none":
                 value = None
             self.running[setting] = value
             self.save()
 
-        elif setting == "image-supression" or setting == "file-cache-timeout" or setting == "delay-keystore":   # pylint: disable=consider-using-in
+        elif setting in ["image-supression", "file-cache-timeout", "delay-keystore"]:
             try:
                 self.running[setting] = int(value)
                 self.save()
@@ -1033,7 +1057,7 @@ class config_manager:                                                          #
             else:
                 print("Unknown Setting!")
 
-    def clear(self, args):                                                     # pylint: disable=too-many-branches
+    def clear(self, args):
         setting = args[2]
         iden = args[3]
         if setting == "keystore":
@@ -1048,7 +1072,8 @@ class config_manager:                                                          #
                         print(f"Key does not exist under ID {iden}: {key}")
                     else:
                         del self.running["keyvalstore"][iden][key]
-                        if self.running["keyvalstore"][iden] == {}: # No keys left
+                        # No keys left
+                        if self.running["keyvalstore"][iden] == {}:
                             del self.running["keyvalstore"][iden]
 
         elif setting == "integration":
@@ -1063,7 +1088,8 @@ class config_manager:                                                          #
                         print(f"Key ({iden}) does not exist under integration ({key})")
                     else:
                         del self.running["integrations"][iden][key]
-                        if self.running["integrations"][iden] == {}: # No keys left
+                        # No keys left
+                        if self.running["integrations"][iden] == {}:
                             del self.running["integrations"][iden]
 
         elif setting == "external-keystore":
@@ -1078,7 +1104,8 @@ class config_manager:                                                          #
                         print(f"Key ({iden}) does not exist under external-keystore ({key})")
                     else:
                         del self.running["external-keystores"][iden][key]
-                        if self.running["external-keystores"][iden] == {}: # No keys left
+                        # No keys left
+                        if self.running["external-keystores"][iden] == {}:
                             del self.running["external-keystores"][iden]
 
         elif setting == "idarray":
@@ -1219,8 +1246,6 @@ class config_manager:                                                          #
         self.save()
 
     def set_dhcpd(self, args):
-        global netaddr
-        import netaddr                                                         # pylint: disable=import-outside-toplevel
         if len(args) < 6:
             print("ERROR: Incomplete Command!")
             sys.exit()
@@ -1236,14 +1261,15 @@ class config_manager:                                                          #
             "lease-time": self.is_num,
             "imagediscoveryfile-option": self.make_true
         }
-        #### Build Path
+        # Build Path
         if "dhcpd" not in list(self.running):
             self.running.update({"dhcpd": {}})
         if scope not in self.running["dhcpd"]:
             print("INFO: New scope creation detected. Adding a few commands automatically")
             scopedict = {}
             cmds = []
-            ips = self.filter_ips(self.get_addresses())  # Get current interface addresses
+            # Get current unicast IPv4 interface addresses
+            ips = self.filter_ips(self.get_addresses())
             if len(ips) == 1:
                 myip = ips[0][1]
                 print(f"INFO: Detected ZTP server IP: {myip}")
@@ -1260,7 +1286,6 @@ class config_manager:                                                          #
 
         if setting in checks:
             check = checks[setting](value)
-            # if check == True:
             if check is True:
                 self.running["dhcpd"][scope].update({setting: value})
             else:
@@ -1276,27 +1301,34 @@ class config_manager:                                                          #
 
     def is_ip(self, data):
         try:
-            netaddr.IPAddress(data)
-            return True
-        except Exception as err:                                               # pylint: disable=broad-exception-caught
-            return err
+            # Eval bool or exception
+            result = isinstance(netaddr.IPAddress(data), netaddr.ip.IPAddress)
+        except netaddr.core.AddrFormatError:
+            result = False
+
+        if result is False:
+            return f"Input is not an IP Address: '{data}'"
+
+        return result
 
     def is_net(self, data):
         try:
+            # Eval bool or exception
             ipobj = netaddr.IPNetwork(data)
-            if str(ipobj.cidr) == data:
-                return True
-            return "Please provide a CIDR address (ie: 10.0.0.0/24)"
+            result = str(ipobj.cidr) == data
+        except netaddr.core.AddrFormatError:
+            result = False
 
-        except ValueError as err:
-            return err
+        if result is False:
+            return f"Input is not a Network Address: '{data}'"
+
+        return result
 
     def is_num(self, data):
-        try:
-            int(data)
-            return True
-        except Exception:                                                      # pylint: disable=broad-exception-caught
-            return "Must be a number!"
+        result = isinstance(data, int)
+        if result is False:
+            return f"Input is not an integer: '{data}'"
+        return True
 
     def make_true(self):
         return True
@@ -1313,7 +1345,7 @@ class config_manager:                                                          #
             self.running["logging"][setting] = value
             self.save()
 
-    def show_config(self):                                                     # pylint: disable=too-many-branches, too-many-locals
+    def show_config(self):
         cmdlist = []
         simplevals = ["suffix", "initialfilename", "community", "tftproot", "imagediscoveryfile", "file-cache-timeout"]
         for each in simplevals:
@@ -1340,7 +1372,7 @@ class config_manager:                                                          #
             tempdel = self.running["templates"][template]["delineator"]
             templatetext += "#\n#\n#\n"
             templatetext += f"ztp set template {template} {tempdel}\n{tempval}\n{tempdel}"
-            templatetext += "\n#\n#\n#\n#######################################################\n"
+            templatetext += f"\n#\n{'#'*55}\n#\n"
 
         idarraylist = []
         for arrayname in self.running["idarrays"]:
@@ -1353,7 +1385,7 @@ class config_manager:                                                          #
         for iden in self.running["keyvalstore"]:
             for key in self.running["keyvalstore"][iden]:
                 value = self.running["keyvalstore"][iden][key]
-                if type(value) != type("") and type(value) != type(u""):       # pylint: disable=unidiomatic-typecheck, redundant-u-string-prefix
+                if not isinstance(value, str):
                     value = f"'{json.dumps(value)}'"
                 else:
                     if " " in value:
@@ -1365,7 +1397,7 @@ class config_manager:                                                          #
         for iden in self.running["integrations"]:
             for key in self.running["integrations"][iden]:
                 value = self.running["integrations"][iden][key]
-                if type(value) != type("") and type(value) != type(u""):       # pylint: disable=unidiomatic-typecheck, redundant-u-string-prefix
+                if not isinstance(value, str):
                     value = f"'{json.dumps(value)}'"
                 else:
                     if " " in value:
@@ -1419,7 +1451,8 @@ class config_manager:                                                          #
             scopelist.append("#")
         scopelist = scopelist[:len(scopelist)-1] # Remove last '#'
 
-        configtext = "#######################################################\n#\n#\n#\n"
+        # Top section - General config and initial template
+        configtext = f"{'#'*55}\n#\n#\n"
         for cmd in cmdlist:
             configtext += f"{cmd}\n"
         configtext += f"{log_merged_mainlog}\n"
@@ -1427,47 +1460,45 @@ class config_manager:                                                          #
         configtext += "#\n#\n"
         configtext += itemp
 
-        configtext += "\n#\n#\n#\n#######################################################\n"
-        configtext += "#\n#\n#\n"
+        # Section - DHCP config
+        configtext += f"#\n#\n{'#'*55}\n#\n#\n"
         for cmd in dhcpoptlist:
             configtext += f"{cmd}\n"
-        configtext += "#\n#\n#\n"
+        configtext += "#\n"
         for cmd in scopelist:
             configtext += f"{cmd}\n"
 
-        configtext += "#\n#\n#\n#######################################################\n"
+        # Section - Internal Templates
+        configtext += f"#\n#\n{'#'*55}\n#\n"
         configtext += templatetext
 
-        configtext += "#\n#\n#\n"
+        # Section - Keystores, ID Arrays, and other settings
+        configtext += "#\n#\n"
         for cmd in keylist:
             configtext += f"{cmd}\n"
         configtext += "#\n#\n"
         for cmd in idarraylist:
             configtext += f"{cmd}\n"
-        configtext += "#\n#\n#\n"
+        configtext += "#\n#\n"
         for cmd in associationlist:
             configtext += f"{cmd}\n"
-        configtext += "#\n#\n#\n"
-        configtext += dkeystore
-        configtext += "\n"
-        configtext += gkeystore
-        configtext += "\n"
-        configtext += dtemplate
-        configtext += "\n"
-        configtext += imagefile
-        configtext += "\n"
-        configtext += imagesup
-        configtext += "\n"
-        configtext += delaykey
-        configtext += "\n#\n#\n#\n"
+        configtext += "#\n#\n"
+        configtext += f"{dkeystore}\n"
+        configtext += f"{gkeystore}\n"
+        configtext += f"{dtemplate}\n"
+        configtext += f"{imagefile}\n"
+        configtext += f"{imagesup}\n"
+        configtext += f"{delaykey}\n"
+        configtext += "#\n"
         for cmd in intglist:
             configtext += f"{cmd}\n"
+        configtext += "#\n"
         for cmd in exkeystlist:
             configtext += f"{cmd}\n"
-        configtext += "#\n#\n"
+        configtext += "#\n"
         for cmd in extemplist:
             configtext += f"{cmd}\n"
-        configtext += "#\n#\n#\n#######################################################"
+        configtext += f"#\n#\n{'#'*55}"
 
         print(configtext)
 
@@ -1491,12 +1522,12 @@ class config_manager:                                                          #
         for iden in self.running["integrations"]:
             for key in self.running["integrations"][iden]:
                 value = self.running["integrations"][iden][key]
-                if type(value) != type("") and type(value) != type(u""):       # pylint: disable=unidiomatic-typecheck, redundant-u-string-prefix
+                if not isinstance(value, str):
                     value = f"'{json.dumps(value)}'"
                 else:
                     if " " in value:
                         value = f"'{value}'"
-                intglist.append("ztp set integration {iden} {key} {value}")
+                intglist.append(f"ztp set integration {iden} {key} {value}")
             intglist.append("#")
         return intglist
 
@@ -1521,7 +1552,7 @@ class config_manager:                                                          #
         last = 0
         current = 1
         templist = []
-        for char in hexdata:                                                   # pylint: disable=unused-variable
+        for _ in hexdata:
             if (len(hexdata) - last) < 4:
                 templist.append(hexdata[last:len(hexdata)])
                 break
@@ -1537,7 +1568,7 @@ class config_manager:                                                          #
     def isc_hex(self, hexdata):
         return ":".join(map(''.join, zip(*[iter(hexdata)]*2))).upper()
 
-    def opt125(self, mode):                                                    # pylint: disable=inconsistent-return-statements
+    def opt125(self, mode):
         if mode == "windows":
             print("    Follow the below Instructions:")
             print("        - Open the Windows DHCP Server admin window")
@@ -1562,13 +1593,19 @@ class config_manager:                                                          #
             print("        - You should see the ZTP configured imagediscoveryfile name under the 'ASCII' field")
             print("        - Click OK")
             print("        - Close the Windows DHCP Server admin window")
-        elif mode == "cisco":
-            optiondata = self.running["imagediscoveryfile"].encode("hex")      # pylint: disable=unused-variable
+            return None
+
+        if mode == "cisco":
+            _ = self.running["imagediscoveryfile"].encode("hex")
             print("\n\nAdd the below line to your 'ip dhcp pool XXXX' config:\n")
             info = self.ciscohex(self.calcopt125hex())
             print(f"option 125 hex {info}\n\n")
-        elif mode == "isc":
+            return None
+
+        if mode == "isc":
             return self.isc_hex(self.calcopt125hex())
+
+        return None
 
     def hidden_list_ids(self):
         for iden in list(self.running["keyvalstore"]):
@@ -1695,7 +1732,7 @@ class config_manager:                                                          #
         except KeyError:
             pass
 
-    def dhcpd_compile(self):                                                   # pylint: disable=too-many-locals
+    def dhcpd_compile(self):
         result = "########### FREEZTP DHCP SCOPES ###########\n"
         result += "############## DO NOT MODIFY ##############\n"
         result += "option imagediscoveryfile-option code 125 = string;\n"
@@ -1761,8 +1798,6 @@ class config_manager:                                                          #
         return result
 
     def dhcpd_commit(self):
-        global netaddr
-        import netaddr                                                         # pylint: disable=import-outside-toplevel
         dhcpdata = self.dhcpd_compile()
         with open("/etc/dhcp/dhcpd.conf", "r", encoding="utf8") as f:
             filedatalist = f.readlines()
@@ -1776,11 +1811,11 @@ class config_manager:                                                          #
         for line in filedatalist[:index-1]:
             strippeddata += line
         strippeddata += dhcpdata
-        print("\n################## Writing the below to the DHCP config file ##################")
-        print("###############################################################################")
+        print(f"\n{'#'*18} Writing the below to the DHCP config file {'#'*18}")
+        print(f"{'-'*79}\n")
         print(strippeddata)
-        print("###############################################################################")
-        print("###############################################################################")
+        print(f"\n{'-'*79}\n")
+
         with open("/etc/dhcp/dhcpd.conf", "w", encoding="utf8") as f:
             f.write(strippeddata)
         print("\nWrite Complete. Restarting DHCP Service...\n")
@@ -1788,10 +1823,9 @@ class config_manager:                                                          #
         osd.service_control("status", osd.DHCPSVC)
 
     def get_addresses(self):
-        import netifaces                                                       # pylint: disable=import-outside-toplevel, redefined-outer-name
         result = []
-        for iface in netifaces.interfaces():                                   # pylint: disable=c-extension-no-member
-            addressdict = netifaces.ifaddresses(iface)                         # pylint: disable=c-extension-no-member
+        for iface in netifaces.interfaces():
+            addressdict = netifaces.ifaddresses(iface)
             for addid in addressdict:
                 for d in addressdict[addid]:
                     if "addr" in d:
@@ -1838,22 +1872,23 @@ class config_manager:                                                          #
                 filedatalist = f.readlines()
             for line in filedatalist:
                 if "INTERFACESv4=" in line:
-                    newfilelines.append(f'INTERFACESv4="{ifstr}"\n')
+                    newfilelines.append(f'INTERFACESv4="{ifstr}"')
                 elif "INTERFACES=" in line:
-                    newfilelines.append(f'INTERFACES="{ifstr}"\n')
+                    newfilelines.append(f'INTERFACES="{ifstr}"')
                 else:
                     newfilelines.append(line)
-            newfile = ""
-            for line in newfilelines:
-                newfile += line                                                # pylint: disable=consider-using-join
+            newfile = "\n".join(newfilelines)
             with open("/etc/default/isc-dhcp-server", "w", encoding="utf8") as f:
                 f.write(newfile)
 
     def auto_dhcpd(self):
-        global netaddr
-        import netaddr                                                         # pylint: disable=import-outside-toplevel
-        print("INFO: Autodetection can often detect an incorrect subnet mask. You may need to correct the subnet on auto built scopes")
-        print("INFO: You will need to set the 'first-address' and 'last-address' settings on any auto-built scope for it to actually serve IP addresses")
+        print(f"{'*'*10} IMPORTANT * IMPORTANT * IMPORTANT {'*'*10}")
+        print("Autodetection can often detect an incorrect subnet mask.")
+        print("You may need to correct the subnet on auto built scopes.")
+        print("You must set the 'first-address' and 'last-address' settings")
+        print("for any auto-built scope before it will serve IP addresses\n")
+        print("You must commit changes with 'ztp request dhcpd-commit'\n")
+        print(f"{'*'*55}\n\n")
         print("Detecting interfaces and determining usable IP addresses...")
         ips = self.filter_ips(self.get_addresses())
         iflist = []
@@ -1861,8 +1896,6 @@ class config_manager:                                                          #
         for net in ips:
             scopename = f"INTERFACE-{net[0].upper()}"
             print(f"  Building Scope {scopename}")
-            if net[2] == "255.255.255.255":
-                print(f"    WARNING: Scope {scopename} has a /32 subnet size. You may need to adjust it if you want to serve IP addresses on that subnet")
             subnet = net[3]
             myip = net[1]
             cmd1 = f"ztp set dhcpd {scopename} subnet {subnet}"
@@ -1875,7 +1908,7 @@ class config_manager:                                                          #
             self.set_dhcpd(api2)
             iflist.append(net[0])
         self._write_interfaces(iflist)
-        print("\n\nComplete!\n\nRemember to commit the new DHCP config using the command 'ztp request dhcpd-commit'\n")
+        print("\nComplete!\n")
 
 
 class log_management:
@@ -2000,74 +2033,92 @@ class installer:
     "tftproot": "/etc/ztp/tftproot/"
 }'''
 
-    def minor_update_script(self):
-        newconfigkeys = {
-        "integrations": {},
-        "external-keystores": {},
-        "external-templates": {},
-        "global-keystore": None,
-        "logging": {
-            "merged-config-to-mainlog": "enable",
-            "merged-config-to-custom-file": "disable"
-            },
-        "dhcpd-options": {
-            "ztp-tftp-address": {
-                "code": 150,
-                "type": "ip-address"
-                }
-            }
-        }
-        for key in newconfigkeys:                                              # pylint: disable=consider-using-dict-items
-            if key not in list(config.running):
-                print(f"Adding ({key}) to config schema")
-                config.running.update({key: newconfigkeys[key]})
-        config.save()
-        try:
-            import requests                                                    # pylint: disable=import-outside-toplevel, unused-import, redefined-outer-name
-        except ImportError:
-            print("\n\nInstalling some new dependencies...\n")
-            subprocess.run(["pip", "install", "requests"], capture_output=False, check=True)
-            subprocess.run(["pip", "install", "requests_toolbelt"], capture_output=False, check=True)
+    # def minor_update_script(self):
+    #     newconfigkeys = {
+    #     "integrations": {},
+    #     "external-keystores": {},
+    #     "external-templates": {},
+    #     "global-keystore": None,
+    #     "logging": {
+    #         "merged-config-to-mainlog": "enable",
+    #         "merged-config-to-custom-file": "disable"
+    #         },
+    #     "dhcpd-options": {
+    #         "ztp-tftp-address": {
+    #             "code": 150,
+    #             "type": "ip-address"
+    #             }
+    #         }
+    #     }
+    #     for key in newconfigkeys:                                              # pylint: disable=consider-using-dict-items
+    #         if key not in list(config.running):
+    #             print(f"Adding ({key}) to config schema")
+    #             config.running.update({key: newconfigkeys[key]})
+    #     config.save()
 
-    def snmp_name_fix(self):
-        # PSC - not sure what problem this fixes. only called by installer.
-        print("\n\nChecking for incompatible SNMP OID names")
-        changes = False
-        for objname in dict(config.running["snmpoid"]):
-            newobjname = objname.replace("-", "_")
-            if newobjname != objname:
-                changes = True
-                print(f"    Replacing SNMPOID name {objname} with {newobjname}")
-                config.running["snmpoid"].update({newobjname: config.running["snmpoid"][objname]})
-                del config.running["snmpoid"][objname]
-        if changes:
-            config.save()
-        else:
-            print("    Nothing to update")
+    # def snmp_name_fix(self):
+    #     # PSC - not sure what problem this fixes. only called by installer.
+    #     print("\n\nChecking for incompatible SNMP OID names")
+    #     changes = False
+    #     for objname in dict(config.running["snmpoid"]):
+    #         newobjname = objname.replace("-", "_")
+    #         if newobjname != objname:
+    #             changes = True
+    #             print(f"    Replacing SNMPOID name {objname} with {newobjname}")
+    #             config.running["snmpoid"].update({newobjname: config.running["snmpoid"][objname]})
+    #             del config.running["snmpoid"][objname]
+    #     if changes:
+    #         config.save()
+    #     else:
+    #         print("    Nothing to update")
 
     def copy_binary(self):
         binpath = "/bin/"
         binname = "ztp"
-        subprocess.run(["cp", "ztp.py", f"{binpath}{binname}"], capture_output=False, check=True)
-        subprocess.run(["chmod", "777", f"{binpath}{binname}"], capture_output=False, check=True)
-        print(f"Binary file installed at {binpath}{binname}")
+        print(f"\n{'#'*25}  Copying ZTP file to {binpath}{binname}... ####\n")
+        try:
+            subprocess.run(
+                ["cp", "ztp.py", f"{binpath}{binname}"],
+                capture_output=False, check=True
+            )
+            subprocess.run(
+                ["chmod", "777", f"{binpath}{binname}"],
+                capture_output=False, check=True
+            )
+        except subprocess.CalledProcessError:
+            print("\n#### INSTALL ABORTED: Try 'sudo' ####\n")
+            sys.exit()
 
     def create_configfile(self):
-        config = json.loads(self.defaultconfig)                                # pylint: disable=redefined-outer-name
-        rawconfig = json.dumps(config, indent=4, sort_keys=True)
-        configfilepath = "/etc/ztp/"
-        configfilename = "ztp.cfg"
-        subprocess.run(["mkdir", "-p", configfilepath], capture_output=False, check=True)
-        subprocess.run(["mkdir", "-p", f"{configfilepath}tftproot/"], capture_output=False, check=True)
-        with open(f"{configfilepath}{configfilename}", "w", encoding="utf8") as f:
-            f.write(rawconfig)
-        print(f"Config File Created at {configfilepath}{configfilename}")
+        cfg_path = "/etc/ztp/"
+        cfg_name = "ztp.cfg"
+        print(f"\n{'#'*25}  Creating default config in {cfg_path}{cfg_name}... ####\n")
+
+        cfg_dict = json.loads(self.defaultconfig)
+        cfg_json = json.dumps(cfg_dict, indent=4, sort_keys=True)
+        subprocess.run(
+            ["mkdir", "-p", cfg_path],
+            capture_output=False, check=True
+        )
+        subprocess.run(
+            ["mkdir", "-p", f"{cfg_path}tftproot/"],
+            capture_output=False, check=True
+        )
+        with open(f"{cfg_path}{cfg_name}", "w", encoding="utf8") as f:
+            f.write(cfg_json)
 
     def install_tftpy(self):
-        print("\n\nInstalling tftpy via PIP...\n")
-        subprocess.run(["pip", "install", "--break-system-packages", "--root-user-action=ignore", "tftpy"], capture_output=False, check=True)
+        print(f"\n{'#'*25}  Installing tftpy via PIP... ####\n")
+        subprocess.run(
+            [
+                "pip", "install", "--break-system-packages",
+                "--root-user-action=ignore", "tftpy"
+            ],
+            capture_output=False, check=True
+        )
 
     def disable_firewall(self):
+        print(f"\n{'#'*25}  Disabling firewall (if present)... ####\n")
         try:
             subprocess.run(["systemctl", "stop", "firewalld"], capture_output=False, check=True)
         except subprocess.CalledProcessError:
@@ -2077,44 +2128,50 @@ class installer:
         print("Firewalld stopped and disabled")
 
     def install_dependencies(self):
-        if osd._pkgmgr == "apt-get":  # If using apt-get, update the repos     # pylint: disable=protected-access
-            subprocess.run(["sudo", "apt-get", "update", "-y"], capture_output=False, check=True)
+        # if osd._pkgmgr == "apt-get":  # If using apt-get, update the repos     # pylint: disable=protected-access
+        #     subprocess.run(["sudo", "apt-get", "update", "-y"], capture_output=False, check=True)
         osd.install_pkg(osd.PIPPKG)
         osd.install_pkg("telnet")
         # apt installed python modules for modern "externally managed environments"
-        osd.install_pkg("python3-pysnmp")
-        osd.install_pkg("python3-requests")
-        osd.install_pkg("python3-requests-toolbelt")
-        osd.install_pkg("python3-jinja2")
-        osd.install_pkg("python3-netaddr")
-        osd.install_pkg("python3-netifaces")
-        osd.install_pkg("python3-isc-dhcp-leases")
+        if "pysnmp" in absent_modules:
+            osd.install_pkg("python3-pysnmp")
+        if "requests" in absent_modules:
+            osd.install_pkg("python3-requests")
+        if "requests_toolbelt" in absent_modules:
+            osd.install_pkg("python3-requests-toolbelt")
+        if "jinja2" in absent_modules:
+            osd.install_pkg("python3-jinja2")
+        if "netaddr" in absent_modules:
+            osd.install_pkg("python3-netaddr")
+        if "netifaces" in absent_modules:
+            osd.install_pkg("python3-netifaces")
+        if "isc_dhcp_leases" in absent_modules:
+            osd.install_pkg("python3-isc-dhcp-leases")
+
+        # Installer will fail when setting up DHCP. Force restart so that
+        # newly installed modules are available.
+        if any(x in absent_modules for x in ["netaddr", "netifaces"]):
+            print("\n\n####\nJust installed modules that installer requires.")
+            print("(This will get better)\n\nPlease restart install.\n####\n")
+            sys.exit()
 
     def dhcp_setup(self):
-        print("\n\nInstalling DHCPD...\n")
+        print(f"\n{'#'*25}  Installing ISC DHCPD... ####\n")
         osd.install_pkg(osd.DHCPPKG)
         osd.service_control("enable", osd.DHCPSVC)
-        print("\n\nSucking in config file...\n")
+        print("\n#### Loading ZTP configuration... ####\n")
         global config
         config = config_manager()
-        print("\n\nRetrying Module Imports...")
-        try:
-            global netaddr
-            global netifaces
-            import netaddr                                                     # pylint: disable=import-outside-toplevel
-            import netifaces                                                   # pylint: disable=import-outside-toplevel
-            print("Success!\n")
-            print("\n\nPerforming DHCPD Auto-Setup...\n")
-            time.sleep(2)
-            config.auto_dhcpd()
-            time.sleep(2)
-            config.dhcpd_commit()
-            print("\n\nDHCPD Auto-Setup Complete\n")
-        except ImportError:
-            print("Failed!\n")
+        print(f"\n{'#'*25}  Performing DHCPD Auto-Setup... ####\n")
+        time.sleep(2)
+        config.auto_dhcpd()
+        time.sleep(2)
+        config.dhcpd_commit()
+        print(f"\n{'#'*25}  DHCPD Auto-Setup Complete. ####\n")
 
     def create_service(self):
-        systemd_startfile = '''[Unit]
+        print(f"\n{'#'*25}  Enabling ZTP as a service... ####\n")
+        installfile = '''[Unit]
 Description=FreeZTP Service
 After=network.target
 
@@ -2128,98 +2185,25 @@ Restart=on-abort
 [Install]
 WantedBy=multi-user.target'''
 
-        nonsystemd_startfile = '''#!/bin/bash
-# radiuid daemon
-# chkconfig: 345 20 80
-# description: ZTP Engine
-# processname: ztp
+        installpath = '/etc/systemd/system/ztp.service'
 
-DAEMON_PATH="/bin/"
+        with open(installpath, "w", encoding="utf8") as f:
+            f.write(installfile)
 
-DAEMON=ztp
-DAEMONOPTS="run"
-STDOUTFILE=/etc/ztp/stdout.log
-STDERR=/etc/ztp/stderr.log
+        osd.service_control("enable", "ztp")
+        osd.service_control("start", "ztp")
 
-NAME=FreeZTP Server
-DESC="ZTP Service"
-PIDFILE=/var/run/$NAME.pid
-SCRIPTNAME=/etc/init.d/$NAME
-
-case "$1" in
-start)
-printf "%-50s" "Starting $NAME..."
-cd $DAEMON_PATH
-PID=`$DAEMON $DAEMONOPTS >> $STDOUTFILE 2>>$STDERR & echo $!`
-#echo "Saving PID" $PID " to " $PIDFILE
-    if [ -z $PID ]; then
-        printf "%s\n" "Fail"
-    else
-        echo $PID > $PIDFILE
-        printf "%s\n" "Ok"
-    fi
-;;
-status)
-    if [ -f $PIDFILE ]; then
-        PID=`cat $PIDFILE`
-        if [ -z "`ps axf | grep ${PID} | grep -v grep`" ]; then
-            printf "%s\n" "Process dead but pidfile exists"
-        else
-            echo "$DAEMON (pid $PID) is running..."
-        fi
-    else
-        printf "%s\n" "$DAEMON is stopped"
-    fi
-;;
-stop)
-    printf "%-50s" "Stopping $NAME"
-        PID=`cat $PIDFILE`
-        cd $DAEMON_PATH
-    if [ -f $PIDFILE ]; then
-        kill -HUP $PID
-        printf "%s\n" "Ok"
-        rm -f $PIDFILE
-    else
-        printf "%s\n" "pidfile not found"
-    fi
-;;
-
-restart)
-$0 stop
-$0 start
-;;
-
-*)
-    echo "Usage: $0 {status|start|stop|restart}"
-    exit 1
-esac'''
-        systemdpath = '/etc/systemd/system/ztp.service'
-        nonsystemdpath = '/etc/init.d/ztp'
-        systemd = True
-        if systemd:
-            installpath = systemdpath
-            installfile = systemd_startfile
-        elif not systemd:
-            installpath = nonsystemdpath
-            installfile = nonsystemd_startfile
-        with open(installpath, "w", encoding="utf8") as f:                     # pylint: disable=possibly-used-before-assignment
-            f.write(installfile)                                               # pylint: disable=possibly-used-before-assignment
-        if systemd:
-            osd.service_control("enable", "ztp")
-            osd.service_control("start", "ztp")
-        elif not systemd:
-            subprocess.run(["chmod", "777", "/etc/init.d/radiuid"], capture_output=False, check=True)
-            subprocess.run(["chkconfig", "radiuid", "on"], capture_output=False, check=True)
-        print("ZTP service installed at /etc/systemd/system/ztp.service")
+        print(f"ZTP service installed at {installpath}")
 
     def install_completion(self):
+        print(f"\n{'#'*25}  Installing BASH CLI Completion... ####\n")
         ##### BASH SCRIPT DATA START #####
         bash_complete_script = """#!/bin/bash
 
 #####     ZTP Server BASH Complete Script   #####
 #####        Written by John W Kerns        #####
 #####       http://blog.packetsar.com       #####
-#####  https://github.com/PackeTsar/radiuid #####
+#####  https://github.com/PackeTsar/freeztp #####
 
 _ztp_complete()
 {
@@ -2735,9 +2719,9 @@ bind 'set show-all-if-ambiguous on'"""
             with open(rcfilepath, "a", encoding="utf8") as f:
                 f.write("\n\n\n# FreeZTP BASH Completion\nsource /etc/bash_completion.d/ztp_completion")
 
-def make_table(columnorder, tabledata):                                        # pylint: disable=too-many-locals
+def make_table(columnorder, tabledata):
     ##### Check and fix input type #####
-    if type(tabledata) != type([]): # If tabledata is not a list               # pylint: disable=unidiomatic-typecheck
+    if not isinstance(tabledata, list):
         tabledata = [tabledata] # Nest it in a list
 
     ##### Set seperators and spacers #####
@@ -2746,54 +2730,86 @@ def make_table(columnorder, tabledata):                                        #
     columnsep = "|" # The character used to seperate each value in the table
     columnspace = "  " # The amount of space between the largest value and its column seperator
 
-    ##### Generate a dictionary which contains the length of the longest value or head in each column #####
-    datalengthdict = {} # Create the dictionary for storing the longest values
-    for columnhead in columnorder: # For each column in the columnorder input
-        datalengthdict.update({columnhead: len(columnhead)}) # Create a key in the length dict with a value which is the length of the header
-    for row in tabledata: # For each row entry in the tabledata list of dicts
-        for item in columnorder: # For column entry in that row
-            if len(re.sub(r'\x1b[^m]*m', "",  str(row[item]))) > datalengthdict[item]: # If the length of this column entry is longer than the current longest entry
-                datalengthdict[item] = len(str(row[item])) # Then change the value of entry
+    ##### Create head keyed dict with int value of longest head or item
+    len_dict = {}
+    # Create initial values with lengths of headers
+    for columnhead in columnorder:
+        len_dict[columnhead] = len(columnhead)
+
+    # Update values as longer items are found
+    for row in tabledata:
+        for item in columnorder:
+            if len(str(row[item])) > len_dict[item]:
+                len_dict[item] = len(str(row[item]))
 
     ##### Calculate total table width #####
-    totalwidth = 0 # Initialize at 0
-    for columnwidth in datalengthdict: # For each of the longest column values # pylint: disable=consider-using-dict-items
-        totalwidth += datalengthdict[columnwidth] # Add them all up into the totalwidth variable
-    totalwidth += len(columnorder) * len(columnspace) * 2 # Account for double spaces on each side of each column value
-    totalwidth += len(columnorder) - 1 # Account for seperators for each row entry minus 1
-    totalwidth += 2 # Account for start and end characters for each row
+    totalwidth = sum(
+        [
+            sum(len_dict.values()), # sum of max col widths
+            len(columnorder) * len(columnspace) * 2, # len of field spacing
+            len(columnorder) - 1, # len of all separators
+            2 # len of leading / trailing characters
+        ]
+    )
+
+    # Top line
+    result = f"{tablewrap*totalwidth}\n{tablewrap}"
 
     ##### Build Header #####
-    result = tablewrap * totalwidth + "\n" + tablewrap # Initialize the result with the top header, line break, and beginning of header line
-    columnqty = len(columnorder) # Count number of columns
-    for columnhead in columnorder: # For each column header value
-        spacing = {"before": 0, "after": 0} # Initialize the before and after spacing for that header value before the columnsep
-        spacing["before"] = int((datalengthdict[columnhead] - len(columnhead)) / 2) # Calculate the before spacing
-        spacing["after"] = int((datalengthdict[columnhead] - len(columnhead)) - spacing["before"]) # Calculate the after spacing
-        result += columnspace + spacing["before"] * " " + columnhead + spacing["after"] * " " + columnspace # Add the header entry with spacing
-        if columnqty > 1: # If this is not the last entry
-            result += columnsep # Append a column seperator
-        del spacing # Remove the spacing variable so it can be used again
-        columnqty -= 1 # Remove 1 from the counter to keep track of when we hit the last column
-    del columnqty # Remove the column spacing variable so it can be used again
-    result += tablewrap + "\n" + tablewrap + headsep * (totalwidth - 2) + tablewrap + "\n" # Add bottom wrapper to header
+    column_remaining = len(columnorder)
+    for columnhead in columnorder:
+        # Cell size with spacers
+        l_cell = len_dict[columnhead] + (2 * len(columnspace))
+        # Length of data in cell
+        l_data = len(columnhead)
+        result += "".join(
+            [
+                # Lead space is half of cell length minus data length
+                " " * int((l_cell - l_data) / 2),
+                columnhead,
+                # Tail space is cell length minus consumed space
+                " " * (l_cell - l_data - int((l_cell - l_data) / 2))
+            ]
+        )
+
+        if column_remaining > 1:
+            result += columnsep
+
+        column_remaining -= 1
+
+    # Header / Data separator
+    result += f"{tablewrap}\n{tablewrap}{headsep*(totalwidth-2)}{tablewrap}\n"
 
     ##### Build table contents #####
-    result += tablewrap # Add the first wrapper of the value table
-    for row in tabledata: # For each row (dict) in the tabledata input
-        columnqty = len(columnorder) # Set a column counter so we can detect the last entry in this row
-        for column in columnorder: # For each value in this row, but using the correct order from column order
-            spacing = {"before": 0, "after": 0} # Initialize the before and after spacing for that header value before the columnsep
-            spacing["before"] = int((datalengthdict[column] - len(re.sub(r'\x1b[^m]*m', "",  str(row[column])))) / 2) # Calculate the before spacing
-            spacing["after"] = int((datalengthdict[column] - len(re.sub(r'\x1b[^m]*m', "",  str(row[column])))) - spacing["before"]) # Calculate the after spacing
-            result += columnspace + spacing["before"] * " " + str(row[column]) + spacing["after"] * " " + columnspace # Add the entry to the row with spacing
-            if columnqty == 1: # If this is the last entry in this row
-                result += tablewrap + "\n" + tablewrap # Add the wrapper, a line break, and start the next row
-            else: # If this is not the last entry in the row
-                result += columnsep # Add a column seperator
-            del spacing # Remove the spacing settings for this entry
-            columnqty -= 1 # Keep count of how many row values are left so we know when we hit the last one
-    result += tablewrap * (totalwidth - 1) # When all rows are complete, wrap the table with a trailer
+    result += tablewrap
+    for row in tabledata:
+        column_remaining = len(columnorder)
+        for columnhead in columnorder:
+            # Cell size with spacers
+            l_cell = len_dict[columnhead] + (2 * len(columnspace))
+            # Length of data in cell
+            l_data = len(str(row[columnhead]))
+            # Regex from 1.5.1. Not sure if it is needed. Disabled for now.
+            # l_data = len(re.sub(r'\x1b[^m]*m', "",  str(row[columnhead])))
+            result += "".join(
+                [
+                    # Lead space is half of cell length minus data length
+                    " " * int((l_cell - l_data) / 2),
+                    str(row[columnhead]),
+                    # Tail space is cell length minus consumed space
+                    " " * (l_cell - l_data - int((l_cell - l_data) / 2))
+                ]
+            )
+
+            if column_remaining == 1:
+                result += tablewrap + "\n" + tablewrap
+            else:
+                result += columnsep
+
+            column_remaining -= 1
+
+    result += tablewrap * (totalwidth - 1)
+
     return result
 
 
@@ -2811,14 +2827,14 @@ class tracking_class:
             self.ipc_server()
 
     def find_session(self, args):
-        for session in self._master:                                           # pylint: disable=consider-using-dict-items
+        for session, data in self._master.items():
             if args["filename"]:
-                if args["filename"] == self._master[session].filename:
-                    if self._master[session].active:
+                if args["filename"] == data.filename:
+                    if data.active:
                         return session
             else:
-                if args["port"] in self._master[session].ports:
-                    if self._master[session].active:
+                if args["port"] in data.ports:
+                    if data.active:
                         return session
         return False
 
@@ -2849,20 +2865,20 @@ class tracking_class:
         while True:
             time.sleep(10)
             ### Update all downloads in memory (self._master)
-            for session in self._master:                                       # pylint: disable=consider-using-dict-items
-                self._master[session].update_percent()
-                self._master[session].update_rate()
+            for session, vals in self._master.items():
+                vals.update_percent()
+                vals.update_rate()
                 data = {
-                    "time": self._master[session].friendlytime,
-                    "ipaddr": self._master[session].ipaddr,
-                    "ports": self._master[session].ports,
-                    "filename": self._master[session].filename,
-                    "position": self._master[session].position,
-                    "bytessent": self._master[session].position,
-                    "active": self._master[session].active,
-                    "filesize": self._master[session].filesize,
-                    "percent": self._master[session].percent,
-                    "rate": self._master[session].rate
+                    "time": vals.friendlytime,
+                    "ipaddr": vals.ipaddr,
+                    "ports": vals.ports,
+                    "filename": vals.filename,
+                    "position": vals.position,
+                    "bytessent": vals.position,
+                    "active": vals.active,
+                    "filesize": vals.filesize,
+                    "percent": vals.percent,
+                    "rate": vals.rate
                 }
                 self.status.update({session: data})
             ### Mark any old downloads in store (and not in mem) as dead
@@ -2956,10 +2972,6 @@ class tracking_class:
 
     class dhcplease_class:
         def __init__(self):
-            global isc
-            global datetime
-            import isc_dhcp_leases as isc                                      # pylint: disable=import-outside-toplevel
-            import datetime                                                    # pylint: disable=import-outside-toplevel
             self.leasesobj = isc.IscDhcpLeases(osd.DHCPLEASES)
 
         def utc_to_local(self, dt):
@@ -2973,8 +2985,8 @@ class tracking_class:
             result = {}
             if mode == "current":
                 leases = self.leasesobj.get_current()
-                for lease in leases:                                           # pylint: disable=consider-using-dict-items
-                    result.update({index: self._format_lease(leases[lease])})
+                for lease in leases.values():
+                    result.update({index: self._format_lease(leases)})
                     index += 1
                 return result
 
@@ -3000,7 +3012,7 @@ class tracking_class:
             }
             return result
 
-    def show_downloads(self, args):                                            # pylint: disable=unused-argument
+    def show_downloads(self, _):
         data = []
         d = self.store.recall()
         dlist = list(d)
@@ -3010,7 +3022,7 @@ class tracking_class:
 
         return make_table(['time', 'ipaddr', 'filename', 'filesize', 'bytessent', 'percent', 'rate', 'active'], data)
 
-    class screen:                                                              # pylint: disable=too-few-public-methods
+    class screen:
         def __init__(self):
             self.win = curses.initscr()
             curses.noecho()
@@ -3050,11 +3062,12 @@ class tracking_class:
 
     def _status_ipc(self):
         while True:
-            sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)  # v6 family
+            # v6 family (PSC - Why? Could be internal.)
+            sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.bind(("", 10000))
             sock.listen(1024)
-            client, addr = sock.accept()                                       # pylint: disable=unused-variable
+            client, _ = sock.accept()
             thread = threading.Thread(target=self._status_ipc_talker, args=(client,))
             thread.start() # Start talker thread to listen to port
 
@@ -3115,13 +3128,12 @@ class tracking_class:
             data.append(d[dload])
         return make_table(['time', 'ipaddr', 'filename', 'filesize', 'bytessent', 'percent', 'rate', 'active'], data)
 
-    def show_downloads_live(self, args):                                       # pylint: disable=unused-argument
+    def show_downloads_live(self, _):
         s = self.screen()
         ani = self._gen_animation()
         client = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
         client.connect(('localhost', 10000))
         try:
-            index = 0                                                          # pylint: disable=unused-variable
             while True:
                 table = self.get_live_status(client)
                 s.write(table+next(ani))
@@ -3136,8 +3148,8 @@ class tracking_class:
         dleases = self.dhcplease_class()
         leases = dleases.get(mode)
         data = []
-        for lease in leases:                                                   # pylint: disable=consider-using-dict-items
-            data.append(leases[lease])
+        for lease in leases.values():
+            data.append(lease)
         return make_table(['ethernet', 'ip', 'start', 'end', 'state', 'uid'], data)
 
     def check_integrations(self, provdata):
@@ -3151,7 +3163,7 @@ class tracking_class:
                 "status": "Complete",
                 "file": None
                 })
-            integrations.send(message)                                         # pylint: disable=used-before-assignment
+            integrations.send(message)
 
     def provision(self, data):
         current = self.provdb.recall()
@@ -3166,7 +3178,7 @@ class tracking_class:
                 return  # Return to prevent further execution
 
         # To prevent multiple provdb entries when multiple requests
-        for tstamp in current:                                                 # pylint: disable=too-many-nested-blocks
+        for tstamp in current:
             if "IP Address" in data:
                 if data["IP Address"] == current[tstamp]["IP Address"]:
                     if data["Timestamp"] - current[tstamp]["Timestamp"] < 60:
@@ -3209,26 +3221,34 @@ class tracking_class:
         tlist.sort(reverse=True)
 
         for each in tlist:
-            if type(data[each]["Real IDs"]) == type({}):                       # pylint: disable=unidiomatic-typecheck
+            if isinstance(data[each]["Real IDs"], dict):
                 real = ""
-                for id in data[each]["Real IDs"]:                              # pylint: disable=redefined-builtin
-                    if data[each]["Real IDs"][id]:
+                for real_id in data[each]["Real IDs"]:
+                    if data[each]["Real IDs"][real_id]:
                         if real == "":
-                            real += data[each]["Real IDs"][id]
+                            real += data[each]["Real IDs"][real_id]
                         else:
-                            real += "," + data[each]["Real IDs"][id]
+                            real += "," + data[each]["Real IDs"][real_id]
                 data[each]["Real IDs"] = real
-            data[each]["Timestamp"] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(data[each]["Timestamp"]))
+            data[each]["Timestamp"] = time.strftime(
+                '%Y-%m-%d %H:%M:%S', time.localtime(data[each]["Timestamp"])
+            )
             tabledata.append(data[each])
-        return make_table(["Timestamp", "IP Address", "Temp ID", "MAC Address", "Real IDs", "Matched Keystore", "Status"], tabledata)
+        return make_table(
+            [
+                "Timestamp", "IP Address", "Temp ID", "MAC Address",
+                "Real IDs", "Matched Keystore", "Status"
+            ],
+            tabledata
+        )
 
     def prov_get_mac(self, ip):
         dleases = self.dhcplease_class()
         leases = dleases.get("current")
-        for lease in leases:                                                   # pylint: disable=consider-using-dict-items
-            if leases[lease]["ip"] == ip:
-                mac = leases[lease]["ethernet"]
-                uid = leases[lease]["uid"]
+        for lease in leases.values():
+            if lease["ip"] == ip:
+                mac = lease["ethernet"]
+                uid = lease["uid"]
                 return [mac, uid]
         return None
 
@@ -3260,15 +3280,11 @@ class persistent_store:
             f.write("{}")
 
     def _read(self):
+        data = self._pull_full_db()
         try:
-            data = self._pull_full_db()
-            try:
-                self._running = data[self._dbid]
-            except KeyError:
-                self._write()
-        except Exception as e:                                                 # pylint: disable=broad-exception-caught
-            log.warning("ERROR: Error in reading from store file")
-            log.warning("ERROR: %s", str(e))
+            self._running = data[self._dbid]
+        except KeyError:
+            self._write()
 
     def _pull_full_db(self):
         try:
@@ -3287,10 +3303,6 @@ class integration_spark:
     name = "spark"
     options = ["api-key", "roomId", "toPersonEmail", "toPersonId"]
     def __init__(self, cfg, setup=False):
-        global requests
-        global MultipartEncoder
-        import requests                                                        # pylint: disable=import-outside-toplevel
-        from requests_toolbelt import MultipartEncoder                         # pylint: disable=import-outside-toplevel
         self.config = cfg
         if not setup:
             self.me = self._get("https://api.ciscospark.com/v1/people/me")
@@ -3325,15 +3337,20 @@ class integration_spark:
         return None
 
     def send(self, message):
-        import io                                                              # pylint: disable=import-outside-toplevel
         log.info("Processing message for object (%s)", self.config["objname"])
         data = self._get_destination()
         if not data:
             raise ValueError("Invalid or Unknown Integration Destination")
         if message.file is not None:
             sendfile = io.StringIO(message.file.data)
-            # data.update({'files': ("{}.txt".format(message.file.filename), sendfile, "text/plain")})
-            data.update({'files': (f"{message.file.filename}.txt", sendfile, "text/plain")})
+            data.update(
+                {
+                    'files': (
+                        f"{message.file.filename}.txt",
+                        sendfile,
+                        "text/plain")
+                }
+            )
         txtmsg = f"""------------------------------
 ## **FreeZTP Provisioning ({self.config["objname"]})**
 - Timestamp: **{message.timestamp}**
@@ -3362,6 +3379,7 @@ class integration_spark:
         print(make_table(["displayName", "emails"], [self._get("https://api.ciscospark.com/v1/people/me")])+"\n\n")
         opts = [{"destination type": entry} for entry in self.options[1:]]
         dtype = integrations.table_select(["destination type"], opts, "Select a Destination Type")
+        value = ""
         if dtype["destination type"] == "roomId":
             rooms = self._rooms()["items"]
             selection = integrations.table_select(["title"], rooms, "Select a Room")
@@ -3370,17 +3388,13 @@ class integration_spark:
             value = input(f"Enter the {dtype["destination type"]} value > ")
         elif dtype["destination type"] == "toPersonId":
             value = input(f"Enter the {dtype["destination type"]} value > ")
-        self.config.update({dtype["destination type"]: value})                 # pylint: disable=possibly-used-before-assignment
+        self.config.update({dtype["destination type"]: value})
         return self.config
 
 class integration_power_automate:
     name = 'powerautomate'
     options = ['url']
-    def __init__(self, cfg, setup=False):                                      # pylint: disable=unused-argument
-        global requests
-        global MultipartEncoder
-        import requests                                                        # pylint: disable=import-outside-toplevel
-        from requests_toolbelt import MultipartEncoder                         # pylint: disable=import-outside-toplevel
+    def __init__(self, cfg, _):
         self.config = cfg
         self.appfilename = (os.path.basename(__file__).lower())
         self.hostfqdn = (socket.getfqdn().lower())
@@ -3445,8 +3459,10 @@ class integration_power_automate:
         self.config.update({"url": url})  # Update API key entry
         return self.config
 
-class integration_message:                                                     # pylint: disable=too-few-public-methods
-    def __init__(self, data={}):                                               # pylint: disable=dangerous-default-value
+class integration_message:
+    def __init__(self, data=None):
+        if data is None:
+            data = {}
         self.timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
         self.ip = None  # String
         self.tempid = None  # String
@@ -3504,9 +3520,9 @@ class integration_main:
                         message.file = file
                         found = True
                 time.sleep(1)
-            for target in self.targets:                                        # pylint: disable=consider-using-dict-items
+            for target, item in self.targets.items():
                 log.info("Kicking off thread for integration (%s)", target)
-                thread = threading.Thread(target=self.targets[target].send, args=(message,))
+                thread = threading.Thread(target=item.send, args=(message,))
                 thread.daemon = True
                 thread.start()
 
@@ -3567,7 +3583,7 @@ class integration_main:
             # Return console logging to previous state
             _ = change_console_logging(old_log_lvl)
 
-class external_keystore_csv:                                                   # pylint: disable=too-few-public-methods
+class external_keystore_csv:
     name = "csv"
     options = ["file"]
 
@@ -3589,8 +3605,12 @@ class external_keystore_main:
         ]
         idarray_count = 1
         for idarray in config.running["idarrays"]:
-            if len(config.running["idarrays"][idarray]) > idarray_count:       # pylint: disable=consider-using-max-builtin
-                idarray_count = len(config.running["idarrays"][idarray])
+            idarray_count = max(
+                idarray_count,
+                len(config.running["idarrays"][idarray])
+            )
+            # if len(config.running["idarrays"][idarray]) > idarray_count:       # pylint: enable=consider-using-max-builtin
+            #     idarray_count = len(config.running["idarrays"][idarray])
         for each in range(1, idarray_count+1):
             headers.append("idarray_"+str(each))
         for keystore_id in config.running["keyvalstore"]:
@@ -3617,7 +3637,7 @@ class external_keystore_main:
             for row in tabledata:
                 writer.writerow(row)
 
-    def test(self, objname):                                                   # pylint: disable=too-many-branches
+    def test(self, objname):
         if objname not in config.running["external-keystores"]:
             print(f"External-keystore object ({objname}) does not exist!")
             sys.exit()
@@ -3640,24 +3660,23 @@ class external_keystore_main:
                 if "keystore_id" not in row:
                     print("ERROR: Cannot find required header 'keystore_id'")
                     sys.exit()
-                id = row["keystore_id"]                                        # pylint: disable=redefined-builtin
+                ks_id = row["keystore_id"]
                 array_keys = []
                 for key in reader.fieldnames:
                     if row[key]:
                         if key == "association":
-                            association_commands.append(f"ztp set association id {id} template {row[key]}")
+                            association_commands.append(f"ztp set association id {ks_id} template {row[key]}")
                         elif key[:7] == "idarray":
                             array_keys.append(row[key])
                         else:
-                            # PSC - WTF?? intent unclear
                             if " " in key:
-                                key = '%s' % key                               # pylint: disable=consider-using-f-string
+                                key = f"'{key}'"
                             if " " in row[key]:
-                                row[key] = '%s' % row[key]                     # pylint: disable=consider-using-f-string
-                            keystore_commands.append(f"ztp set keystore {id} {key} {row[key]}")
+                                row[key] = f"'{row[key]}'"
+                            keystore_commands.append(f"ztp set keystore {ks_id} {key} {row[key]}")
                 if array_keys:
                     key_set = " ".join(array_keys)
-                    idarray_commands.append(f"ztp set idarray {id} {key_set}")
+                    idarray_commands.append(f"ztp set idarray {ks_id} {key_set}")
                 keystore_commands.append("#")
 
         print("#\n#\n#")
@@ -3672,12 +3691,12 @@ class external_keystore_main:
         print("#\n#\n#")
         self.load()
 
-    def load(self):                                                            # pylint: disable=too-many-locals, too-many-branches
+    def load(self):
         keyvalstore = {}
         idarrays = {}
         associations = {}
         log.debug("Starting load of external-keystores")
-        for objname in config.running["external-keystores"]:                   # pylint: disable=too-many-nested-blocks
+        for objname in config.running["external-keystores"]:
             log.debug("Loading external-keystore (%s)", objname)
             if "file" not in config.running["external-keystores"][objname]:
                 log.debug("ERROR: External-keystore (%s) has no file defined!", objname)
@@ -3687,37 +3706,37 @@ class external_keystore_main:
                 with open(config.running["external-keystores"][objname]["file"], "r", encoding="utf8") as csvfile:
                     reader = csv.DictReader(csvfile)
                     counter = 1
-                    for row in reader:                                         # pylint: disable=too-many-nested-blocks
+                    for row in reader:
                         try:
                             if "keystore_id" not in row:
                                 log.warning("ERROR: External-keystore (%s): Cannot find required header 'keystore_id'. Discarding keystore.", objname)
                                 break
-                            id = row["keystore_id"]                            # pylint: disable=redefined-builtin
+                            ks_id = row["keystore_id"]
                             array_values = []
                             unordered_arrays = {}
                             ordered_keys = []
                             for key in row:
                                 if row[key]:
                                     if key == "association":
-                                        associations.update({id: row[key]})
+                                        associations.update({ks_id: row[key]})
                                     if key[:7] == "idarray":
                                         array_values.append(row[key])
-                                        if id not in keyvalstore:
-                                            keyvalstore.update({id:{}})
-                                        keyvalstore[id].update({key: row[key]})
+                                        if ks_id not in keyvalstore:
+                                            keyvalstore.update({ks_id:{}})
+                                        keyvalstore[ks_id].update({key: row[key]})
                                         unordered_arrays.update({key: row[key]})
                                     else:
-                                        if id not in keyvalstore:
-                                            keyvalstore.update({id:{}})
-                                        keyvalstore[id].update({key: row[key]})
+                                        if ks_id not in keyvalstore:
+                                            keyvalstore.update({ks_id:{}})
+                                        keyvalstore[ks_id].update({key: row[key]})
                             if array_values:
-                                idarrays.update({id:array_values})
+                                idarrays.update({ks_id:array_values})
                             if unordered_arrays:
                                 ordered_array_keys = list(unordered_arrays)
                                 ordered_array_keys.sort()
                                 for key in ordered_array_keys:
                                     ordered_keys.append(unordered_arrays[key])
-                            keyvalstore[id].update({"idarray": ordered_keys})
+                            keyvalstore[ks_id].update({"idarray": ordered_keys})
                             counter += 1
                         except Exception:                                      # pylint: disable=broad-exception-caught
                             log.warning("ERROR: External-keystore (%s) error encountered in row %s, row excluded", objname, counter)
@@ -3728,7 +3747,7 @@ class external_keystore_main:
             "associations": associations,
         }
 
-class external_templates_main:                                                 # pylint: disable=too-few-public-methods
+class external_templates_main:
     def __init__(self):
         self.templates = {}
     def load(self):
@@ -3748,9 +3767,6 @@ def start_tftp():
     program loop. It is started with the ztp_dyn_file class passed in as the
     dynamic file function.
     """
-    global tftpy
-    import tftpy                                                               # pylint: disable=import-outside-toplevel
-
     log.info("Starting Up TFTPy")
 
     try:
@@ -3780,14 +3796,14 @@ def cat_list(listname):
     """
     result = ""
     counter = 0
-    for word in listname:                                                      # pylint: disable=unused-variable
+    for _ in listname:
         result = result + listname[counter].lower() + " "
         counter = counter + 1
     result = result[:len(result) - 1:]
     return result
 
 
-def interpreter():                                                             # pylint: disable=too-many-branches
+def interpreter():
     """
     Main CLI interpreter and helper function. Entry point for the app.
     """
@@ -3797,12 +3813,67 @@ def interpreter():                                                             #
     else:
         # Minimize logging for all other commands
         init_logging(log_file=None, file_level=None, console_level=logging.WARNING)
-    global config
+
+    if len(absent_modules) > 0:
+        mod_list = ", ".join(absent_modules)
+        if arguments == "run":
+            log.critical("External modules failed to load: %s", mod_list)
+            sys.exit()
+        elif arguments in ["install", "upgrade"]:
+            pass
+        else:
+            print_main_menu()
+            print(f"\n\n#### External modules failed to load: {mod_list} ####")
+            print("#### Run install ####")
+            sys.exit()
+
     global osd
+    osd = os_detect()
+
+    ##### INSTALL #####
+    if arguments == "install":
+        print(f"\n{'#'*25}\nThis command will install FreeZTP {VERSION}?")
+        try:
+            answer = input("ARE YOU SURE? Type in 'CONFIRM' to proceed. > ")
+        except KeyboardInterrupt:
+            answer = ""
+        if answer.lower() == "confirm":
+            inst = installer()
+            inst.copy_binary()
+            inst.install_dependencies()
+            inst.create_configfile()
+            inst.install_completion()
+            inst.install_tftpy()
+            inst.disable_firewall()
+            inst.create_service()
+            inst.dhcp_setup()
+            print("\nInstall complete! Logout and log back into SSH to activate auto-complete")
+        else:
+            print("\nInstall/upgrade cancelled")
+        sys.exit()
+
+    elif arguments == "upgrade":
+        print(f"***** Are you sure you want to upgrade FreeZTP using version {VERSION}?*****")
+        answer = input(">>>>> If you are sure you want to do this, type in 'CONFIRM' and hit ENTER >>>>")
+        if answer.lower() == "confirm":
+            inst = installer()
+            inst.copy_binary()
+            inst.install_completion()
+            inst.create_service()
+            # inst.minor_update_script()
+            # inst.snmp_name_fix()
+            print("\n")
+            osd.service_control("status", "ztp")
+            print("\n")
+            print("\nInstall complete! Logout and log back into SSH to activate auto-complete\n")
+        else:
+            print("Install/upgrade cancelled")
+        sys.exit()
+
+    global config
     global integrations
     global external_keystores
     global external_templates
-    osd = os_detect()
     log_mgmt = log_management()
     external_keystores = external_keystore_main()
     external_templates = external_templates_main()
@@ -3824,41 +3895,6 @@ def interpreter():                                                             #
         global tracking
         tracking = tracking_class()
         start_tftp()
-
-    ##### INSTALL #####
-    elif arguments == "install":
-        print(f"***** Are you sure you want to install FreeZTP using version {VERSION}?*****")
-        answer = input(">>>>> If you are sure you want to do this, type in 'CONFIRM' and hit ENTER >>>>")
-        if answer.lower() == "confirm":
-            inst = installer()
-            inst.copy_binary()
-            inst.create_configfile()
-            inst.install_completion()
-            inst.install_dependencies()
-            inst.install_tftpy()
-            inst.disable_firewall()
-            inst.create_service()
-            inst.dhcp_setup()
-            print("\nInstall complete! Logout and log back into SSH to activate auto-complete")
-        else:
-            print("Install/upgrade cancelled")
-
-    elif arguments == "upgrade":
-        print(f"***** Are you sure you want to upgrade FreeZTP using version {VERSION}?*****")
-        answer = input(">>>>> If you are sure you want to do this, type in 'CONFIRM' and hit ENTER >>>>")
-        if answer.lower() == "confirm":
-            inst = installer()
-            inst.copy_binary()
-            inst.install_completion()
-            inst.create_service()
-            inst.minor_update_script()
-            inst.snmp_name_fix()
-            print("\n")
-            osd.service_control("status", "ztp")
-            print("\n")
-            print("\nInstall complete! Logout and log back into SSH to activate auto-complete\n")
-        else:
-            print("Install/upgrade cancelled")
 
     elif arguments == "hidden" or arguments == "hidden show":
         print("NOTE: These hidden commands are mostly meant to display information for use in TAB autocomplete")
@@ -4297,82 +4333,85 @@ def interpreter():                                                             #
         print(f"FreeZTP {VERSION}")
 
     else:
-        print("----------------------------------------------------------------------------------------------------------------------------------------------")
-        print("                     ARGUMENTS                                 |                                  DESCRIPTIONS")
-        print("----------------------------------------------------------------------------------------------------------------------------------------------")
-        print(" - run                                                         |  Run the ZTP main program in shell mode begin listening for TFTP requests")
-        print("----------------------------------------------------------------------------------------------------------------------------------------------")
-        print(" - install                                                     |  Run the ZTP installer")
-        print(" - upgrade                                                     |  Run the ZTP upgrade process to update the software")
-        print("----------------------------------------------------------------------------------------------------------------------------------------------")
-        print(" - show (config|run) (raw)                                     |  Show the current ZTP configuration")
-        print(" - show status                                                 |  Show the status of the ZTP background service")
-        print(" - show version                                                |  Show the current version of ZTP")
-        print(" - show log (tail) (<num_of_lines>)                            |  Show or tail the log file")
-        print(" - show downloads (live)                                       |  Show list of TFTP downloads")
-        print(" - show dhcpd leases (current|all|raw)                         |  Show DHCPD leases")
-        print(" - show provisioning                                           |  Show list of provisioned devices")
-        print("----------------------------------------------------------------------------------------------------------------------------------------------")
-        print("----------------------------------------------------------------------------------------------------------------------------------------------")
-        print("--------------------------------------------------- SETTINGS YOU PROBABLY SHOULDN'T CHANGE ---------------------------------------------------")
-        print(" - set suffix <value>                                          |  Set the file name suffix used by target when requesting the final config")
-        print(" - set initialfilename <value>                                 |  Set the file name used by the target during the initial config request")
-        print(" - set community <value>                                       |  Set the SNMP community you want to use for target ID identification")
-        print(" - set snmpoid <name> <value>                                  |  Set named SNMP OIDs to use to pull the target ID during identification")
-        print(" - set initial-template <end_char>                             |  Set the initial configuration j2 template used for target identification")
-        print(" - set tftproot <tftp_root_directory>                          |  Set the root directory for TFTP files")
-        print(" - set imagediscoveryfile <filename>                           |  Set the name of the IOS image discovery file used for IOS upgrades")
-        print(" - set file-cache-timeout <timeout>                            |  Set the timeout for cacheing of files. '0' disables caching.")
-        print("--------------------------------------------------------- SETTINGS YOU SHOULD CHANGE ---------------------------------------------------------")
-        print(" - set integration <svc_name> [parameters]                     |  Configure external integrations (experimental)")
-        print(" - set external-keystore <store_name> [parameters]             |  Configure an external keystore")
-        print(" - set template <template_name> <end_char>                     |  Create/Modify a named J2 tempate which is used for the final config push")
-        print(" - set external-template <template_name> [parameters]          |  Configure an external template")
-        print(" - set keystore <id/arrayname> <keyword> <value>               |  Create a keystore entry to be used when merging final configurations")
-        print(" - set idarray <arrayname> <id_#1> <id_#2> ...                 |  Create an ID array to allow multiple real ids to match one keystore id")
-        print(" - set association id <id/arrayname> template <template_name>  |  Associate a keystore id or an idarray to a specific named template")
-        print(" - set default-keystore (none|keystore-id)                     |  Set a last-resort keystore and template for when target identification fails")
-        print(" - set global-keystore (none|keystore-id)                      |  Set a keystore to be injected into all merges")
-        print(" - set default-template (none|template_name)                   |  Set a last-resort template for when no keystore/template association is found")
-        print(" - set imagefile <binary_image_file_name>                      |  Set the image file name to be used for upgrades (must be in tftp root dir)")
-        print(" - set image-supression <seconds-to-supress>                   |  Set the seconds to supress a second image download preventing double-upgrades")
-        print(" - set delay-keystore <msec-to-delay>                          |  Set the miliseconds to delay the processing of a keystore lookup")
-        print(" - set dhcpd-option <opt-name> code <code> type <field-type>   |  Configure DHCP options to be available to the DHCP server")
-        print(" - set dhcpd <scope-name> [parameters]                         |  Configure DHCP scope(s) to serve IP addresses to ZTP clients")
-        print(" - set logging [parameters]                                    |  Set up custom logging settings")
-        print("----------------------------------------------------------------------------------------------------------------------------------------------")
-        print("----------------------------------------------------------------------------------------------------------------------------------------------")
-        print(" - clear snmpoid <name>                                        |  Delete an SNMP OID from the configuration")
-        print(" - clear integration <svc_name> (all|<key>)                    |  Delete an individual integration key or the whole object")
-        print(" - clear template <template_name>                              |  Delete a named configuration template")
-        print(" - clear external-template <template_name>                     |  Delete a named external-template")
-        print(" - clear keystore <id> (all|<keyword>)                         |  Delete an individual key or a whole keystore ID from the configuration")
-        print(" - clear external-keystore <name> (all|<key>)                  |  Delete an individual external-keystore key or the whole object")
-        print(" - clear idarray <arrayname>                                   |  Delete an ID array from the configuration")
-        print(" - clear association <id/arrayname>                            |  Delete an association from the configuration")
-        print(" - clear dhcpd-option <opt-name>                               |  Delete a configured DHCP option")
-        print(" - clear dhcpd <scope-name>                                    |  Delete a DHCP scope")
-        print(" - clear log                                                   |  Delete the logging info from the logfile")
-        print(" - clear downloads                                             |  Delete the list of TFTP downloads")
-        print(" - clear provisioning                                          |  Delete the list of provisioned devices")
-        print("----------------------------------------------------------------------------------------------------------------------------------------------")
-        print(" - request merge-test <id>                                     |  Perform a test jinja2 merge of the final template with a keystore ID")
-        print(" - request initial-merge                                       |  See the result of an auto-merge of the initial-template")
-        print(" - request default-keystore-test                               |  Check that the default-keystore is fully configured to return a template")
-        print(" - request snmp-test <ip-address>                              |  Run a SNMP test using the configured community and OID against an IP")
-        print(" - request dhcp-option-125 (windows|cisco)                     |  Show the DHCP Option 125 Hex value to use on the DHCP server for OS upgrades")
-        print(" - request dhcpd-commit                                        |  Compile the DHCP config, write to config file, and restart the DHCP service")
-        print(" - request auto-dhcpd                                          |  Automatically detect local interfaces and build DHCP scopes accordingly")
-        print(" - request ipc-console                                         |  Connect to the IPC console to run commands (be careful)")
-        print(" - request integration-setup <svc_name>                        |  Run the setup wizard for the module type configured on the object")
-        print(" - request integration-test <svc_name>                         |  Perform a test message push to a target integration object")
-        print(" - request external-keystore-test <store_name>                 |  Perform a test import of external-keystore data and print as set keystore config")
-        print(" - request keystore-csv-export <file_name>                     |  Export the current keystore, idarray, and association config as CSV")
-        print("----------------------------------------------------------------------------------------------------------------------------------------------")
-        print(" - service (start|stop|restart|status|freeztp|dhcpd|all)       |  Start, Stop, or Restart the installed services")
-        print("----------------------------------------------------------------------------------------------------------------------------------------------")
-        print(" - version                                                     |  Show the current version of ZTP")
-        print("----------------------------------------------------------------------------------------------------------------------------------------------")
+        print_main_menu()
+
+def print_main_menu():
+    print("----------------------------------------------------------------------------------------------------------------------------------------------")
+    print("                     ARGUMENTS                                 |                                  DESCRIPTIONS")
+    print("----------------------------------------------------------------------------------------------------------------------------------------------")
+    print(" - run                                                         |  Run the ZTP main program in shell mode begin listening for TFTP requests")
+    print("----------------------------------------------------------------------------------------------------------------------------------------------")
+    print(" - install                                                     |  Run the ZTP installer")
+    print(" - upgrade                                                     |  Run the ZTP upgrade process to update the software")
+    print("----------------------------------------------------------------------------------------------------------------------------------------------")
+    print(" - show (config|run) (raw)                                     |  Show the current ZTP configuration")
+    print(" - show status                                                 |  Show the status of the ZTP background service")
+    print(" - show version                                                |  Show the current version of ZTP")
+    print(" - show log (tail) (<num_of_lines>)                            |  Show or tail the log file")
+    print(" - show downloads (live)                                       |  Show list of TFTP downloads")
+    print(" - show dhcpd leases (current|all|raw)                         |  Show DHCPD leases")
+    print(" - show provisioning                                           |  Show list of provisioned devices")
+    print("----------------------------------------------------------------------------------------------------------------------------------------------")
+    print("----------------------------------------------------------------------------------------------------------------------------------------------")
+    print("--------------------------------------------------- SETTINGS YOU PROBABLY SHOULDN'T CHANGE ---------------------------------------------------")
+    print(" - set suffix <value>                                          |  Set the file name suffix used by target when requesting the final config")
+    print(" - set initialfilename <value>                                 |  Set the file name used by the target during the initial config request")
+    print(" - set community <value>                                       |  Set the SNMP community you want to use for target ID identification")
+    print(" - set snmpoid <name> <value>                                  |  Set named SNMP OIDs to use to pull the target ID during identification")
+    print(" - set initial-template <end_char>                             |  Set the initial configuration j2 template used for target identification")
+    print(" - set tftproot <tftp_root_directory>                          |  Set the root directory for TFTP files")
+    print(" - set imagediscoveryfile <filename>                           |  Set the name of the IOS image discovery file used for IOS upgrades")
+    print(" - set file-cache-timeout <timeout>                            |  Set the timeout for cacheing of files. '0' disables caching.")
+    print("--------------------------------------------------------- SETTINGS YOU SHOULD CHANGE ---------------------------------------------------------")
+    print(" - set integration <svc_name> [parameters]                     |  Configure external integrations (experimental)")
+    print(" - set external-keystore <store_name> [parameters]             |  Configure an external keystore")
+    print(" - set template <template_name> <end_char>                     |  Create/Modify a named J2 tempate which is used for the final config push")
+    print(" - set external-template <template_name> [parameters]          |  Configure an external template")
+    print(" - set keystore <id/arrayname> <keyword> <value>               |  Create a keystore entry to be used when merging final configurations")
+    print(" - set idarray <arrayname> <id_#1> <id_#2> ...                 |  Create an ID array to allow multiple real ids to match one keystore id")
+    print(" - set association id <id/arrayname> template <template_name>  |  Associate a keystore id or an idarray to a specific named template")
+    print(" - set default-keystore (none|keystore-id)                     |  Set a last-resort keystore and template for when target identification fails")
+    print(" - set global-keystore (none|keystore-id)                      |  Set a keystore to be injected into all merges")
+    print(" - set default-template (none|template_name)                   |  Set a last-resort template for when no keystore/template association is found")
+    print(" - set imagefile <binary_image_file_name>                      |  Set the image file name to be used for upgrades (must be in tftp root dir)")
+    print(" - set image-supression <seconds-to-supress>                   |  Set the seconds to supress a second image download preventing double-upgrades")
+    print(" - set delay-keystore <msec-to-delay>                          |  Set the miliseconds to delay the processing of a keystore lookup")
+    print(" - set dhcpd-option <opt-name> code <code> type <field-type>   |  Configure DHCP options to be available to the DHCP server")
+    print(" - set dhcpd <scope-name> [parameters]                         |  Configure DHCP scope(s) to serve IP addresses to ZTP clients")
+    print(" - set logging [parameters]                                    |  Set up custom logging settings")
+    print("----------------------------------------------------------------------------------------------------------------------------------------------")
+    print("----------------------------------------------------------------------------------------------------------------------------------------------")
+    print(" - clear snmpoid <name>                                        |  Delete an SNMP OID from the configuration")
+    print(" - clear integration <svc_name> (all|<key>)                    |  Delete an individual integration key or the whole object")
+    print(" - clear template <template_name>                              |  Delete a named configuration template")
+    print(" - clear external-template <template_name>                     |  Delete a named external-template")
+    print(" - clear keystore <id> (all|<keyword>)                         |  Delete an individual key or a whole keystore ID from the configuration")
+    print(" - clear external-keystore <name> (all|<key>)                  |  Delete an individual external-keystore key or the whole object")
+    print(" - clear idarray <arrayname>                                   |  Delete an ID array from the configuration")
+    print(" - clear association <id/arrayname>                            |  Delete an association from the configuration")
+    print(" - clear dhcpd-option <opt-name>                               |  Delete a configured DHCP option")
+    print(" - clear dhcpd <scope-name>                                    |  Delete a DHCP scope")
+    print(" - clear log                                                   |  Delete the logging info from the logfile")
+    print(" - clear downloads                                             |  Delete the list of TFTP downloads")
+    print(" - clear provisioning                                          |  Delete the list of provisioned devices")
+    print("----------------------------------------------------------------------------------------------------------------------------------------------")
+    print(" - request merge-test <id>                                     |  Perform a test jinja2 merge of the final template with a keystore ID")
+    print(" - request initial-merge                                       |  See the result of an auto-merge of the initial-template")
+    print(" - request default-keystore-test                               |  Check that the default-keystore is fully configured to return a template")
+    print(" - request snmp-test <ip-address>                              |  Run a SNMP test using the configured community and OID against an IP")
+    print(" - request dhcp-option-125 (windows|cisco)                     |  Show the DHCP Option 125 Hex value to use on the DHCP server for OS upgrades")
+    print(" - request dhcpd-commit                                        |  Compile the DHCP config, write to config file, and restart the DHCP service")
+    print(" - request auto-dhcpd                                          |  Automatically detect local interfaces and build DHCP scopes accordingly")
+    print(" - request ipc-console                                         |  Connect to the IPC console to run commands (be careful)")
+    print(" - request integration-setup <svc_name>                        |  Run the setup wizard for the module type configured on the object")
+    print(" - request integration-test <svc_name>                         |  Perform a test message push to a target integration object")
+    print(" - request external-keystore-test <store_name>                 |  Perform a test import of external-keystore data and print as set keystore config")
+    print(" - request keystore-csv-export <file_name>                     |  Export the current keystore, idarray, and association config as CSV")
+    print("----------------------------------------------------------------------------------------------------------------------------------------------")
+    print(" - service (start|stop|restart|status|freeztp|dhcpd|all)       |  Start, Stop, or Restart the installed services")
+    print("----------------------------------------------------------------------------------------------------------------------------------------------")
+    print(" - version                                                     |  Show the current version of ZTP")
+    print("----------------------------------------------------------------------------------------------------------------------------------------------")
 
 def change_console_logging(new_lvl):
     old_lvl = None
