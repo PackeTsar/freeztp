@@ -792,10 +792,11 @@ class config_factory:
             for oid in config.running["snmpoid"]:
                 snmpinfo.update({oid: f"{oid}_FAKESERIAL"})
             kvalues.update({"snmpinfo": snmpinfo})
-            log.info("Merging with values:\n%s", json.dumps(kvalues, indent=4))
-            print("##############################")
+            print(f"{'#'*30}\nMerging with values:\n")
+            print(json.dumps(kvalues, indent=4))
+            print('#'*30)
             print(j2template.render(kvalues))
-            print("##############################")
+            print('#'*30)
 
     def pull_keystore_values(self, path, keystore_id):
         if (keystore_id not in path["idarrays"]) and (keystore_id not in list(config.running["idarrays"])):
@@ -3394,7 +3395,8 @@ class integration_spark:
 class integration_power_automate:
     name = 'powerautomate'
     options = ['url']
-    def __init__(self, cfg, _):
+    def __init__(self, cfg, setup=False):
+        _ = setup
         self.config = cfg
         self.appfilename = (os.path.basename(__file__).lower())
         self.hostfqdn = (socket.getfqdn().lower())
