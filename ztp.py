@@ -1,20 +1,10 @@
 #!/usr/bin/env python3
-# Globally disabled linting warnings
+# Fixable warnings that are temporarily disabled
 # pylint: disable=line-too-long
 # pylint: disable=missing-docstring
 # pylint: disable=invalid-name
-# pylint: disable=too-many-lines
-# pylint: disable=too-many-statements
-# pylint: disable=too-many-instance-attributes
-# pylint: disable=global-statement
 # pylint: disable=consider-using-join
 # pylint: disable=consider-using-in
-# pylint: disable=too-many-locals
-# pylint: disable=too-many-branches
-# pylint: disable=too-many-return-statements
-# pylint: disable=too-few-public-methods
-# pylint: disable=too-many-public-methods
-# pylint: disable=too-many-nested-blocks
 """
 #####             FreeZTP Server             #####
 #####        Written by John W Kerns         #####
@@ -80,7 +70,7 @@ except ModuleNotFoundError as err:
 VERSION = "v1.6.1a"
 
 log = None
-F_LEV = logging.DEBUG
+F_LEV = logging.INFO
 C_LEV = logging.INFO
 LOG_FILE = "/etc/ztp/ztp.log"
 
@@ -366,11 +356,11 @@ class config_factory:
                         log.info("Target ID is in the Keystore or an IDArray")
                         return True
                 # If there is a default keystore configured
-                if self._default_lookup():
+                if self.default_lookup():
                     log.info("Target ID is NOT in the Keystore or an IDArray, but a default is configured")
                     return True
             # If there is a default keystore configured
-            elif self._default_lookup():
+            elif self.default_lookup():
                 log.info("Target ID is NOT in the Keystore or an IDArray, but a default is configured")
                 return True
 
@@ -380,7 +370,7 @@ class config_factory:
 
         return False
 
-    def _default_lookup(self):
+    def default_lookup(self):
         log.info("Checking if a default-keystore is configured and ready")
         if config.running["default-keystore"]:  # If a default keystore ID is set
             kid = config.running["default-keystore"]
@@ -516,7 +506,7 @@ class config_factory:
                     return result
 
                 log.info("SNMP request for (%s) returned an unknown ID, checking for default-keystore", self.snmprequests[tempid].host)
-                default = self._default_lookup()
+                default = self.default_lookup()
                 if default:
                     log.info("default-keystore is configured. Returning default")
                     result, kvals = self.merge_final_config(default, snmpinfo)
@@ -551,7 +541,7 @@ class config_factory:
                     return result
             else:
                 log.info("SNMP request is not complete on host (%s), checking for default-keystore", self.snmprequests[tempid].host)
-                default = self._default_lookup()
+                default = self.default_lookup()
                 if default:
                     log.info("default-keystore is configured. Returning default")
                     result, kvals = self.merge_final_config(default)
@@ -2034,45 +2024,6 @@ class installer:
     "tftproot": "/etc/ztp/tftproot/"
 }'''
 
-    # def minor_update_script(self):
-    #     newconfigkeys = {
-    #     "integrations": {},
-    #     "external-keystores": {},
-    #     "external-templates": {},
-    #     "global-keystore": None,
-    #     "logging": {
-    #         "merged-config-to-mainlog": "enable",
-    #         "merged-config-to-custom-file": "disable"
-    #         },
-    #     "dhcpd-options": {
-    #         "ztp-tftp-address": {
-    #             "code": 150,
-    #             "type": "ip-address"
-    #             }
-    #         }
-    #     }
-    #     for key in newconfigkeys:                                              # pylint: disable=consider-using-dict-items
-    #         if key not in list(config.running):
-    #             print(f"Adding ({key}) to config schema")
-    #             config.running.update({key: newconfigkeys[key]})
-    #     config.save()
-
-    # def snmp_name_fix(self):
-    #     # PSC - not sure what problem this fixes. only called by installer.
-    #     print("\n\nChecking for incompatible SNMP OID names")
-    #     changes = False
-    #     for objname in dict(config.running["snmpoid"]):
-    #         newobjname = objname.replace("-", "_")
-    #         if newobjname != objname:
-    #             changes = True
-    #             print(f"    Replacing SNMPOID name {objname} with {newobjname}")
-    #             config.running["snmpoid"].update({newobjname: config.running["snmpoid"][objname]})
-    #             del config.running["snmpoid"][objname]
-    #     if changes:
-    #         config.save()
-    #     else:
-    #         print("    Nothing to update")
-
     def copy_binary(self):
         binpath = "/bin/"
         binname = "ztp"
@@ -2129,8 +2080,6 @@ class installer:
         print("Firewalld stopped and disabled")
 
     def install_dependencies(self):
-        # if osd._pkgmgr == "apt-get":  # If using apt-get, update the repos     # pylint: disable=protected-access
-        #     subprocess.run(["sudo", "apt-get", "update", "-y"], capture_output=False, check=True)
         osd.install_pkg(osd.PIPPKG)
         osd.install_pkg("telnet")
         # apt installed python modules for modern "externally managed environments"
@@ -3074,7 +3023,11 @@ class tracking_class:
 
     def _status_ipc_talker(self, client):
         while True:
-            recv = client.recv(1024)
+            try:
+                recv = client.recv(1024)
+            except ConnectionResetError:
+                log.info("IPC client disconnected.")
+                return
             recieve = recv.decode("utf-8")
             if len(recieve) > 0:
                 if "?" in recieve:
@@ -3119,7 +3072,7 @@ class tracking_class:
 
     def get_live_status(self, client):
         data = []
-        client.send("get downloads\n")
+        client.send("get downloads\n".encode("utf-8"))
         time.sleep(0.1)
         d = client.recv(100000)
         d = json.loads(d)
@@ -3129,20 +3082,25 @@ class tracking_class:
             data.append(d[dload])
         return make_table(['time', 'ipaddr', 'filename', 'filesize', 'bytessent', 'percent', 'rate', 'active'], data)
 
-    def show_downloads_live(self, _):
+    def show_downloads_live(self, args):
+        _ = args
         s = self.screen()
         ani = self._gen_animation()
         client = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-        client.connect(('localhost', 10000))
+        try:
+            client.connect(('localhost', 10000))
+        except ConnectionRefusedError:
+            print("ZTP server is not running or IPC listener is broken.")
+            sys.exit()
+
         try:
             while True:
                 table = self.get_live_status(client)
                 s.write(table+next(ani))
-        except:                                                                # pylint: disable=bare-except
+        except KeyboardInterrupt:
             curses.echo()
             curses.nocbreak()
             curses.endwin()
-            # quit()
             sys.exit()
 
     def show_dhcp_leases(self, mode="current"):
@@ -3491,7 +3449,8 @@ class integration_main:
         self._load()
 
     def _load(self):
-        log.info("Beginning load of integration objects. Make sure your internet connection is working properly.")
+        log.info("Beginning load of integration objects. Make sure your " \
+            "internet connection is working properly.")
         for target in config.running["integrations"]:
             try:
                 if "type" in config.running["integrations"][target]:
@@ -3570,7 +3529,11 @@ class integration_main:
             cfg = {"objname": objname}
             cfg.update(config.running["integrations"][objname])
             intgobj = self.mods[typ](cfg)
-            testfile = ztp_dyn_file("testconfig", "127.0.0.1", "65000",data="This is a\ntest configuration", track=False)
+            testfile = ztp_dyn_file(
+                "testconfig", "127.0.0.1",
+                "65000",data="This is a\ntest configuration",
+                track=False
+            )
             message = integration_message({
                 "ip": "127.0.0.1",
                 "tempid": "ZTP-TESTING123",
@@ -3611,8 +3574,6 @@ class external_keystore_main:
                 idarray_count,
                 len(config.running["idarrays"][idarray])
             )
-            # if len(config.running["idarrays"][idarray]) > idarray_count:       # pylint: enable=consider-using-max-builtin
-            #     idarray_count = len(config.running["idarrays"][idarray])
         for each in range(1, idarray_count+1):
             headers.append("idarray_"+str(each))
         for keystore_id in config.running["keyvalstore"]:
@@ -4226,7 +4187,7 @@ def interpreter():
         cfact.request(config.running["initialfilename"], "10.0.0.1", test=True)
     elif arguments == "request default-keystore-test":
         cfact = config_factory()
-        default = cfact._default_lookup()                                      # pylint: disable=protected-access
+        default = cfact.default_lookup()
         if default:
             cfact.merge_test(default, "final")
     elif arguments == "request snmp-test":
