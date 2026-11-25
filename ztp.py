@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-# Fixable warnings that are temporarily disabled
 # pylint: disable=line-too-long
-# pylint: disable=missing-docstring
-# pylint: disable=invalid-name
-# pylint: disable=consider-using-join
-# pylint: disable=consider-using-in
 """
 #####             FreeZTP Server             #####
 #####        Written by John W Kerns         #####
@@ -87,6 +82,7 @@ tracking = None
 # is_admin = os.geteuid() == 0
 
 class os_detect:
+    """Detect OS"""
     def __init__(self):
         self._dist = self._dist_detect()
         self._systemd = self._systemd_detect()
@@ -140,6 +136,7 @@ class os_detect:
             self.DHCPLEASES = "/var/lib/dhcp/dhcpd.leases"
 
     def service_control(self, cmd, service):
+        """Start / stop services"""
         if self._systemd:
             cli_cmd = ["sudo", "systemctl", cmd, service]
         else:
@@ -148,11 +145,13 @@ class os_detect:
         subprocess.run(cli_cmd, capture_output=False, check=False)
 
     def install_pkg(self, pkg):
+        """Install Linux packages"""
         cli_cmd = ["sudo", self._pkgmgr, "install", "-y", pkg]
         print(f"\n{'#'*25}\n")
         subprocess.run(cli_cmd, capture_output=False, check=False)
 
 def interceptor(afile, raddress, rport):
+    """Top level function for TFTP dynamic files"""
     log.info("Checking the cache")
     cached = cache.get(afile, raddress)
     if cached:
@@ -185,6 +184,7 @@ class file_cache:
         self.mthread.start()
 
     def store(self, filename, ipaddr, fileobj):
+        """Cache function"""
         if self.timeout == 0:
             log.info("Caching set to 0. Declining caching.")
         else:
@@ -193,6 +193,7 @@ class file_cache:
             self._cache.update(data)
 
     def get(self, filename, ipaddr):
+        """Cache function"""
         currenttime = time.time()
         for entry, item in self._cache.items():
             if filename == item["filename"] and ipaddr == item["ipaddr"]:
@@ -257,15 +258,18 @@ class ztp_dyn_file:
         log.info("File size is %s bytes", len(self.data))
 
     def tell(self):
+        """Dynamic file function"""
         log.debug("Returning (%s)", str(self.position))
         return self.position
 
     def len(self):
+        """Dynamic file function"""
         if len(self.data)-self.position < 1:
             return 0
         return len(self.data)-self.position
 
     def read(self, size):
+        """Dynamic file function"""
         start = self.position
         end = self.position + size
         result = str(self.data[start:end])
@@ -281,9 +285,11 @@ class ztp_dyn_file:
         return result
 
     def seek(self, arg1, arg2):
+        """Dynamic file function"""
         log.info("Called with args (%s) and (%s)", str(arg1), str(arg2))
 
     def close(self):
+        """Dynamic file function"""
         if not self.closed:
             log.info("File closing.")
         else:
@@ -329,6 +335,7 @@ class config_factory:
         return False
 
     def lookup(self, filename, ipaddr):
+        """Config function"""
         log.info("Checking filename (%s) and IP (%s)", filename, ipaddr)
         tempid = filename.replace(self.uniquesuffix, "")
         if (self.uniquesuffix in filename) and (filename != self.basefilename):
@@ -371,6 +378,7 @@ class config_factory:
         return False
 
     def default_lookup(self):
+        """Config function"""
         log.info("Checking if a default-keystore is configured and ready")
         if config.running["default-keystore"]:  # If a default keystore ID is set
             kid = config.running["default-keystore"]
@@ -383,6 +391,7 @@ class config_factory:
         return False
 
     def id_configured(self, serial):
+        """Config function"""
         if serial in list(config.running["keyvalstore"]):
             return True
 
@@ -406,6 +415,7 @@ class config_factory:
         return False
 
     def request(self, filename, ipaddr, test=False):
+        """Config function"""
         log.info("Called with filename (%s) and IP (%s)", filename, ipaddr)
         if filename == self.basefilename:
             log.info("Filename (%s) matches the configured initialfilename", self.basefilename)
@@ -578,6 +588,7 @@ class config_factory:
         return None
 
     def log_merged_config_file(self, filedata, keystore_data, other_args):
+        """Config function"""
         if config.running["logging"]["merged-config-to-custom-file"] != "disable":
             newdict = dict(keystore_data)
             newdict.update(other_args)
@@ -606,6 +617,7 @@ class config_factory:
                     f.write(f"\n\n{filedata}\n\n")
 
     def send_tracking_update(self, ipaddr, filename, filesize):
+        """Config function"""
         tracking.report({
             "ipaddr": ipaddr,
             "filename": filename,
@@ -615,6 +627,7 @@ class config_factory:
             "source": "config_factory"})
 
     def create_snmp_request(self, tempid, ipaddr):
+        """Config function"""
         newquery = snmp_query(ipaddr, self.basesnmpcom, self.snmpoid)
         self.snmprequests.update({tempid: newquery})
 
@@ -625,11 +638,13 @@ class config_factory:
         return f"ZTP-{hname}"
 
     def merge_base_config(self, tempid):
+        """Config function"""
         env = j2.Environment(loader=j2.FileSystemLoader('/'))
         template = env.from_string(self.baseconfig)
         return template.render(autohostname=tempid, community=self.basesnmpcom)
 
     def merge_final_config(self, keystoreid, snmpinfo=None):
+        """Config function"""
         if keystoreid in config.running["keyvalstore"]:
             path = config.running
         else:
@@ -645,6 +660,7 @@ class config_factory:
         return (template.render(vals), vals)
 
     def get_keystore_id(self, idens, silent=False):
+        """Config function"""
         for identifier in idens:
             identifier = idens[identifier]
             if not silent:
@@ -691,6 +707,7 @@ class config_factory:
         return None
 
     def get_template(self, identity):
+        """Config function"""
         log.info("Looking up association for identity (%s)", identity)
         response = False
         for association in self.associations:
@@ -735,6 +752,7 @@ class config_factory:
         return response
 
     def merge_test(self, iden, template):
+        """Config function"""
         idtup = self.get_keystore_id({"Merge Test":iden})
         if not idtup:
             log.info("ID '%s' cannot be found!", iden)
@@ -789,6 +807,7 @@ class config_factory:
             print('#'*30)
 
     def pull_keystore_values(self, path, keystore_id):
+        """Config function"""
         if (keystore_id not in path["idarrays"]) and (keystore_id not in list(config.running["idarrays"])):
             return self._global_keystore_merge(path["keyvalstore"][keystore_id])
 
@@ -957,6 +976,7 @@ class config_manager:
             print("No Config File Found! Please install app!")
 
     def load_external(self):
+        """Config function"""
         if self.configfile:
             if "external-keystores" in self.running:
                 external_keystores.load()
@@ -964,6 +984,7 @@ class config_manager:
                 external_templates.load()
 
     def save(self):
+        """Config function"""
         rawconfig = json.dumps(self.running, indent=4, sort_keys=True)
         try:
             with open(self.configfile, "w", encoding="utf8") as f:
@@ -972,6 +993,7 @@ class config_manager:
             print("CHANGE ABORTED: Error writing config. Try 'sudo'")
 
     def set(self, args):
+        """Config function"""
         setting = args[2]
         value = args[3]
         exceptions = ["keyvalstore", "starttemplate"]
@@ -1049,6 +1071,7 @@ class config_manager:
                 print("Unknown Setting!")
 
     def clear(self, args):
+        """Config function"""
         setting = args[2]
         iden = args[3]
         if setting == "keystore":
@@ -1156,12 +1179,14 @@ class config_manager:
         self.save()
 
     def multilineinput(self, ending):
+        """Config function"""
         result = ""
         for line in iter(input, ending):
             result += line+"\n"
         return result[0:len(result)-1]
 
     def set_integration(self, iden, key, value):
+        """Config function"""
         if key == "type":
             if value not in integration_main.mods:
                 print(f"Integration type ({value}) not recognized or allowed")
@@ -1173,6 +1198,7 @@ class config_manager:
         self.save()
 
     def set_external_keystore(self, iden, key, value):
+        """Config function"""
         if key == "type":
             if value not in external_keystore_main.mods:
                 print(f"External-keystore type ({value}) not recognized or allowed")
@@ -1184,6 +1210,7 @@ class config_manager:
         self.save()
 
     def set_external_template(self, iden, setting, value):
+        """Config function"""
         if setting == "file":
             if iden in list(self.running["external-templates"]):
                 self.running["external-templates"][iden].update({"file": value})
@@ -1192,6 +1219,7 @@ class config_manager:
         self.save()
 
     def set_keystore(self, iden, keyword, value):
+        """Config function"""
         try:
             value = json.loads(value)
         except ValueError:
@@ -1203,6 +1231,7 @@ class config_manager:
         self.save()
 
     def set_idarray(self, arrayname, idlist):
+        """Config function"""
         if arrayname in list(self.running["idarrays"]):
             self.running["idarrays"][arrayname] = idlist
         else:
@@ -1210,6 +1239,7 @@ class config_manager:
         self.save()
 
     def set_association(self, iden, template):
+        """Config function"""
         if "associations" not in list(self.running):
             self.running.update({"associations": {}})
         self.running["associations"].update({iden: template})
@@ -1223,6 +1253,7 @@ class config_manager:
     ]
 
     def set_dhcpd_options(self, args):
+        """Config function"""
         try:
             code = int(args[5])
             if code > 254 or code < 1:
@@ -1237,6 +1268,7 @@ class config_manager:
         self.save()
 
     def set_dhcpd(self, args):
+        """Config function"""
         if len(args) < 6:
             print("ERROR: Incomplete Command!")
             sys.exit()
@@ -1291,6 +1323,7 @@ class config_manager:
         self.save()
 
     def is_ip(self, data):
+        """Config function"""
         try:
             # Eval bool or exception
             result = isinstance(netaddr.IPAddress(data), netaddr.ip.IPAddress)
@@ -1303,6 +1336,7 @@ class config_manager:
         return result
 
     def is_net(self, data):
+        """Config function"""
         try:
             # Eval bool or exception
             ipobj = netaddr.IPNetwork(data)
@@ -1316,15 +1350,18 @@ class config_manager:
         return result
 
     def is_num(self, data):
+        """Config function"""
         result = isinstance(data, int)
         if result is False:
             return f"Input is not an integer: '{data}'"
         return True
 
     def make_true(self):
+        """Config function"""
         return True
 
     def set_logging(self, setting, value):
+        """Config function"""
         endis = ["enable", "disable"]
         if setting == "merged-config-to-mainlog":
             if value not in endis:
@@ -1337,6 +1374,7 @@ class config_manager:
             self.save()
 
     def show_config(self):
+        """Config function"""
         cmdlist = []
         simplevals = ["suffix", "initialfilename", "community", "tftproot", "imagediscoveryfile", "file-cache-timeout"]
         for each in simplevals:
@@ -1494,21 +1532,27 @@ class config_manager:
         print(configtext)
 
     def show_config_dhcpd(self):
+        """Config function"""
         return ["This feature not yet implemented."]
 
     def show_config_template(self):
+        """Config function"""
         return ["This feature not yet implemented."]
 
     def show_config_keystore(self):
+        """Config function"""
         return ["This feature not yet implemented."]
 
     def show_config_idarray(self):
+        """Config function"""
         return ["This feature not yet implemented."]
 
     def show_config_association(self):
+        """Config function"""
         return ["This feature not yet implemented."]
 
     def show_config_integration(self):
+        """Config function"""
         intglist = []
         for iden in self.running["integrations"]:
             for key in self.running["integrations"][iden]:
@@ -1523,6 +1567,7 @@ class config_manager:
         return intglist
 
     def show_config_section(self, secinput):
+        """Config function"""
         for section in self.sections:
             if section["name"] == secinput:
                 return section["function"]()
@@ -1530,6 +1575,7 @@ class config_manager:
         return ""
 
     def calcopt125hex(self):
+        """Config function"""
         # Basedata meaning as follows:
         ### 00 00 00 09 = Cisco vendor specific code
         basedata = "000000090a05"
@@ -1540,6 +1586,7 @@ class config_manager:
         return basedata+lenval+filenamedata
 
     def ciscohex(self, hexdata):
+        """Config function"""
         last = 0
         current = 1
         templist = []
@@ -1557,33 +1604,36 @@ class config_manager:
         return result[:len(result)-1]
 
     def isc_hex(self, hexdata):
+        """Config function"""
         return ":".join(map(''.join, zip(*[iter(hexdata)]*2))).upper()
 
     def opt125(self, mode):
+        """Config function"""
         if mode == "windows":
-            print("    Follow the below Instructions:")
-            print("        - Open the Windows DHCP Server admin window")
-            print("        - Right click on the 'IPv4' object under the DHCP server name")
-            print("            - Select 'Set Predefined Options'")
-            print("        - Click the 'Add' button")
-            print("            - Set the following values")
-            print("                - Name        = Cisco Image Discovery File")
-            print("                - Data Type   = Encapsulated")
-            print("                - Code        = 125")
-            print("                - Description = Used by FreeZTP for IOS upgrade")
-            print("            - Click OK")
-            print("        - Click OK again")
-            print("")
-            print("        - Find the DHCP scope serving ZTP devices")
-            print("        - Expand the scope and right click 'Scope Options'")
-            print("            - Click 'Configure Options'")
-            print("        - Scroll down and check the box for option '125 Cisco Image Discovery File'")
-            print("        - Place the typing cursor into the data field under 'Binary'")
-            print("        - Copy and paste the below hex code into the firewalld")
-            print(f"            - Hex code between quotes - '{self.calcopt125hex()}'")
-            print("        - You should see the ZTP configured imagediscoveryfile name under the 'ASCII' field")
-            print("        - Click OK")
-            print("        - Close the Windows DHCP Server admin window")
+            print(
+                "    Follow the below Instructions:\n"
+                "        - Open the Windows DHCP Server admin window\n"
+                "        - Right click on the 'IPv4' object under the DHCP server name\n"
+                "            - Select 'Set Predefined Options'\n"
+                "        - Click the 'Add' button\n"
+                "            - Set the following values\n"
+                "                - Name        = Cisco Image Discovery File\n"
+                "                - Data Type   = Encapsulated\n"
+                "                - Code        = 125\n"
+                "                - Description = Used by FreeZTP for IOS upgrade\n"
+                "            - Click OK\n"
+                "        - Click OK again\n\n"
+                "        - Find the DHCP scope serving ZTP devices\n"
+                "        - Expand the scope and right click 'Scope Options'\n"
+                "            - Click 'Configure Options'\n"
+                "        - Scroll down and check the box for option '125 Cisco Image Discovery File'\n"
+                "        - Place the typing cursor into the data field under 'Binary'\n"
+                "        - Copy and paste the below hex code into the firewalld\n"
+                f"            - Hex code between quotes - '{self.calcopt125hex()}'\n"
+                "        - You should see the ZTP configured imagediscoveryfile name under the 'ASCII' field\n"
+                "        - Click OK\n"
+                "        - Close the Windows DHCP Server admin window\n"
+            )
             return None
 
         if mode == "cisco":
@@ -1599,10 +1649,12 @@ class config_manager:
         return None
 
     def hidden_list_ids(self):
+        """Config function"""
         for iden in list(self.running["keyvalstore"]):
             print(iden)
 
     def hidden_list_keys(self, iden):
+        """Config function"""
         try:
             for key in list(self.running["keyvalstore"][iden]):
                 print(key)
@@ -1610,15 +1662,18 @@ class config_manager:
             pass
 
     def hidden_list_arrays(self):
+        """Config function"""
         for arrayname in list(self.running["idarrays"]):
             print(arrayname)
 
     def hidden_list_array_members(self):
+        """Config function"""
         for arrayname in list(self.running["idarrays"]):
             for member in self.running["idarrays"][arrayname]:
                 print(member)
 
     def hidden_list_array_name_options(self):
+        """Config function"""
         done = []
         for arrayname in list(self.running["idarrays"]):
             done.append(arrayname)
@@ -1628,24 +1683,29 @@ class config_manager:
                 print(keystorename)
 
     def hidden_list_snmpoid(self):
+        """Config function"""
         for oid in self.running["snmpoid"]:
             print(oid)
 
     def hidden_list_templates(self):
+        """Config function"""
         for template in self.running["templates"]:
             print(template)
         for template in self.running["external-templates"]:
             print(template)
 
     def hidden_list_external_templates(self):
+        """Config function"""
         for template in self.running["external-templates"]:
             print(template)
 
     def hidden_list_associations(self):
+        """Config function"""
         for association in self.running["associations"]:
             print(association)
 
     def hidden_list_all_ids(self):
+        """Config function"""
         allids = {}  # Using a dict to automatically remove duplicates
         for iden in list(self.running["keyvalstore"]):
             allids.update({iden: None})
@@ -1657,41 +1717,51 @@ class config_manager:
             print(each)
 
     def hidden_list_image_files(self):
+        """Config function"""
         for each in os.listdir(self.running["tftproot"]):
             print(each)
 
     def hidden_list_dhcpd_options(self):
+        """Config function"""
         for option in self.running["dhcpd-options"]:
             print(option)
 
     def hidden_list_dhcpd_option_types(self):
+        """Config function"""
         for typ in self.dhcp_option_types:
             print(typ)
 
     def hidden_show_dhcpd_option(self, opt_name):
+        """Config function"""
         print(self.running["dhcpd-options"][opt_name]["type"])
 
     def hidden_list_dhcpd_scopes(self):
+        """Config function"""
         for scope in self.running["dhcpd"]:
             print(scope)
 
     def hidden_list_integrations(self):
+        """Config function"""
         for scope in self.running["integrations"]:
             print(scope)
 
     def hidden_list_external_keystores(self):
+        """Config function"""
         for scope in self.running["external-keystores"]:
             print(scope)
 
     def hidden_list_integration_types(self):
+        """Config function"""
         for typ in integration_main.mods:
             print(typ)
 
     def hidden_list_external_keystore_types(self):
+        """Config function"""
         for typ in external_keystore_main.mods:
             print(typ)
 
     def hidden_show_integration_keys(self, iden):
+        """Config function"""
         try:
             for key in list(self.running["integrations"][iden]):
                 print(key)
@@ -1699,6 +1769,7 @@ class config_manager:
             pass
 
     def hidden_show_external_keystore_keys(self, iden):
+        """Config function"""
         try:
             for key in list(self.running["external-keystores"][iden]):
                 print(key)
@@ -1706,6 +1777,7 @@ class config_manager:
             pass
 
     def hidden_show_integration_opts(self, iden):
+        """Config function"""
         try:
             typ = self.running["integrations"][iden]["type"]
             options = integration_main.mods[typ].options
@@ -1715,6 +1787,7 @@ class config_manager:
             pass
 
     def hidden_show_external_keystore_opts(self, iden):
+        """Config function"""
         try:
             typ = self.running["external-keystores"][iden]["type"]
             options = external_keystore_main.mods[typ].options
@@ -1724,6 +1797,7 @@ class config_manager:
             pass
 
     def dhcpd_compile(self):
+        """Config function"""
         result = "########### FREEZTP DHCP SCOPES ###########\n"
         result += "############## DO NOT MODIFY ##############\n"
         result += "option imagediscoveryfile-option code 125 = string;\n"
@@ -1789,6 +1863,7 @@ class config_manager:
         return result
 
     def dhcpd_commit(self):
+        """Config function"""
         dhcpdata = self.dhcpd_compile()
         with open("/etc/dhcp/dhcpd.conf", "r", encoding="utf8") as f:
             filedatalist = f.readlines()
@@ -1798,9 +1873,7 @@ class config_manager:
                 break
 
             index += 1
-        strippeddata = ""
-        for line in filedatalist[:index-1]:
-            strippeddata += line
+        strippeddata = "".join(filedatalist[:index-1])
         strippeddata += dhcpdata
         print(f"\n{'#'*18} Writing the below to the DHCP config file {'#'*18}")
         print(f"{'-'*79}\n")
@@ -1814,6 +1887,7 @@ class config_manager:
         osd.service_control("status", osd.DHCPSVC)
 
     def get_addresses(self):
+        """Config function"""
         result = []
         for iface in netifaces.interfaces():
             addressdict = netifaces.ifaddresses(iface)
@@ -1827,6 +1901,7 @@ class config_manager:
         return result
 
     def filter_ips(self, iplist):
+        """Config function"""
         result = []
         for adtup in iplist:
             try:
@@ -1856,6 +1931,7 @@ class config_manager:
         return result
 
     def _write_interfaces(self, iflist):
+        """Config function"""
         if os.path.isfile("/etc/default/isc-dhcp-server"):
             ifstr = " ".join(iflist)
             newfilelines = []
@@ -1873,6 +1949,7 @@ class config_manager:
                 f.write(newfile)
 
     def auto_dhcpd(self):
+        """Config function"""
         print(f"{'*'*10} IMPORTANT * IMPORTANT * IMPORTANT {'*'*10}")
         print("Autodetection can often detect an incorrect subnet mask.")
         print("You may need to correct the subnet on auto built scopes.")
@@ -1910,6 +1987,7 @@ class log_management:
         self.logfile = LOG_FILE
 
     def show(self, args):
+        """Log management function"""
         if len(args) == 3:
             subprocess.run(["more", self.logfile], capture_output=False, check=True)
         else:
@@ -1926,6 +2004,7 @@ class log_management:
                 print(f"Invalid input '{args[3]}'")
 
     def tail(self, length="25"):
+        """Log management function"""
         print("\nUse CTRL + C to exit from the tail\n\n")
         try:
             subprocess.run(["tail", "-fn", length, self.logfile], capture_output=False, check=True)
@@ -1933,6 +2012,7 @@ class log_management:
             sys.exit()
 
     def clear(self):
+        """Log management function"""
         try:
             with open(self.logfile,"w", encoding="utf8") as f:
                 f.write("")
@@ -2025,6 +2105,7 @@ class installer:
 }'''
 
     def copy_binary(self):
+        """Installer function"""
         binpath = "/bin/"
         binname = "ztp"
         print(f"\n{'#'*25}  Copying ZTP file to {binpath}{binname}... ####\n")
@@ -2042,6 +2123,7 @@ class installer:
             sys.exit()
 
     def create_configfile(self):
+        """Installer function"""
         cfg_path = "/etc/ztp/"
         cfg_name = "ztp.cfg"
         print(f"\n{'#'*25}  Creating default config in {cfg_path}{cfg_name}... ####\n")
@@ -2060,6 +2142,7 @@ class installer:
             f.write(cfg_json)
 
     def install_tftpy(self):
+        """Installer function"""
         print(f"\n{'#'*25}  Installing tftpy via PIP... ####\n")
         subprocess.run(
             [
@@ -2070,6 +2153,7 @@ class installer:
         )
 
     def disable_firewall(self):
+        """Installer function"""
         print(f"\n{'#'*25}  Disabling firewall (if present)... ####\n")
         try:
             subprocess.run(["systemctl", "stop", "firewalld"], capture_output=False, check=True)
@@ -2080,6 +2164,7 @@ class installer:
         print("Firewalld stopped and disabled")
 
     def install_dependencies(self):
+        """Installer function"""
         osd.install_pkg(osd.PIPPKG)
         osd.install_pkg("telnet")
         # apt installed python modules for modern "externally managed environments"
@@ -2106,6 +2191,7 @@ class installer:
             sys.exit()
 
     def dhcp_setup(self):
+        """Installer function"""
         print(f"\n{'#'*25}  Installing ISC DHCPD... ####\n")
         osd.install_pkg(osd.DHCPPKG)
         osd.service_control("enable", osd.DHCPSVC)
@@ -2120,6 +2206,7 @@ class installer:
         print(f"\n{'#'*25}  DHCPD Auto-Setup Complete. ####\n")
 
     def create_service(self):
+        """Installer function"""
         print(f"\n{'#'*25}  Enabling ZTP as a service... ####\n")
         installfile = '''[Unit]
 Description=FreeZTP Service
@@ -2146,6 +2233,7 @@ WantedBy=multi-user.target'''
         print(f"ZTP service installed at {installpath}")
 
     def install_completion(self):
+        """Installer function"""
         print(f"\n{'#'*25}  Installing BASH CLI Completion... ####\n")
         ##### BASH SCRIPT DATA START #####
         bash_complete_script = """#!/bin/bash
@@ -2670,6 +2758,7 @@ bind 'set show-all-if-ambiguous on'"""
                 f.write("\n\n\n# FreeZTP BASH Completion\nsource /etc/bash_completion.d/ztp_completion")
 
 def make_table(columnorder, tabledata):
+    """Create a table for on screen display"""
     ##### Check and fix input type #####
     if not isinstance(tabledata, list):
         tabledata = [tabledata] # Nest it in a list
@@ -2764,6 +2853,7 @@ def make_table(columnorder, tabledata):
 
 
 class tracking_class:
+    """Track downloads and provisioning"""
     def __init__(self, client=False):
         self._master = {}
         self.store = persistent_store("tracking")
@@ -2777,6 +2867,7 @@ class tracking_class:
             self.ipc_server()
 
     def find_session(self, args):
+        """Tracking function"""
         for session, data in self._master.items():
             if args["filename"]:
                 if args["filename"] == data.filename:
@@ -2789,6 +2880,7 @@ class tracking_class:
         return False
 
     def report(self, args):
+        """Tracking function"""
         session = self.find_session(args)
         if session:
             self._master[session].update(args)  # Send update to session
@@ -2838,6 +2930,7 @@ class tracking_class:
             self.store(self.status)
 
     class request_class:
+        """Tracking function"""
         def __init__(self, args, parent):
             self.ipaddr = None
             self.ports = {}
@@ -2858,6 +2951,7 @@ class tracking_class:
             self.update(args)
 
         def update(self, args): # Update this object from a report
+            """Tracking function"""
             self.lastupdate = time.time()
             if args["port"]:
                 if args["port"] not in self.ports:
@@ -2897,11 +2991,13 @@ class tracking_class:
                 time.sleep(0.1)  # Sleep for .1 seconds
 
         def check_file(self):
+            """Tracking function"""
             path = config.running["tftproot"]+self.filename
             if os.path.isfile(path):
                 self.filesize = os.path.getsize(path)
 
         def update_percent(self):
+            """Tracking function"""
             if self.filesize:
                 percent = round(100.0*self.position/self.filesize, 4)
                 if percent > 100:
@@ -2910,6 +3006,7 @@ class tracking_class:
                     self.percent = percent
 
         def update_rate(self):
+            """Tracking function"""
             diff = self.position - self.last_position
             rate = diff * 8
             if rate > 1000000:
@@ -2921,16 +3018,19 @@ class tracking_class:
             self.last_position = self.position
 
     class dhcplease_class:
+        """Tracking function"""
         def __init__(self):
             self.leasesobj = isc.IscDhcpLeases(osd.DHCPLEASES)
 
         def utc_to_local(self, dt):
+            """Tracking function"""
             if time.localtime().tm_isdst:
                 return dt - datetime.timedelta(seconds = time.altzone)
 
             return dt - datetime.timedelta(seconds = time.timezone)
 
         def get(self, mode="current"):
+            """Tracking function"""
             index = 0
             result = {}
             if mode == "current":
@@ -2963,6 +3063,7 @@ class tracking_class:
             return result
 
     def show_downloads(self, _):
+        """Tracking function"""
         data = []
         d = self.store.recall()
         dlist = list(d)
@@ -2973,12 +3074,14 @@ class tracking_class:
         return make_table(['time', 'ipaddr', 'filename', 'filesize', 'bytessent', 'percent', 'rate', 'active'], data)
 
     class screen:
+        """Tracking function"""
         def __init__(self):
             self.win = curses.initscr()
             curses.noecho()
             curses.cbreak()
 
         def write(self, data):
+            """Tracking function"""
             linelist = data.split("\n")
             index = 0
             #self.win.clear()
@@ -2988,6 +3091,7 @@ class tracking_class:
             self.win.refresh()
 
     def clear_downloads(self, nested=False):
+        """Tracking function"""
         self._master = {}
         self.status = {}
         if not nested:
@@ -3006,6 +3110,7 @@ class tracking_class:
         self.store({})
 
     def ipc_server(self):
+        """Tracking function"""
         self.ipcthread = threading.Thread(target=self._status_ipc)
         self.ipcthread.daemon = True
         self.ipcthread.start()
@@ -3071,6 +3176,7 @@ class tracking_class:
                 index += 1
 
     def get_live_status(self, client):
+        """Tracking function"""
         data = []
         client.send("get downloads\n".encode("utf-8"))
         time.sleep(0.1)
@@ -3083,6 +3189,7 @@ class tracking_class:
         return make_table(['time', 'ipaddr', 'filename', 'filesize', 'bytessent', 'percent', 'rate', 'active'], data)
 
     def show_downloads_live(self, args):
+        """Tracking function"""
         _ = args
         s = self.screen()
         ani = self._gen_animation()
@@ -3104,6 +3211,7 @@ class tracking_class:
             sys.exit()
 
     def show_dhcp_leases(self, mode="current"):
+        """Tracking function"""
         dleases = self.dhcplease_class()
         leases = dleases.get(mode)
         data = []
@@ -3112,6 +3220,7 @@ class tracking_class:
         return make_table(['ethernet', 'ip', 'start', 'end', 'state', 'uid'], data)
 
     def check_integrations(self, provdata):
+        """Tracking function"""
         if provdata["Status"] == "Complete":
             message = integration_message({
                 "ip": provdata["IP Address"],
@@ -3125,6 +3234,7 @@ class tracking_class:
             integrations.send(message)
 
     def provision(self, data):
+        """Tracking function"""
         current = self.provdb.recall()
         for tstamp in current:  # For each ID in provdb
             if data["Temp ID"] == current[tstamp]["Temp ID"]:  # If the temp IDs match
@@ -3157,6 +3267,7 @@ class tracking_class:
         self.provdb(current)
 
     def clear_provisioning(self, nested=False):
+        """Tracking function"""
         self.provdb({})
         if not nested:
             try:
@@ -3171,6 +3282,7 @@ class tracking_class:
         self.store({})
 
     def show_provisioning(self):
+        """Tracking function"""
         data = self.provdb.recall()
         tabledata = []
 
@@ -3202,6 +3314,7 @@ class tracking_class:
         )
 
     def prov_get_mac(self, ip):
+        """Tracking function"""
         dleases = self.dhcplease_class()
         leases = dleases.get("current")
         for lease in leases.values():
@@ -3212,6 +3325,7 @@ class tracking_class:
         return None
 
 class persistent_store:
+    """Persistent storage of tracked data."""
     def __init__(self, dbid):
         self._file = "/etc/ztp/pdb"
         self._dbid = dbid
@@ -3224,6 +3338,7 @@ class persistent_store:
         self._write()
 
     def recall(self):
+        """PDB function"""
         self._read()
         return self._running
 
@@ -3259,6 +3374,7 @@ class persistent_store:
         return result
 
 class integration_spark:
+    """Integration for Cisco Webex Teams"""
     name = "spark"
     options = ["api-key", "roomId", "toPersonEmail", "toPersonId"]
     def __init__(self, cfg, setup=False):
@@ -3296,6 +3412,7 @@ class integration_spark:
         return None
 
     def send(self, message):
+        """Webex integration function"""
         log.info("Processing message for object (%s)", self.config["objname"])
         data = self._get_destination()
         if not data:
@@ -3324,6 +3441,7 @@ class integration_spark:
         log.info("Message delivery for (%s) complete", self.config["objname"])
 
     def setup(self):
+        """Webex integration function"""
         print("""
         Spark Integration Wizard Overview:
         -----------------------------------------------------------------------
@@ -3351,6 +3469,7 @@ class integration_spark:
         return self.config
 
 class integration_power_automate:
+    """Integration for Microsoft Power Automate (via Azure WebHook)"""
     name = 'powerautomate'
     options = ['url']
     def __init__(self, cfg, setup=False):
@@ -3377,6 +3496,7 @@ class integration_power_automate:
         return text
 
     def send(self, message):
+        """PowerAutomate integration function"""
         log.info("Processing message for object (%s)", self.config["objname"])
         msgdict = {}
         if not self.config['url']:
@@ -3400,6 +3520,7 @@ class integration_power_automate:
         log.info("Message delivery for (%s) complete", self.config["objname"])
 
     def setup(self):
+        """PowerAutomate integration function"""
         print(
             'Microsoft Power Automate Integration Wizard Overview:\r\n'
             '-----------------------------------------------------------------\r\n'
@@ -3420,6 +3541,7 @@ class integration_power_automate:
         return self.config
 
 class integration_message:
+    """General message format for integrations."""
     def __init__(self, data=None):
         if data is None:
             data = {}
@@ -3434,11 +3556,13 @@ class integration_message:
         self.update(data)
 
     def update(self, data):
+        """Integration function"""
         for key in data:
             if key in self.__dict__:
                 self.__dict__[key] = data[key]
 
 class integration_main:
+    """Core class for integrations"""
     mods = {
         integration_spark.name: integration_spark,
         integration_power_automate.name: integration_power_automate
@@ -3469,6 +3593,7 @@ class integration_main:
                      target)
 
     def send(self, message, thread=False):
+        """Integration function"""
         if not thread:
             log.info("Starting initialization thread to wait for files")
             t = threading.Thread(target=self.send, args=(message,True))
@@ -3489,6 +3614,7 @@ class integration_main:
                 thread.start()
 
     def table_select(self, columnorder, tabdata, message):
+        """Integration function"""
         index = 1
         lookup = {}
         for option in tabdata:
@@ -3507,6 +3633,7 @@ class integration_main:
         return lookup[selection]
 
     def setup(self, objname):
+        """Integration function"""
         try:
             typ = config.running["integrations"][objname]["type"]
         except KeyError:
@@ -3520,6 +3647,7 @@ class integration_main:
         print("New Integration Config Saved!")
 
     def test(self, objname):
+        """Integration function"""
         if objname not in config.running["integrations"]:
             print(f"Integration object ({objname}) does not exist!")
         else:
@@ -3550,10 +3678,12 @@ class integration_main:
             _ = change_console_logging(old_log_lvl)
 
 class external_keystore_csv:
+    """CLI helper class"""
     name = "csv"
     options = ["file"]
 
 class external_keystore_main:
+    """External keystore handling class"""
     mods = {
         external_keystore_csv.name: external_keystore_csv
     }
@@ -3565,6 +3695,7 @@ class external_keystore_main:
         }
 
     def export(self, filename):
+        """External keystore function"""
         headers = [
             "keystore_id",
             "association"
@@ -3602,6 +3733,7 @@ class external_keystore_main:
                 writer.writerow(row)
 
     def test(self, objname):
+        """External keystore function"""
         if objname not in config.running["external-keystores"]:
             print(f"External-keystore object ({objname}) does not exist!")
             sys.exit()
@@ -3656,6 +3788,7 @@ class external_keystore_main:
         self.load()
 
     def load(self):
+        """External keystore function"""
         keyvalstore = {}
         idarrays = {}
         associations = {}
@@ -3735,9 +3868,11 @@ class external_keystore_main:
         }
 
 class external_templates_main:
+    """External template handling class"""
     def __init__(self):
         self.templates = {}
     def load(self):
+        """External template function"""
         for template_name in config.running["external-templates"]:
             filepath = config.running["external-templates"][template_name]["file"]
             if os.path.isfile(filepath):
@@ -3799,7 +3934,7 @@ def interpreter():
         init_logging(log_file=LOG_FILE, file_level=F_LEV, console_level=C_LEV)
     else:
         # Minimize logging for all other commands
-        init_logging(log_file=None, file_level=None, console_level=logging.DEBUG)
+        init_logging(log_file=None, file_level=None, console_level=logging.WARNING)
 
     if len(absent_modules) > 0:
         mod_list = ", ".join(absent_modules)
@@ -3883,7 +4018,7 @@ def interpreter():
         tracking = tracking_class()
         start_tftp()
 
-    elif arguments == "hidden" or arguments == "hidden show":
+    elif arguments in ["hidden", "hidden show"]:
         print("NOTE: These hidden commands are mostly meant to display information for use in TAB autocomplete")
         print(" - hidden reset-config                            |  Replace the ZTP config with the default configuration")
         print(" - hidden show keystores                          |  Show a list of configured keystores")
@@ -3968,9 +4103,9 @@ def interpreter():
         print(" - show dhcpd leases (current|all|raw)            |  Show DHCPD leases")
         print(" - show provisioning                              |  Show list of provisioned devices")
 
-    elif arguments == "show config raw" or arguments == "show run raw":
+    elif arguments in ["show config raw", "show run raw"]:
         subprocess.run(["more", "/etc/ztp/ztp.cfg"], capture_output=False, check=True)
-    elif arguments == "show config" or arguments == "show run":
+    elif arguments in ["show config", "show run"]:
         config.show_config()
     elif arguments[:11] == "show config" and len(sys.argv) > 3:
         cfglist = config.show_config_section(sys.argv[3])
@@ -4251,19 +4386,19 @@ def interpreter():
     ##### SERVICE #####
     elif arguments == "service":
         print(" - service (start|stop|restart|status)            |  Start, Stop, or Restart the installed ZTP service")
-    elif arguments == "service start" or arguments == "service freeztp start":
+    elif arguments in ["service start", "service freeztp start"]:
         log.warning("#########################################################")
         log.warning("Starting the ZTP Service")
         osd.service_control("start", "ztp")
         osd.service_control("status", "ztp")
         log.warning("#########################################################")
-    elif arguments == "service stop" or arguments == "service freeztp stop":
+    elif arguments in ["service stop", "service freeztp stop"]:
         log.warning("#########################################################")
         log.warning("Stopping the ZTP Service")
         osd.service_control("stop", "ztp")
         osd.service_control("status", "ztp")
         log.warning("#########################################################")
-    elif arguments == "service restart" or arguments == "service freeztp restart":
+    elif arguments in ["service restart", "service freeztp restart"]:
         log.warning("#########################################################")
         log.warning("Restarting the ZTP Service")
         osd.service_control("restart", "ztp")
@@ -4323,6 +4458,7 @@ def interpreter():
         print_main_menu()
 
 def print_main_menu():
+    """Simple abstraction to print menu"""
     print("----------------------------------------------------------------------------------------------------------------------------------------------")
     print("                     ARGUMENTS                                 |                                  DESCRIPTIONS")
     print("----------------------------------------------------------------------------------------------------------------------------------------------")
@@ -4401,6 +4537,14 @@ def print_main_menu():
     print("----------------------------------------------------------------------------------------------------------------------------------------------")
 
 def change_console_logging(new_lvl):
+    """
+    Alter console logging level temporarily. Allow additional visibility for
+    specific commands.
+        Parameters:
+            new_lvl = Standard numeric value or logging module constant
+        Returns
+            old_lvl = Previous logging value (numeric)
+    """
     old_lvl = None
     for handler in log.handlers:
         if not isinstance(handler, logging.FileHandler):
