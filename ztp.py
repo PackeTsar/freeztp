@@ -188,7 +188,7 @@ class file_cache:
         if self.timeout == 0:
             log.info("Caching set to 0. Declining caching.")
         else:
-            data = {time.time(): {"filename": filename, "ipaddr": ipaddr, "file": fileobj}}
+            data = {str(time.time()): {"filename": filename, "ipaddr": ipaddr, "file": fileobj}}
             log.info("Storing %s", str(data))
             self._cache.update(data)
 
@@ -200,7 +200,7 @@ class file_cache:
                     "File (%s) requested by (%s) found in cache.",
                     filename, ipaddr
                 )
-                if currenttime - entry < self.timeout:
+                if currenttime - float(entry) < self.timeout:
                     log.info("Not timed out. Set cursor to 0 and return.")
                     item["file"].position = 0
                     return item["file"]
@@ -213,22 +213,22 @@ class file_cache:
         return None
 
     def _maintenance(self):
-        self.sthread = threading.Thread(target=self._maintain_cache)           # pylint: disable=attribute-defined-outside-init
-        self.sthread.daemon = True
-        self.sthread.start()
+        thread = threading.Thread(target=self._maintain_cache)
+        thread.daemon = True
+        thread.start()
         while True:
             time.sleep(1)
-            if not self.sthread.is_alive():
-                self.sthread = threading.Thread(target=self._maintain_cache)   # pylint: disable=attribute-defined-outside-init
-                self.sthread.daemon = True
-                self.sthread.start()
+            if not thread.is_alive():
+                thread = threading.Thread(target=self._maintain_cache)
+                thread.daemon = True
+                thread.start()
 
     def _maintain_cache(self):
         while True:
             time.sleep(1)
             currenttime = time.time()
             for entry in list(self._cache):
-                if currenttime - entry > self.timeout:
+                if currenttime - float(entry) > self.timeout:
                     log.info("Timing out and deleting %s:%s", entry, self._cache[entry])
                     del self._cache[entry]
 
@@ -420,7 +420,7 @@ class config_factory:
                     "Status": "Incomplete",
                     "Real IDs": None,
                     "MAC Address": None,
-                    "Timestamp": time.time()
+                    "Timestamp": str(time.time())
                     })
             log.info("Generated a SNMP Request with TempID (%s) and IP (%s)", tempid, ipaddr)
             result = self.merge_base_config(tempid)
@@ -2797,19 +2797,19 @@ class tracking_class:
                 filename = args["filename"]
                 ip = args["ipaddr"]
                 log.info("New transfer of (%s) from (%s) detected", filename, ip)
-                self._master.update({time.time(): self.request_class(args, self)})
+                self._master.update({str(time.time()): self.request_class(args, self)})
 
     def _maintenance(self):
-        self.sthread = threading.Thread(target=self._maintain_store)           # pylint: disable=attribute-defined-outside-init
-        self.sthread.daemon = True
-        self.sthread.start()
+        thread = threading.Thread(target=self._maintain_store)
+        thread.daemon = True
+        thread.start()
         while True:
             time.sleep(1)
-            if not self.sthread.is_alive():
+            if not thread.is_alive():
                 log.warning("Maintenance thread died. Restarting")
-                self.sthread = threading.Thread(target=self._maintain_store)   # pylint: disable=attribute-defined-outside-init
-                self.sthread.daemon = True
-                self.sthread.start()
+                thread = threading.Thread(target=self._maintain_store)
+                thread.daemon = True
+                thread.start()
 
     def _maintain_store(self):
         while True:
@@ -3140,7 +3140,7 @@ class tracking_class:
         for tstamp in current:
             if "IP Address" in data:
                 if data["IP Address"] == current[tstamp]["IP Address"]:
-                    if data["Timestamp"] - current[tstamp]["Timestamp"] < 60:
+                    if float(data["Timestamp"]) - float(current[tstamp]["Timestamp"]) < 60:
                         for attrib in data:  # For each reported attribute
                             if data[attrib]:  # If the attribute has a value
                                 current[tstamp][attrib] = data[attrib]  # Update the provdb
@@ -3230,7 +3230,7 @@ class persistent_store:
     def _write(self):
         fulldb = self._pull_full_db()  # Pull a full copy of the db
         fulldb.update({self._dbid: self._running})  # Update it
-        rawout = json.dumps(fulldb, indent=4, sort_keys=False)
+        rawout = json.dumps(fulldb, indent=4, sort_keys=True)
         with open(self._file, "w", encoding="utf8") as f:
             f.write(rawout)
 
@@ -3449,23 +3449,24 @@ class integration_main:
         self._load()
 
     def _load(self):
-        log.info("Beginning load of integration objects. Make sure your " \
-            "internet connection is working properly.")
+        log.info("Initializing integrations, if present.")
         for target in config.running["integrations"]:
-            try:
-                if "type" in config.running["integrations"][target]:
-                    typ = config.running["integrations"][target]["type"]
-                    if typ in self.mods:
-                        cfg = {"objname":target}
-                        cfg.update(config.running["integrations"][target])
-                        self.targets.update({target: self.mods[typ](cfg)})
-                        log.info("Integration object (%s) loaded to targets successfully", target)
-                    else:
-                        log.info("Integration object (%s) has unrecognized type (%s)! Cannot load object", target, typ)
-                else:
-                    log.info("Integration object (%s) has no type! Cannot load object", target)
-            except Exception as e:                                             # pylint: disable=broad-exception-caught
-                log.info("Error loading object (%s): %s", target, e)
+            if "type" not in config.running["integrations"][target]:
+                log.warning("Cannot load integration %s. Config is flawed or" \
+                            " incomplete.", target)
+                continue
+
+            typ = config.running["integrations"][target]["type"]
+            if typ not in self.mods:
+                log.warning("Cannot load integration %s. Unrecognized type, " \
+                            "%s.", target, typ)
+                continue
+
+            cfg = {"objname":target}
+            cfg.update(config.running["integrations"][target])
+            self.targets.update({target: self.mods[typ](cfg)})
+            log.info("Integration object (%s) loaded to targets successfully",
+                     target)
 
     def send(self, message, thread=False):
         if not thread:
