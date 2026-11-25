@@ -3190,7 +3190,7 @@ class tracking_class:
                             real += "," + data[each]["Real IDs"][real_id]
                 data[each]["Real IDs"] = real
             data[each]["Timestamp"] = time.strftime(
-                '%Y-%m-%d %H:%M:%S', time.localtime(data[each]["Timestamp"])
+                '%Y-%m-%d %H:%M:%S', time.localtime(float(data[each]["Timestamp"]))
             )
             tabledata.append(data[each])
         return make_table(
@@ -3660,51 +3660,74 @@ class external_keystore_main:
         idarrays = {}
         associations = {}
         log.debug("Starting load of external-keystores")
-        for objname in config.running["external-keystores"]:
-            log.debug("Loading external-keystore (%s)", objname)
-            if "file" not in config.running["external-keystores"][objname]:
-                log.debug("ERROR: External-keystore (%s) has no file defined!", objname)
-            elif not os.path.isfile(config.running["external-keystores"][objname]["file"]):
-                log.debug("ERROR: Cannot fine file (%s)", config.running["external-keystores"][objname]["file"])
-            else:
-                with open(config.running["external-keystores"][objname]["file"], "r", encoding="utf8") as csvfile:
-                    reader = csv.DictReader(csvfile)
-                    counter = 1
-                    for row in reader:
-                        try:
-                            if "keystore_id" not in row:
-                                log.warning("ERROR: External-keystore (%s): Cannot find required header 'keystore_id'. Discarding keystore.", objname)
-                                break
-                            ks_id = row["keystore_id"]
-                            array_values = []
-                            unordered_arrays = {}
-                            ordered_keys = []
-                            for key in row:
-                                if row[key]:
-                                    if key == "association":
-                                        associations.update({ks_id: row[key]})
-                                    if key[:7] == "idarray":
-                                        array_values.append(row[key])
-                                        if ks_id not in keyvalstore:
-                                            keyvalstore.update({ks_id:{}})
-                                        keyvalstore[ks_id].update({key: row[key]})
-                                        unordered_arrays.update({key: row[key]})
-                                    else:
-                                        if ks_id not in keyvalstore:
-                                            keyvalstore.update({ks_id:{}})
-                                        keyvalstore[ks_id].update({key: row[key]})
-                            if array_values:
-                                idarrays.update({ks_id:array_values})
-                            if unordered_arrays:
-                                ordered_array_keys = list(unordered_arrays)
-                                ordered_array_keys.sort()
-                                for key in ordered_array_keys:
-                                    ordered_keys.append(unordered_arrays[key])
-                            keyvalstore[ks_id].update({"idarray": ordered_keys})
-                            counter += 1
-                        except Exception:                                      # pylint: disable=broad-exception-caught
-                            log.warning("ERROR: External-keystore (%s) error encountered in row %s, row excluded", objname, counter)
-                            log.warning("    Row Info: %s", row)
+
+        for ext_ks, data in config.running["external-keystores"].items():
+            log.debug("Verifying config for external keystore '%s'", ext_ks)
+            if "file" not in data.keys():
+                log.debug(
+                    "Incomplete config. External keystore '%s' has no file "
+                    "defined.", ext_ks
+                )
+                continue
+
+            if not os.path.exists(data["file"]):
+                log.warning(
+                    "Cannot find external keystore file '%s'", data["file"]
+                )
+                continue
+
+            log.debug("Parsing external-keystore '%s'", ext_ks)
+
+            with open(data["file"], "r", encoding="utf8") as csvfile:
+                reader = csv.DictReader(csvfile, restkey="spam")
+                headers = reader.fieldnames
+                if "keystore_id" not in headers:
+                    log.warning(
+                        "External-keystore '%s' is missing mandatory header "
+                        "'keystore_id'. Ingest skipped.", ext_ks
+                    )
+                    continue
+
+                for row in reader:
+                    ks_id = row["keystore_id"]
+                    array_values = []
+                    unordered_arrays = {}
+                    ordered_keys = []
+                    for key in row:
+                        if key == "association":
+                            associations.update({ks_id: row[key]})
+
+                        if key[:7] == "idarray":
+                            array_values.append(row[key])
+                            if ks_id not in keyvalstore:
+                                keyvalstore.update({ks_id:{}})
+                            keyvalstore[ks_id].update({key: row[key]})
+                            unordered_arrays.update({key: row[key]})
+
+                        if key == "spam":
+                            log.debug(
+                                "Row %s has data without headers. Discarding "
+                                "%s", reader.line_num, row["spam"]
+                            )
+
+                        else:
+                            if ks_id not in keyvalstore:
+                                keyvalstore.update({ks_id:{}})
+                            keyvalstore[ks_id].update({key: row[key]})
+
+                    if array_values:
+                        idarrays.update({ks_id:array_values})
+
+                    if unordered_arrays:
+                        ordered_array_keys = list(unordered_arrays)
+                        ordered_array_keys.sort()
+                        for key in ordered_array_keys:
+                            ordered_keys.append(unordered_arrays[key])
+                    keyvalstore[ks_id].update({"idarray": ordered_keys})
+
+                log.info(
+                    "Read %s records from keystore %s", reader.line_num, ext_ks
+                )
         self.data = {
             "keyvalstore": keyvalstore,
             "idarrays": idarrays,
@@ -3776,7 +3799,7 @@ def interpreter():
         init_logging(log_file=LOG_FILE, file_level=F_LEV, console_level=C_LEV)
     else:
         # Minimize logging for all other commands
-        init_logging(log_file=None, file_level=None, console_level=logging.WARNING)
+        init_logging(log_file=None, file_level=None, console_level=logging.DEBUG)
 
     if len(absent_modules) > 0:
         mod_list = ", ".join(absent_modules)
