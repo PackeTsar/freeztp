@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# pylint: disable=line-too-long
 """
 #####             FreeZTP Server             #####
 #####        Written by John W Kerns         #####
@@ -947,6 +946,7 @@ class config_manager:
         {"name": "association", "function": self.show_config_association},
         {"name": "integration", "function": self.show_config_integration}
         ]
+        log.info("Initializing configuration manager...")
         self.configfile = self._get_config_file()
         self._publish()
 
@@ -972,8 +972,10 @@ class config_manager:
             self.snmpoid = self.running["snmpoid"]
             self.starttemplate = self.running["starttemplate"]
             self.associations = self.running["associations"]
+            log.info("Configuration loaded from '%s'", self.configfile)
         else:
             print("No Config File Found! Please install app!")
+            log.warning("No Config File Found! Please install app!")
 
     def load_external(self):
         """Config function"""
@@ -3122,47 +3124,61 @@ class tracking_class:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.bind(("", 10000))
             sock.listen(1024)
-            client, _ = sock.accept()
-            thread = threading.Thread(target=self._status_ipc_talker, args=(client,))
+            client, addr = sock.accept()
+            thread = threading.Thread(target=self._status_ipc_talker, args=(client,addr))
             thread.start() # Start talker thread to listen to port
 
-    def _status_ipc_talker(self, client):
+    def _status_ipc_talker(self, client, addr):
+        interactive = False
+        table = (
+            "- threads\n"
+            "- clear downloads\n"
+            "- clear provisioning\n"
+            "- get downloads\n"
+            "- exit\n\n"
+        )
+        log.info("IPC Connection opened from %s", addr)
         while True:
+            if interactive:
+                client.send("\nZTP# ".encode("utf-8"))
+
             try:
                 recv = client.recv(1024)
             except ConnectionResetError:
                 log.info("IPC client disconnected.")
                 return
             recieve = recv.decode("utf-8")
+
             if len(recieve) > 0:
                 if "?" in recieve:
-                    table = """
-- threads
-- clear downloads
-- clear provisioning
-- get downloads
-- exit
-"""
                     client.send(table.encode("utf-8"))
                 elif "exit" in recieve:
+                    log.info("IPC Connection closed by %s", addr)
                     client.close()
                     return
                 elif "threads" in recieve:
-                    client.send(str(threading.active_count()).encode("utf-8"))  # Send the query response
-                    client.send(str(threading.enumerate()).encode("utf-8"))
+                    msg = f"Thread count: {threading.active_count()}\n"
+                    for t in threading.enumerate():
+                        msg += (
+                            f"Name: {t.name} | ID: {t.ident} | Daemon: "
+                            "{t.daemon}\n"
+                        )
+                    client.send(f"{msg}".encode("utf-8"))
                 elif "clear downloads" in recieve:
                     self.clear_downloads(nested=True)
                     msg = json.dumps(self.status, indent=4, sort_keys=True)+"\n"
-                    client.send(msg.encode("utf-8"))  # Send the query response
+                    client.send(msg.encode("utf-8"))
                 elif "get downloads" in recieve:
                     msg = json.dumps(self.status, indent=4, sort_keys=True)+"\n"
-                    client.send(msg.encode("utf-8"))  # Send the query response
+                    client.send(msg.encode("utf-8"))
                 elif "clear provisioning" in recieve:
                     self.clear_provisioning(nested=True)
-                    msg = json.dumps(self.provdb.recall(), indent=4, sort_keys=True)+"\n"
-                    client.send(msg.encode("utf-8"))  # Send the query response
+                    msg = json.dumps(
+                        self.provdb.recall(), indent=4, sort_keys=True
+                    )
+                    client.send(f"{msg}\n".encode("utf-8"))
                 else:
-                    client.send("ZTP#".encode("utf-8"))  # Send the query response
+                    interactive = True
 
     def _gen_animation(self):
         l = ["\\", "|", "/", "-"]
@@ -3364,13 +3380,21 @@ class persistent_store:
         try:
             with open(self._file, "r", encoding="utf8") as f:
                 rawdata = f.read()
-
         except IOError:
+            log.info("Persistent store file missing. Creating new file.")
             self._create_blank()
             with open(self._file, "r", encoding="utf8") as f:
                 rawdata = f.read()
 
-        result = json.loads(rawdata)
+        try:
+            result = json.loads(rawdata)
+        except json.decoder.JSONDecodeError:
+            log.info("Persistent store damaged. Creating new file.")
+            self._create_blank()
+            with open(self._file, "r", encoding="utf8") as f:
+                rawdata = f.read()
+            result = json.loads(rawdata)
+
         return result
 
 class integration_spark:
