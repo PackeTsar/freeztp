@@ -3932,6 +3932,7 @@ def start_tftp():
             dyn_file_func=interceptor
         )
 
+    logging.getLogger("tftpy").setLevel(logging.WARNING)
     server.listen(listenip="", listenport=69)
     log.info("Started up successfully")
 
